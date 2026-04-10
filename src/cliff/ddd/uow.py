@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from types import TracebackType
 from typing import NamedTuple, Self
 
 from .repository import IRepository
@@ -6,7 +7,7 @@ from .repository import IRepository
 
 class DBContext(ABC):
     @abstractmethod
-    def begin(self):
+    def begin(self) -> None:
         """Begin a transaction."""
 
     @abstractmethod
@@ -31,13 +32,18 @@ class UnitOfWork[TRepos: NamedTuple]:
                 )
         self.repos = repos
 
-    def __enter__(self, db_context: DBContext, auto_commit=False) -> Self:
+    def __enter__(self, db_context: DBContext, auto_commit: bool = False) -> Self:
         self.auto_commit = auto_commit
         self._context = db_context
         self._context.begin()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: TracebackType | None,
+    ) -> None:
         if exc_type:
             self._context.rollback()
             return
@@ -46,35 +52,5 @@ class UnitOfWork[TRepos: NamedTuple]:
             return
         self._context.close()
 
-    def commit(self):
+    def commit(self) -> None:
         self._context.commit()
-
-
-from .aggregate import Aggregate, AggregateUUID
-
-
-class First(Aggregate[AggregateUUID]): ...
-
-
-class Second(Aggregate[AggregateUUID]): ...
-
-
-def s() -> IRepository: ...
-
-
-def m() -> DBContext: ...
-
-
-from .aggregate import AggregateID
-
-
-class AggregateStrID(AggregateID[str]): ...
-
-
-class MyRepos(NamedTuple):
-    first: IRepository[AggregateStrID, First]
-    second: IRepository[AggregateUUID, Second]
-
-
-my_uow = UnitOfWork[MyRepos](MyRepos(first=s(), second=s()))
-my_uow.repos.first.save()

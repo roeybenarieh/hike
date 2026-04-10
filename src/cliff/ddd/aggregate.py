@@ -1,14 +1,13 @@
-from typing import Generic, Hashable, Iterable, TypeVar
-from uuid import UUID
 from abc import ABC, abstractmethod
-
-from cliff.ddd.entity import Entity, EntityID
+from dataclasses import field
+from typing import Any, Iterable
 
 from .domain_event import DomainEvent
 from .common import DomainError, DomainObject
+from .entity import Entity
 
 
-class Rule[obj: DomainObject](ABC):
+class Rule[T: DomainObject](ABC):
     """Rule that is met by the BusinessRule
 
     Unlike invariants - unchanging truth constraints required for data integrity(e.g., "age cannot be negative"),
@@ -16,34 +15,40 @@ class Rule[obj: DomainObject](ABC):
     """
 
     @abstractmethod
-    def is_broken(self, obj: obj) -> bool: ...
+    def is_broken(self, obj: T) -> bool: ...
 
-    def raise_on_broken_rule(self, obj: obj):
+    def raise_on_broken_rule(self, obj: T) -> None:
         if self.is_broken(obj):
             raise RuleBrokenError(self)
 
 
 class RuleBrokenError(DomainError):
-    def __init__(self, rule: Rule):
-        self.broken_rule = rule
+    def __init__(self, rule: Rule[Any]):
+        self.broken_rule: Rule[Any] = rule
 
 
-class AggregateID[TId: Hashable](EntityID[TId]): ...
+class Aggregate(Entity):
+    """Base class for DDD aggregate roots.
 
+    Adds domain event collection and business rule checking on top of Entity.
+    Declare ``_events`` with ``init=False`` so it is never passed as a
+    constructor argument:
 
-class AggregateUUID(AggregateID[UUID]): ...
+        class Order(Aggregate):
+            id: UUID = field(default_factory=uuid4)
+            total: Money
+    """
 
+    _events: list[DomainEvent] = field(  # pyright: ignore[reportUnknownVariableType]
+        default_factory=list, init=False, repr=False
+    )
 
-TId = TypeVar("TId", bound=AggregateID)
+    def get_events(self) -> list[DomainEvent]:
+        return list(self._events)
 
+    def clear_events(self) -> None:
+        self._events.clear()
 
-class Aggregate(Entity[TId]):
-    _events: list[DomainEvent]
-
-    def get_events(self) -> DomainEvent: ...
-    def clear_events(self) -> None: ...
-
-    # TODO: since invariants are not reused, maybe remove this.
-    def check_invariants(self, rules: Iterable[Rule]):
+    def check_invariants(self, rules: Iterable[Rule[Any]]) -> None:
         for rule in rules:
             rule.raise_on_broken_rule(self)
