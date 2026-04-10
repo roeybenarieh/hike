@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar, dataclass_transform, get_type_hints, overload
+from typing import Any, Generic, TypeVar, dataclass_transform, get_origin, get_type_hints, overload
 from uuid import UUID, uuid4
 
 from .common import DomainObject
@@ -16,6 +17,15 @@ from .specifications.specs import (
 from .value_object import ValueObject
 
 _T = TypeVar("_T", bound="ValueObject[Any]")
+
+
+class EntityID[TId: Hashable](ValueObject[TId]):
+    """A ValueObject that wraps the raw identifier of a DDD entity.
+
+    Use ``Field[EntityID[UUID]]`` (or any hashable raw type) in entity
+    subclasses to get type-safe, VO-wrapped IDs that participate in
+    spec-building via ``FieldProxy``.
+    """
 
 
 class FieldProxy:
@@ -111,12 +121,26 @@ class Field(Generic[_T]):
 
 
 def _unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
-    """Return the inner ``T`` if *ann_type* is ``Field[T]``, else ``None``."""
+    """Return the inner ``T`` if *ann_type* is ``Field[T]``, else ``None``.
+
+    Handles both bare types (``Field[Price]``) and parameterized generics
+    (``Field[EntityID[UUID]]``).  For parameterized generics the bare origin
+    class is returned so that ``isinstance`` and constructor calls in
+    ``_FieldDescriptor`` work correctly at runtime.
+    """
     origin = getattr(ann_type, "__origin__", None)
     if origin is Field:
         args: tuple[Any, ...] = getattr(ann_type, "__args__", ())
-        if args and isinstance(args[0], type) and issubclass(args[0], ValueObject):
-            return args[0]  # type: ignore[return-value]
+        if not args:
+            return None
+        inner = args[0]
+        # Bare class: Field[Price]
+        if isinstance(inner, type) and issubclass(inner, ValueObject):
+            return inner  # type: ignore[return-value]
+        # Parameterized generic: Field[EntityID[UUID]]
+        bare = get_origin(inner)
+        if isinstance(bare, type) and issubclass(bare, ValueObject):
+            return bare  # type: ignore[return-value]
     return None
 
 
@@ -192,27 +216,52 @@ def vo(field_type: type[_T]) -> Field[_T]:
     return _FieldDescriptor("", field_type)  # type: ignore[return-value]
 
 
-@dataclass_transform(kw_only_default=True, field_specifiers=(vo,))
-class Entity(DomainObject):
-    """Base class for DDD entities.
+def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
+    """Declare a ValueObject field with a default factory.
+
+    Use instead of ``dataclasses.field(default_factory=…)`` when the field is
+    annotated with ``Field[T]``.  Pyright cannot reconcile ``dataclasses.field``
+    return types with our custom ``Field[T]`` descriptor type, so this helper
+    bridges the gap.  The parameter is named ``default_factory`` so that
+    ``@dataclass_transform`` (PEP 681) recognises the field as optional in the
+    generated ``__init__``::
+
+        class UuidEntity(Entity):
+            id: Field[EntityID[UUID]] = vo_field(default_factory=lambda: EntityID(uuid4()))
+
+    At runtime it simply delegates to ``dataclasses.field``.
+    """
+    return field(default_factory=default_factory)  # type: ignore[return-value]
+
+
+@dataclass_transform(kw_only_default=True, field_specifiers=(vo, vo_field))
+class Entity[TId: Hashable](DomainObject):
+    """Base class for DDD entities, generic over the raw ID type ``TId``.
 
     An entity has *identity*: two Entity objects are equal if and only if they
     share the same ``id``, regardless of the values of their other fields.
+
+    ``TId`` is the raw hashable type wrapped inside the ``EntityID`` value
+    object (e.g. ``UUID``, ``int``, ``str``).  Concrete subclasses pin the
+    type parameter:
+
+        class UuidEntity(Entity[UUID]):
+            id: Field[EntityID[UUID]] = vo_field(default_factory=lambda: EntityID(uuid4()))
 
     ---
 
     ## Declaring an entity
 
-    Subclass ``Entity`` and annotate ValueObject fields with ``Field[T]``:
+    Subclass a concrete base (e.g. ``UuidEntity``) and annotate ValueObject
+    fields with ``Field[T]``:
 
-        from cliff.ddd.entity import Entity, Field
+        from cliff.ddd.entity import Field, UuidEntity
         from cliff.ddd.value_object import ValueObject
 
         class Price(ValueObject[float]):
             value: float
 
-        class Boat(Entity):
-            id: UUID = field(default_factory=uuid4)
+        class Boat(UuidEntity):
             name: str
             price: Field[Price]     # VO field — enables Boat.price < 100
 
@@ -231,8 +280,8 @@ class Entity(DomainObject):
     - ``boat.price < 100``  →  ``bool``                  (compares ``.value``)
     - ``Boat.price < 100``  →  ``LessThanSpecification``
 
-    Plain annotations (``id: UUID``, ``name: str``) work as normal dataclass
-    fields — no spec-building magic, just data.
+    Plain annotations (``name: str``) work as normal dataclass fields — no
+    spec-building magic, just data.
 
     ---
 
@@ -241,6 +290,8 @@ class Entity(DomainObject):
     ``__eq__`` compares by ``id`` only.  ``__hash__`` is also id-based so
     entities can be stored in sets and used as dict keys.
     """
+
+    id: Field[EntityID[TId]]
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -285,14 +336,10 @@ class Entity(DomainObject):
         return self.id == other.id  # type: ignore[attr-defined]
 
     def __hash__(self) -> int:
-        return hash(self.id)  # type: ignore[attr-defined]
+        return hash(self.id)
 
 
-class UuidValueObject(ValueObject[UUID]):
-    ...
-
-
-class UuidEntity(Entity):
+class UuidEntity(Entity[UUID]):
     """Entity with a UUID primary key, auto-generated by default."""
 
-    id: Field[UuidValueObject] = field(default_factory=uuid4)
+    id: Field[EntityID[UUID]] = vo_field(default_factory=lambda: EntityID(uuid4()))

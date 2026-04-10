@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Hashable
 from dataclasses import field
 from typing import Any, Iterable
 
@@ -27,16 +28,16 @@ class RuleBrokenError(DomainError):
         self.broken_rule: Rule[Any] = rule
 
 
-class Aggregate(Entity):
-    """Base class for DDD aggregate roots.
+class Aggregate[TId: Hashable](Entity[TId]):
+    """Base class for DDD aggregate roots, generic over the raw ID type ``TId``.
 
     Adds domain event collection and business rule checking on top of Entity.
     Declare ``_events`` with ``init=False`` so it is never passed as a
     constructor argument:
 
-        class Order(Aggregate):
-            id: UUID = field(default_factory=uuid4)
-            total: Money
+        class Order(Aggregate[UUID]):
+            id: Field[EntityID[UUID]] = vo_field(default_factory=lambda: EntityID(uuid4()))
+            total: Field[Money]
     """
 
     _events: list[DomainEvent] = field(  # pyright: ignore[reportUnknownVariableType]

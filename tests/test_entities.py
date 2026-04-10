@@ -3,7 +3,7 @@
 from typing import assert_type
 from uuid import UUID
 
-from cliff.ddd.entity import Field, UuidEntity
+from cliff.ddd.entity import EntityID, Field, UuidEntity
 from cliff.ddd.value_object import ValueObject
 from cliff.ddd.specifications import (
     AndSpecification,
@@ -45,7 +45,8 @@ class Boat(UuidEntity):
 class TestUuidEntityIdentity:
     def test_auto_generated_uuid(self) -> None:
         s = Ship(name=Name("Titanic"))
-        assert isinstance(s.id, UUID)
+        assert isinstance(s.id, EntityID)
+        assert isinstance(s.id.value, UUID)
 
     def test_two_instances_have_different_ids(self) -> None:
         s1 = Ship(name=Name("Titanic"))
