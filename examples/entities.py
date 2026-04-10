@@ -1,10 +1,20 @@
+from dataclasses import field
+from datetime import datetime
+
 from cliff.ddd.entity import Field, UuidEntity
 from cliff.ddd.specifications import EqualSpecification
+from cliff.ddd.value_object import ValueObject
 from examples.value_objects import Name
+
+
+class DateTime(ValueObject[datetime]):
+    ...
 
 
 class Ship(UuidEntity):
     name: Field[Name]
+    created_at: Field[DateTime] = field(default_factory=datetime.now)
+    # something: str # TODO: should be banned
 
 
 if __name__ == "__main__":
@@ -12,7 +22,7 @@ if __name__ == "__main__":
     s2 = Ship(name=Name("Titanic"))  # different id → not equal
     s3 = Ship(id=s1.id, name=Name("Renamed"))  # same id → equal
 
-    print(s1)  # Ship(id=UUID('...'), name=Name(value='Titanic'))
+    print(s1)  # Ship(id=UUID('...'), name=Name(value='Titanic'), created_at=datetime(...))
     print(s1 == s2)  # False — different ids
     print(s1 == s3)  # True  — same id, entity identity
 
