@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from pymongo.collection import Collection
 from redis import Redis
 from sqlalchemy import ColumnElement, Select, select, true, and_, or_, not_
 from sqlalchemy.orm import QueryableAttribute
@@ -172,21 +171,16 @@ class MongoDBEvaluationVisitor(IVisitor):
 
     Usage::
 
-        visitor = MongoDBEvaluationVisitor(collection)
+        visitor = MongoDBEvaluationVisitor()
         spec.accept(visitor)
-        documents = visitor.result()
+        documents = collection.find(visitor.filters)
 
-    ``result()`` executes ``collection.find(filter)`` and returns a cursor.
-    The raw filter dict is also available as ``visitor.filters`` if you want
-    to inspect or further compose the query before running it.
+    The filter dict is available as ``visitor.filters`` to pass directly to
+    any pymongo collection method.
     """
 
-    def __init__(self, collection: Collection[dict[str, Any]]) -> None:
-        self._collection = collection
+    def __init__(self) -> None:
         self.filters: dict[str, Any] = {}  # empty dict matches every document
-
-    def result(self) -> Any:
-        return self._collection.find(self.filters)
 
     def _pop_filters(self) -> dict[str, Any]:
         f = self.filters
