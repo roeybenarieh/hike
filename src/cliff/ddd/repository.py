@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
-from cliff.ddd.common import DomainError
 from cliff.ddd.aggregate import Aggregate
+from cliff.ddd.common import DomainError
 from cliff.ddd.specifications import ISpecification
 
 TId = TypeVar("TId")
@@ -59,12 +59,12 @@ class IRepository(Generic[TId, TAggregate], ABC):
 
     @abstractmethod
     def get_many(
-        self,
-        specifications: ISpecification,
-        only: Any = None,
-        order: Any = None,
-        locked: bool = False,
-        pagination: Any = None,
+            self,
+            specifications: ISpecification,
+            only: Any = None,
+            order: Any = None,
+            locked: bool = False,
+            pagination: Any = None,
     ) -> list[TAggregate]:
         """Get multiple aggregates.
 
@@ -86,8 +86,3 @@ class IRepository(Generic[TId, TAggregate], ABC):
 
         :param aggregate: The aggregate to update/create.
         """
-
-    # TODO: think about how exactly to implement this
-    @abstractmethod
-    def convertion_table(self) -> dict[str, str]:
-        """Convert from domain model to table model."""
