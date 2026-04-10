@@ -41,7 +41,7 @@ class InMemoryEvaluationVisitor(IVisitor):
 
     def __init__(self, obj: object) -> None:
         self._obj = obj
-        self.result: bool = False
+        self.result: bool = True
 
     def _field_value(self, spec: BaseFilterSpecification) -> object:
         val = getattr(self._obj, spec.field.field_name)

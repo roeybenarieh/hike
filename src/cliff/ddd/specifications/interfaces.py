@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from .specs import (
@@ -35,6 +35,13 @@ class ISpecification(ABC):
 
     @abstractmethod
     def accept(self, visitor: IVisitor) -> None: ...
+
+    @final
+    def is_satisfied(self, obj: object) -> bool:
+        from cliff.ddd.specifications.evaluation_visitors import InMemoryEvaluationVisitor
+        visitor = InMemoryEvaluationVisitor(obj)
+        self.accept(visitor)
+        return visitor.result
 
 
 class IVisitor(ABC):
