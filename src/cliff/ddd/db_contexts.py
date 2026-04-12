@@ -104,11 +104,11 @@ class RedisDBContext(DBContext[Pipeline]):
         self._session = self._client.pipeline(transaction=True)  # pyright: ignore[reportUnknownMemberType]
 
     def commit(self) -> None:
-        self._session.execute()
+        self.session.execute()
 
     def rollback(self) -> None:
-        self._session.reset()
+        self.session.reset()
 
     def close(self) -> None:
-        self._session.reset()
+        self.session.reset()
         self._session = None

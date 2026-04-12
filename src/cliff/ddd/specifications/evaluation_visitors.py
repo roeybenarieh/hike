@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from redis import Redis
 from sqlalchemy import ColumnElement, Select, select, true, and_, or_, not_
@@ -42,9 +42,12 @@ class InMemoryEvaluationVisitor(IVisitor):
         self._obj = obj
         self.result: bool = True
 
-    def _field_value(self, spec: BaseFilterSpecification) -> object:
+    def _field_value(self, spec: BaseFilterSpecification) -> Any:
         val = getattr(self._obj, spec.field.field_name)
-        return val.value if isinstance(val, ValueObject) else val  # type: ignore[union-attr]
+        if isinstance(val, ValueObject):
+            val_any: Any = cast(Any, val)
+            return val_any.value
+        return val
 
     def _pop_result(self) -> bool:
         r = self.result
@@ -78,17 +81,13 @@ class InMemoryEvaluationVisitor(IVisitor):
         self.result = self._field_value(spec) != spec.operand
 
     def visit_greater_than(self, spec: GreaterThanSpecification) -> None:
-        self.result = self._field_value(spec) > spec.operand  # type: ignore[operator]
-
+        self.result = self._field_value(spec) > spec.operand
     def visit_greater_than_equal(self, spec: GreaterThanEqualSpecification) -> None:
-        self.result = self._field_value(spec) >= spec.operand  # type: ignore[operator]
-
+        self.result = self._field_value(spec) >= spec.operand
     def visit_less_than(self, spec: LessThanSpecification) -> None:
-        self.result = self._field_value(spec) < spec.operand  # type: ignore[operator]
-
+        self.result = self._field_value(spec) < spec.operand
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
-        self.result = self._field_value(spec) <= spec.operand  # type: ignore[operator]
-
+        self.result = self._field_value(spec) <= spec.operand
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy visitor
@@ -138,28 +137,22 @@ class SQLAlchemyEvaluationVisitor(IVisitor):
 
     def visit_equal(self, spec: EqualSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col == val  # type: ignore[assignment]
-
+        self.filters = col == val
     def visit_not_equal(self, spec: NotEqualSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col != val  # type: ignore[assignment]
-
+        self.filters = col != val
     def visit_greater_than(self, spec: GreaterThanSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col > val  # type: ignore[assignment]
-
+        self.filters = col > val
     def visit_greater_than_equal(self, spec: GreaterThanEqualSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col >= val  # type: ignore[assignment]
-
+        self.filters = col >= val
     def visit_less_than(self, spec: LessThanSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col < val  # type: ignore[assignment]
-
+        self.filters = col < val
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
         col, val = self._visit_filter(spec)
-        self.filters = col <= val  # type: ignore[assignment]
-
+        self.filters = col <= val
 
 # ---------------------------------------------------------------------------
 # MongoDB visitor
@@ -316,7 +309,7 @@ class RedisEvaluationVisitor(IVisitor):
         self.query: str = self._MATCH_ALL
 
     def result(self) -> Any:
-        return self._client.ft(self._index).search(self.query)  # type: ignore[no-any-return]
+        return self._client.ft(self._index).search(self.query)  # pyright: ignore[reportUnknownVariableType]
 
     def _pop_query(self) -> str:
         q = self.query

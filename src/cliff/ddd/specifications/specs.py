@@ -21,13 +21,13 @@ class BaseLeftRightSpecification(ISpecification, ABC):
 @final
 class AndSpecification(BaseLeftRightSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_and(self)  # type: ignore[arg-type]
+        visitor.visit_and(self)
 
 
 @final
 class OrSpecification(BaseLeftRightSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_or(self)  # type: ignore[arg-type]
+        visitor.visit_or(self)
 
 
 @final
@@ -36,7 +36,7 @@ class NotSpecification(ISpecification):
         self.spec = spec
 
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_not(self)  # type: ignore[arg-type]
+        visitor.visit_not(self)
 
 
 ##### Leaf Specifications #####
@@ -49,34 +49,34 @@ class BaseFilterSpecification(ISpecification, ABC):
 @final
 class EqualSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_equal(self)  # type: ignore[arg-type]
+        visitor.visit_equal(self)
 
 
 @final
 class NotEqualSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_not_equal(self)  # type: ignore[arg-type]
+        visitor.visit_not_equal(self)
 
 
 @final
 class GreaterThanSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_greater_than(self)  # type: ignore[arg-type]
+        visitor.visit_greater_than(self)
 
 
 @final
 class GreaterThanEqualSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_greater_than_equal(self)  # type: ignore[arg-type]
+        visitor.visit_greater_than_equal(self)
 
 
 @final
 class LessThanSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_less_than(self)  # type: ignore[arg-type]
+        visitor.visit_less_than(self)
 
 
 @final
 class LessThanEqualSpecification(BaseFilterSpecification):
     def accept(self, visitor: IVisitor) -> None:
-        visitor.visit_less_than_equal(self)  # type: ignore[arg-type]
+        visitor.visit_less_than_equal(self)

@@ -52,14 +52,14 @@ class FieldProxy:
         self.field_type = field_type  # e.g. Price
         self.entity_class = entity_class  # e.g. Boat
 
-    def __eq__(self, other: object) -> EqualSpecification:  # type: ignore[override]
+    def __eq__(self, other: object) -> EqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
         if isinstance(other, FieldProxy):
-            return EqualSpecification(self, other is self)  # type: ignore[arg-type]
+            return EqualSpecification(self, other is self)
         return EqualSpecification(self, other)
 
-    def __ne__(self, other: object) -> NotEqualSpecification:  # type: ignore[override]
+    def __ne__(self, other: object) -> NotEqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
         if isinstance(other, FieldProxy):
-            return NotEqualSpecification(self, other is not self)  # type: ignore[arg-type]
+            return NotEqualSpecification(self, other is not self)
         return NotEqualSpecification(self, other)
 
     def __lt__(self, other: object) -> LessThanSpecification:
@@ -136,11 +136,11 @@ def unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
         inner = args[0]
         # Bare class: Field[Price]
         if isinstance(inner, type) and issubclass(inner, ValueObject):
-            return inner  # type: ignore[return-value]
+            return cast(type[ValueObject[Any]], inner)
         # Parameterized generic: Field[EntityID[UUID]]
         bare = get_origin(inner)
         if isinstance(bare, type) and issubclass(bare, ValueObject):
-            return bare  # type: ignore[return-value]
+            return cast(type[ValueObject[Any]], bare)
     return None
 
 
@@ -192,7 +192,7 @@ class _FieldDescriptor(Generic[_T]):
         val = instance.__dict__.get(self._private, _MISSING)
         if val is _MISSING:
             raise AttributeError(f"Field '{self.field_name}' not set")
-        return val  # type: ignore[return-value]
+        return val
 
     def __set__(self, instance: object, value: object) -> None:
         if not isinstance(value, self.field_type):
@@ -213,7 +213,7 @@ def vo(field_type: type[_T]) -> Field[_T]:
     Both forms install a ``_FieldDescriptor`` and are fully equivalent at
     runtime and to Pyright.
     """
-    return _FieldDescriptor("", field_type)  # type: ignore[return-value]
+    return _FieldDescriptor("", field_type)  # pyright: ignore[reportReturnType]
 
 
 def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
@@ -231,7 +231,7 @@ def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
 
     At runtime it simply delegates to ``dataclasses.field``.
     """
-    return field(default_factory=default_factory)  # type: ignore[return-value]
+    return field(default_factory=default_factory)  # pyright: ignore[reportReturnType]
 
 
 @dataclass_transform(kw_only_default=True, field_specifiers=(vo, vo_field))
@@ -304,7 +304,7 @@ class Entity[TId: Hashable](DomainObject):
             cls.__annotations__ = {}
         for name, attr in cls.__dict__.items():
             if isinstance(attr, _FieldDescriptor) and name not in cls.__annotations__:
-                cls.__annotations__[name] = Field[attr.field_type]  # type: ignore[valid-type]
+                cls.__annotations__[name] = Field[attr.field_type]  # pyright: ignore[reportUnknownMemberType]
 
                 # ── Step 2: turn the subclass into a dataclass ────────────────────────
         # eq=False  — don't overwrite our id-based __eq__/__hash__.
@@ -333,7 +333,7 @@ class Entity[TId: Hashable](DomainObject):
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
             return False
-        return self.id == other.id  # type: ignore[attr-defined]
+        return self.id == cast(Entity[Any], other).id
 
     def __hash__(self) -> int:
         return hash(self.id)

@@ -34,7 +34,7 @@ class UnknownError(RepositoryError): ...
 
 
 class AggregateError(RepositoryError):
-    def __init__(self, aggregate: Aggregate[Any]):
+    def __init__(self, aggregate: object) -> None:
         self.aggregate = aggregate
 
 
@@ -130,7 +130,7 @@ class InMemoryRepository(IRepository[TId, dict[Any, "Aggregate[Any]"]]):
         if key in self.session:
             raise AggregateAlreadyExistError(aggregate)
         self.session[key] = aggregate
-        return aggregate.id  # type: ignore[return-value]
+        return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: Aggregate[TId]) -> None:
         key = aggregate.id.value
@@ -141,8 +141,8 @@ class InMemoryRepository(IRepository[TId, dict[Any, "Aggregate[Any]"]]):
     def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
         aggregate = self.session.get(identifier)
         if aggregate is None:
-            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
-        return aggregate  # type: ignore[return-value]
+            raise AggregateDoesNotExistError(identifier)
+        return aggregate
 
 
     def get_many(
@@ -150,7 +150,7 @@ class InMemoryRepository(IRepository[TId, dict[Any, "Aggregate[Any]"]]):
             specification: ISpecification,
             locked: bool = False,
     ) -> list[Aggregate[TId]]:
-        return [agg for agg in self.session.values() if specification.is_satisfied(agg)]  # type: ignore[return-value]
+        return [agg for agg in self.session.values() if specification.is_satisfied(agg)]
 
     def update(self, aggregate: Aggregate[TId]) -> None:
         key = aggregate.id.value
@@ -197,7 +197,7 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
         """
         init_field_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         doc = {k: v for k, v in document.items() if k in init_field_names}
-        return self._aggregate_class(**doc)  # type: ignore[return-value]
+        return self._aggregate_class(**doc)
 
     @staticmethod
     def _id_filter(aggregate: Aggregate[TId]) -> dict[str, TId]:
@@ -229,7 +229,7 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
     def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
         document = self._collection.find_one({"id": identifier}, session=self._session)
         if document is None:
-            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
+            raise AggregateDoesNotExistError(identifier)
         return self._from_doc(document)
 
     def get_many(
@@ -286,7 +286,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
     def _from_model(self, model: Any) -> Aggregate[TId]:
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         data = {k: getattr(model, k) for k in init_names if hasattr(model, k)}
-        return self._aggregate_class(**data)  # type: ignore[return-value]
+        return self._aggregate_class(**data)
 
     def save(self, aggregate: Aggregate[TId]) -> TId:
         model = self._model_class(**to_dict(aggregate))
@@ -295,7 +295,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
             self.session.flush()
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
-        return aggregate.id  # type: ignore[return-value]
+        return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: Aggregate[TId]) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
@@ -310,7 +310,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
             with_for_update=True if locked else None,
         )
         if model is None:
-            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
+            raise AggregateDoesNotExistError(identifier)
         return self._from_model(model)
 
     def get_many(
@@ -318,13 +318,13 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
             specification: ISpecification,
             locked: bool = False,
     ) -> list[Aggregate[TId]]:
-        visitor = SQLAlchemyEvaluationVisitor(self._model_class)  # type: ignore[arg-type]
+        visitor = SQLAlchemyEvaluationVisitor(self._model_class)
         specification.accept(visitor)
         stmt = visitor.result()
         if locked:
             stmt = stmt.with_for_update()
         rows = self.session.scalars(stmt).all()
-        return [self._from_model(row) for row in rows]  # type: ignore[return-value]
+        return [self._from_model(row) for row in rows]
 
     def update(self, aggregate: Aggregate[TId]) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
@@ -353,7 +353,7 @@ class _AggregateEncoder(json.JSONEncoder):
     def default(self, o: object) -> object:
         if isinstance(o, _uuid_mod.UUID):
             return {"__uuid__": str(o)}
-        return super().default(o)  # type: ignore[misc]
+        return super().default(o)
 
 
 def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
@@ -385,7 +385,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
 
     def __init__(
             self,
-            client: Redis,  # type: ignore[type-arg]  # redis-py stubs pre-parameterize Redis
+            client: Redis,  # redis-py stubs pre-parameterize Redis
             aggregate_class: type[Aggregate[TId]],
             key_prefix: str,
             *,
@@ -406,7 +406,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
     def session(self) -> Pipeline:
         if self._session is None:
             raise RuntimeError("Session wasn't provided to the repository")
-        return self._session  # type: ignore[return-value]
+        return self._session
 
     @session.setter
     def session(self, value: Pipeline) -> None:
@@ -424,7 +424,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
             timeout=self._lock_timeout,
             blocking_timeout=self._lock_blocking_timeout,
         )
-        acquired: bool = lock.acquire()  # type: ignore[assignment]
+        acquired: bool = lock.acquire()
         if not acquired:
             raise LockTimeoutError(
                 f"Could not acquire lock for {key!r} within {self._lock_blocking_timeout}s"
@@ -454,7 +454,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         filtered = {k: v for k, v in data.items() if k in init_names}
-        return self._aggregate_class(**filtered)  # type: ignore[return-value]
+        return self._aggregate_class(**filtered)
 
     # ------------------------------------------------------------------
     # IRepository implementation
@@ -465,13 +465,13 @@ class RedisRepository(IRepository[TId, Pipeline]):
         if self._client.exists(key):
             raise AggregateAlreadyExistError(aggregate)
         self.session.set(key, self._serialize(aggregate))
-        return aggregate.id  # type: ignore[return-value]
+        return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: Aggregate[TId]) -> None:
         key = self._key(aggregate.id.value)
         if not self._client.exists(key):
             raise AggregateDoesNotExistError(aggregate)
-        self.session.delete(key)  # type: ignore[misc]
+        self.session.delete(key)
 
     def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
         key = self._key(identifier)
@@ -479,7 +479,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
             self._acquire_lock(key)
         raw = cast(bytes | None, self._client.get(key))
         if raw is None:
-            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
+            raise AggregateDoesNotExistError(identifier)
         return self._deserialize(raw)
 
     def get_many(
@@ -488,7 +488,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
             locked: bool = False,
     ) -> list[Aggregate[TId]]:
         result: list[Aggregate[TId]] = []
-        for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # type: ignore[reportUnknownMemberType]
+        for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
             raw = cast(bytes | None, self._client.get(key))
             if raw is None:
                 continue

@@ -97,7 +97,7 @@ class TestFieldDescriptor:
 
     def test_raw_value_auto_converted(self) -> None:
         # Field[Name] should auto-convert raw str to Name
-        s = Ship(name="Titanic")  # type: ignore[arg-type]
+        s = Ship(name="Titanic")  # pyright: ignore[reportArgumentType]
         assert isinstance(s.name, Name)
 
     def test_price_field_on_boat(self) -> None:

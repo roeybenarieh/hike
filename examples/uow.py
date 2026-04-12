@@ -73,7 +73,7 @@ print(f"Boats priced above 1000: {[cast(Boat, b).name for b in results]}")
 # Update
 # ---------------------------------------------------------------------------
 
-boat.price = Price(3_999.99)  # type: ignore[assignment]
+boat.price = Price(3_999.99)
 with uow:
     uow.repo.update(boat)
     uow.commit()

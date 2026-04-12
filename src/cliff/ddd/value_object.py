@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Self, Any
+from typing import Self, Any, cast
 
 from .common import DomainObject
 
 
-def _cmp_value(other: Any) -> Any:  # type: ignore[return]
+def _cmp_value(other: Any) -> Any:
     if isinstance(other, ValueObject):
-        return other.value  # type: ignore[return-value]
+        return cast(ValueObject[Any], other).value
     return other
 
 
