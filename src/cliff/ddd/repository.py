@@ -1,14 +1,23 @@
+import json
+import uuid as _uuid_mod
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from collections.abc import Iterator
+from typing import Any, Generic, TypeVar, cast
 
 from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
+from redis import Redis
+from redis.client import Pipeline
+from sqlalchemy.orm import Session
 
 from cliff.ddd.aggregate import Aggregate
 from cliff.ddd.common import DomainError
 from cliff.ddd.entity import to_dict, get_fields
 from cliff.ddd.specifications import ISpecification
-from cliff.ddd.specifications.evaluation_visitors import MongoDBEvaluationVisitor
+from cliff.ddd.specifications.evaluation_visitors import (
+    MongoDBEvaluationVisitor,
+    SQLAlchemyEvaluationVisitor,
+)
 
 TId = TypeVar("TId")
 TSession = TypeVar("TSession")
@@ -244,3 +253,186 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
             upsert=True,
             session=self._session,
         )
+
+
+# ---------------------------------------------------------------------------
+# SQLAlchemy repository
+# ---------------------------------------------------------------------------
+
+
+class SQLAlchemyRepository(IRepository[TId, Session]):
+    """Generic SQLAlchemy ORM repository.
+
+    ``model_class`` must be a SQLAlchemy mapped class whose column names match
+    the aggregate's dataclass field names after ``to_dict`` flattening.
+    ``get_many`` translates the specification tree into a SQL WHERE clause via
+    ``SQLAlchemyEvaluationVisitor``.  ``locked=True`` adds ``FOR UPDATE``.
+    """
+
+    def __init__(
+            self,
+            model_class: type[Any],
+            aggregate_class: type[Aggregate[TId]],
+    ) -> None:
+        super().__init__()
+        self._model_class = model_class
+        self._aggregate_class = aggregate_class
+
+    def _from_model(self, model: Any) -> Aggregate[TId]:
+        init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
+        data = {k: getattr(model, k) for k in init_names if hasattr(model, k)}
+        return self._aggregate_class(**data)  # type: ignore[return-value]
+
+    def save(self, aggregate: Aggregate[TId]) -> TId:
+        model = self._model_class(**to_dict(aggregate))
+        try:
+            self.session.add(model)
+            self.session.flush()
+        except Exception as exc:
+            raise AggregateAlreadyExistError(aggregate) from exc
+        return aggregate.id  # type: ignore[return-value]
+
+    def delete(self, aggregate: Aggregate[TId]) -> None:
+        model = self.session.get(self._model_class, aggregate.id.value)
+        if model is None:
+            raise AggregateDoesNotExistError(aggregate)
+        self.session.delete(model)
+
+    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
+        model = self.session.get(
+            self._model_class,
+            identifier,
+            with_for_update=True if locked else None,
+        )
+        if model is None:
+            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
+        return self._from_model(model)
+
+    def get_many(
+            self,
+            specification: ISpecification,
+            locked: bool = False,
+    ) -> list[Aggregate[TId]]:
+        visitor = SQLAlchemyEvaluationVisitor(self._model_class)  # type: ignore[arg-type]
+        specification.accept(visitor)
+        stmt = visitor.result()
+        if locked:
+            stmt = stmt.with_for_update()
+        rows = self.session.scalars(stmt).all()
+        return [self._from_model(row) for row in rows]  # type: ignore[return-value]
+
+    def update(self, aggregate: Aggregate[TId]) -> None:
+        model = self.session.get(self._model_class, aggregate.id.value)
+        if model is None:
+            raise AggregateDoesNotExistError(aggregate)
+        for key, val in to_dict(aggregate).items():
+            setattr(model, key, val)
+
+    def upsert(self, aggregate: Aggregate[TId]) -> None:
+        model = self.session.get(self._model_class, aggregate.id.value)
+        if model is None:
+            self.session.add(self._model_class(**to_dict(aggregate)))
+        else:
+            for key, val in to_dict(aggregate).items():
+                setattr(model, key, val)
+
+
+# ---------------------------------------------------------------------------
+# Redis repository
+# ---------------------------------------------------------------------------
+
+
+class _AggregateEncoder(json.JSONEncoder):
+    """JSON encoder that round-trips ``uuid.UUID`` values via ``{"__uuid__": "…"}``."""
+
+    def default(self, o: object) -> object:
+        if isinstance(o, _uuid_mod.UUID):
+            return {"__uuid__": str(o)}
+        return super().default(o)  # type: ignore[misc]
+
+
+def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
+    if "__uuid__" in obj:
+        return _uuid_mod.UUID(str(obj["__uuid__"]))
+    return obj
+
+
+class RedisRepository(IRepository[TId, Pipeline]):
+    """Generic Redis repository.
+
+    Aggregates are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.
+    Write operations (save, delete, update, upsert) are queued into the
+    pipeline session so they execute atomically on commit.  Read operations
+    (get_one, get_many) bypass the pipeline and go directly to the raw client
+    because pipeline commands return no results until executed.
+
+    ``uuid.UUID`` values survive JSON round-trips via a ``{"__uuid__": "…"}``
+    envelope.  ``locked`` is accepted for interface compatibility but ignored —
+    Redis does not support row-level pessimistic locking.
+    """
+
+    def __init__(
+            self,
+            client: Redis,  # type: ignore[type-arg]  # redis-py stubs pre-parameterize Redis
+            aggregate_class: type[Aggregate[TId]],
+            key_prefix: str,
+    ) -> None:
+        super().__init__()
+        self._client = client
+        self._aggregate_class = aggregate_class
+        self._key_prefix = key_prefix
+
+    def _key(self, raw_id: Any) -> str:
+        return f"{self._key_prefix}:{raw_id}"
+
+    def _serialize(self, aggregate: Aggregate[TId]) -> str:
+        return json.dumps(to_dict(aggregate), cls=_AggregateEncoder)
+
+    def _deserialize(self, raw: bytes | str) -> Aggregate[TId]:
+        data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
+        init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
+        filtered = {k: v for k, v in data.items() if k in init_names}
+        return self._aggregate_class(**filtered)  # type: ignore[return-value]
+
+    def save(self, aggregate: Aggregate[TId]) -> TId:
+        key = self._key(aggregate.id.value)
+        if self._client.exists(key):
+            raise AggregateAlreadyExistError(aggregate)
+        self.session.set(key, self._serialize(aggregate))
+        return aggregate.id  # type: ignore[return-value]
+
+    def delete(self, aggregate: Aggregate[TId]) -> None:
+        key = self._key(aggregate.id.value)
+        if not self._client.exists(key):
+            raise AggregateDoesNotExistError(aggregate)
+        self.session.delete(key)  # type: ignore[misc]
+
+    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
+        raw = cast(bytes | None, self._client.get(self._key(identifier)))
+        if raw is None:
+            raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
+        return self._deserialize(raw)
+
+    def get_many(
+            self,
+            specification: ISpecification,
+            locked: bool = False,
+    ) -> list[Aggregate[TId]]:
+        result: list[Aggregate[TId]] = []
+        for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # type: ignore[reportUnknownMemberType]
+            raw = cast(bytes | None, self._client.get(key))
+            if raw is None:
+                continue
+            aggregate = self._deserialize(raw)
+            if specification.is_satisfied(aggregate):
+                result.append(aggregate)
+        return result
+
+    def update(self, aggregate: Aggregate[TId]) -> None:
+        key = self._key(aggregate.id.value)
+        if not self._client.exists(key):
+            raise AggregateDoesNotExistError(aggregate)
+        self.session.set(key, self._serialize(aggregate))
+
+    def upsert(self, aggregate: Aggregate[TId]) -> None:
+        self.session.set(self._key(aggregate.id.value), self._serialize(aggregate))
