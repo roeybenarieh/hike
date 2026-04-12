@@ -8,6 +8,7 @@ from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 from redis import Redis
 from redis.client import Pipeline
+from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from cliff.ddd.aggregate import Aggregate
@@ -41,6 +42,10 @@ class AggregateDoesNotExistError(AggregateError): ...
 
 
 class AggregateAlreadyExistError(AggregateError): ...
+
+
+class LockTimeoutError(RepositoryError):
+    """Raised when a pessimistic lock cannot be acquired within the allowed time."""
 
 
 # HACK: as of time of writing this class, there is no way to statically enforce
@@ -358,7 +363,7 @@ def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
 
 
 class RedisRepository(IRepository[TId, Pipeline]):
-    """Generic Redis repository.
+    """Generic Redis repository with distributed locking via ``redis.lock.Lock``.
 
     Aggregates are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.
     Write operations (save, delete, update, upsert) are queued into the
@@ -366,9 +371,16 @@ class RedisRepository(IRepository[TId, Pipeline]):
     (get_one, get_many) bypass the pipeline and go directly to the raw client
     because pipeline commands return no results until executed.
 
-    ``uuid.UUID`` values survive JSON round-trips via a ``{"__uuid__": "…"}``
-    envelope.  ``locked`` is accepted for interface compatibility but ignored —
-    Redis does not support row-level pessimistic locking.
+    **Locking** — when ``locked=True`` is passed to ``get_one`` or
+    ``get_many``, a ``redis.lock.Lock`` is acquired on each key before the
+    value is read (using the lock key ``lock:<data-key>``).  All held locks
+    are released by calling ``release_locks()``, which is also called
+    automatically when a new pipeline session is assigned (i.e. at the start
+    of the next ``UnitOfWork`` block).  Locks expire unconditionally after
+    ``lock_timeout`` seconds as a safety net.
+
+    **UUID serialization** — ``uuid.UUID`` values survive JSON round-trips
+    via a ``{"__uuid__": "…"}`` envelope.
     """
 
     def __init__(
@@ -376,11 +388,61 @@ class RedisRepository(IRepository[TId, Pipeline]):
             client: Redis,  # type: ignore[type-arg]  # redis-py stubs pre-parameterize Redis
             aggregate_class: type[Aggregate[TId]],
             key_prefix: str,
+            *,
+            lock_timeout: float = 30.0,
+            lock_blocking_timeout: float | None = 10.0,
     ) -> None:
         super().__init__()
         self._client = client
         self._aggregate_class = aggregate_class
         self._key_prefix = key_prefix
+        self._lock_timeout = lock_timeout
+        self._lock_blocking_timeout = lock_blocking_timeout
+        self._held_locks: dict[str, RedisLock] = {}
+
+    # Full property override — also narrows the return type to Pipeline.
+    # Releases any locks left over from a previous session on assignment.
+    @property
+    def session(self) -> Pipeline:
+        if self._session is None:
+            raise RuntimeError("Session wasn't provided to the repository")
+        return self._session  # type: ignore[return-value]
+
+    @session.setter
+    def session(self, value: Pipeline) -> None:
+        self.release_locks()
+        self._session = value
+
+    # ------------------------------------------------------------------
+    # Lock helpers
+    # ------------------------------------------------------------------
+
+    def _acquire_lock(self, key: str) -> None:
+        """Acquire a distributed lock for *key*; raise ``DBConnectionError`` on failure."""
+        lock = self._client.lock(
+            f"lock:{key}",
+            timeout=self._lock_timeout,
+            blocking_timeout=self._lock_blocking_timeout,
+        )
+        acquired: bool = lock.acquire()  # type: ignore[assignment]
+        if not acquired:
+            raise LockTimeoutError(
+                f"Could not acquire lock for {key!r} within {self._lock_blocking_timeout}s"
+            )
+        self._held_locks[key] = lock
+
+    def release_locks(self) -> None:
+        """Release all locks held by this repository."""
+        for lock in self._held_locks.values():
+            try:
+                lock.release()
+            except Exception:
+                pass
+        self._held_locks.clear()
+
+    # ------------------------------------------------------------------
+    # Serialization helpers
+    # ------------------------------------------------------------------
 
     def _key(self, raw_id: Any) -> str:
         return f"{self._key_prefix}:{raw_id}"
@@ -393,6 +455,10 @@ class RedisRepository(IRepository[TId, Pipeline]):
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         filtered = {k: v for k, v in data.items() if k in init_names}
         return self._aggregate_class(**filtered)  # type: ignore[return-value]
+
+    # ------------------------------------------------------------------
+    # IRepository implementation
+    # ------------------------------------------------------------------
 
     def save(self, aggregate: Aggregate[TId]) -> TId:
         key = self._key(aggregate.id.value)
@@ -408,7 +474,10 @@ class RedisRepository(IRepository[TId, Pipeline]):
         self.session.delete(key)  # type: ignore[misc]
 
     def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
-        raw = cast(bytes | None, self._client.get(self._key(identifier)))
+        key = self._key(identifier)
+        if locked:
+            self._acquire_lock(key)
+        raw = cast(bytes | None, self._client.get(key))
         if raw is None:
             raise AggregateDoesNotExistError(identifier)  # type: ignore[arg-type]
         return self._deserialize(raw)
@@ -425,6 +494,8 @@ class RedisRepository(IRepository[TId, Pipeline]):
                 continue
             aggregate = self._deserialize(raw)
             if specification.is_satisfied(aggregate):
+                if locked:
+                    self._acquire_lock(key.decode())
                 result.append(aggregate)
         return result
 
