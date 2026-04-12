@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from cliff.ddd.uow import DBContext
 
 
-class SQLAlchemyDBContext(DBContext):
+class SQLAlchemyDBContext(DBContext[Session]):
     """DBContext backed by a SQLAlchemy Session.
 
     Pass the session to your repositories via ``context.session``.
@@ -26,14 +26,8 @@ class SQLAlchemyDBContext(DBContext):
     """
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        super().__init__()
         self._session_factory = session_factory
-        self._session: Session | None = None
-
-    @property
-    def session(self) -> Session:
-        if self._session is None:
-            raise RuntimeError("Transaction not started — call begin() first")
-        return self._session
 
     def begin(self) -> None:
         self._session = self._session_factory()
@@ -49,7 +43,7 @@ class SQLAlchemyDBContext(DBContext):
         self._session = None
 
 
-class MongoDBContext(DBContext):
+class PyMongoDBContext(DBContext[ClientSession]):
     """DBContext backed by a pymongo ClientSession (ACID transaction).
 
     Requires a replica set or mongos — standalone MongoDB does not support
@@ -67,14 +61,8 @@ class MongoDBContext(DBContext):
     """
 
     def __init__(self, client: MongoClient[dict[str, Any]]) -> None:
+        super().__init__()
         self._client = client
-        self._session: ClientSession | None = None
-
-    @property
-    def session(self) -> ClientSession:
-        if self._session is None:
-            raise RuntimeError("Transaction not started — call begin() first")
-        return self._session
 
     def begin(self) -> None:
         self._session = self._client.start_session()
@@ -91,7 +79,7 @@ class MongoDBContext(DBContext):
         self._session = None
 
 
-class RedisDBContext(DBContext):
+class RedisDBContext(DBContext[Pipeline]):
     """DBContext backed by a redis Pipeline (MULTI/EXEC transaction).
 
     All commands queued between ``begin()`` and ``commit()`` are sent
@@ -109,24 +97,18 @@ class RedisDBContext(DBContext):
     """
 
     def __init__(self, client: Redis) -> None:
+        super().__init__()
         self._client = client
-        self._pipeline: Pipeline | None = None
-
-    @property
-    def pipeline(self) -> Pipeline:
-        if self._pipeline is None:
-            raise RuntimeError("Transaction not started — call begin() first")
-        return self._pipeline
 
     def begin(self) -> None:
-        self._pipeline = self._client.pipeline(transaction=True)  # pyright: ignore[reportUnknownMemberType]
+        self._session = self._client.pipeline(transaction=True)  # pyright: ignore[reportUnknownMemberType]
 
     def commit(self) -> None:
-        self.pipeline.execute()
+        self._session.execute()
 
     def rollback(self) -> None:
-        self.pipeline.reset()
+        self._session.reset()
 
     def close(self) -> None:
-        self.pipeline.reset()
-        self._pipeline = None
+        self._session.reset()
+        self._session = None
