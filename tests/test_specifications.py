@@ -14,7 +14,7 @@ from hike.ddd.specifications import (
     GreaterThanEqualSpecification,
     GreaterThanSpecification,
     ISpecification,
-    IVisitor,
+    ISpecificationVisitor,
     LessThanEqualSpecification,
     LessThanSpecification,
     NotEqualSpecification,
@@ -79,7 +79,7 @@ def _field_value(listing: ProductListing, proxy: FieldProxy) -> Any:
     return cast(ValueObject[Any], field_val).value if isinstance(field_val, ValueObject) else field_val
 
 
-class ListingFilterVisitor(IVisitor):
+class ListingFilterSpecificationVisitor(ISpecificationVisitor):
     def __init__(self, listing: ProductListing) -> None:
         self._listing = listing
         self.result: bool = False
@@ -123,7 +123,7 @@ class ListingFilterVisitor(IVisitor):
 
 
 def _evaluate(listing: ProductListing, spec: ISpecification) -> bool:
-    visitor = ListingFilterVisitor(listing)
+    visitor = ListingFilterSpecificationVisitor(listing)
     spec.accept(visitor)
     return visitor.result
 

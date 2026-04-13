@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, and_, not_, or_, select, true
 from sqlalchemy.orm import QueryableAttribute
 
-from hike.ddd.specifications import IVisitor
+from hike.ddd.specifications import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
     BaseLeftRightSpecification,
@@ -22,7 +22,7 @@ from hike.ddd.specifications.specs import (
 _EMPTY_FILTER: ColumnElement[Any] = true()
 
 
-class SQLAlchemyEvaluationVisitor(IVisitor):
+class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
     """Translates a specification tree into a SQLAlchemy SELECT with WHERE filters."""
 
     def __init__(self, table_object: type[QueryableAttribute[Any]]) -> None:

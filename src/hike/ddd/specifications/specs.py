@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, final
 
-from .interfaces import ISpecification, IVisitor
+from .interfaces import ISpecification, ISpecificationVisitor
 
 if TYPE_CHECKING:
     from hike.ddd.entity import FieldProxy
@@ -20,13 +20,13 @@ class BaseLeftRightSpecification(ISpecification, ABC):
 
 @final
 class AndSpecification(BaseLeftRightSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_and(self)
 
 
 @final
 class OrSpecification(BaseLeftRightSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_or(self)
 
 
@@ -35,7 +35,7 @@ class NotSpecification(ISpecification):
     def __init__(self, spec: ISpecification) -> None:
         self.spec = spec
 
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_not(self)
 
 
@@ -48,35 +48,35 @@ class BaseFilterSpecification(ISpecification, ABC):
 
 @final
 class EqualSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_equal(self)
 
 
 @final
 class NotEqualSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_not_equal(self)
 
 
 @final
 class GreaterThanSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_greater_than(self)
 
 
 @final
 class GreaterThanEqualSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_greater_than_equal(self)
 
 
 @final
 class LessThanSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_less_than(self)
 
 
 @final
 class LessThanEqualSpecification(BaseFilterSpecification):
-    def accept(self, visitor: IVisitor) -> None:
+    def accept(self, visitor: ISpecificationVisitor) -> None:
         visitor.visit_less_than_equal(self)

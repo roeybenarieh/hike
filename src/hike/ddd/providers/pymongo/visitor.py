@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hike.ddd.specifications import IVisitor
+from hike.ddd.specifications import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
     BaseLeftRightSpecification,
@@ -17,7 +17,7 @@ from hike.ddd.specifications.specs import (
 )
 
 
-class MongoDBEvaluationVisitor(IVisitor):
+class MongoDBEvaluationSpecificationVisitor(ISpecificationVisitor):
     """Translates a specification tree into a pymongo filter dict.
 
     Usage::

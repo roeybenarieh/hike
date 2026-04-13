@@ -16,7 +16,7 @@ from hike.ddd.repository import (
 )
 from hike.ddd.specifications import ISpecification
 
-from .visitor import MongoDBEvaluationVisitor
+from .visitor import MongoDBEvaluationSpecificationVisitor
 
 
 class PyMongoRepository(IRepository[TId, ClientSession]):
@@ -86,7 +86,7 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
             specification: ISpecification,
             locked: bool = False,
     ) -> list[Aggregate[TId]]:
-        visitor = MongoDBEvaluationVisitor()
+        visitor = MongoDBEvaluationSpecificationVisitor()
         specification.accept(visitor)
         cursor = self._collection.find(visitor.filters, session=self._session)
         return [self._from_doc(doc) for doc in cursor]

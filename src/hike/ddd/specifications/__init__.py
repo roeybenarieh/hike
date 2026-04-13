@@ -1,4 +1,4 @@
-from .interfaces import ISpecification, IVisitor
+from .interfaces import ISpecification, ISpecificationVisitor
 from .specs import (
     AndSpecification,
     BaseFilterSpecification,
@@ -18,7 +18,7 @@ from .comperable import (
 
 __all__ = [
     "ISpecification",
-    "IVisitor",
+    "ISpecificationVisitor",
     "AndSpecification",
     "OrSpecification",
     "NotSpecification",

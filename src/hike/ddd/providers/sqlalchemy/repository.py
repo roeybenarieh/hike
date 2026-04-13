@@ -14,7 +14,7 @@ from hike.ddd.repository import (
 )
 from hike.ddd.specifications import ISpecification
 
-from .visitor import SQLAlchemyEvaluationVisitor
+from .visitor import SQLAlchemyEvaluationSpecificationVisitor
 
 
 class SQLAlchemyRepository(IRepository[TId, Session]):
@@ -72,7 +72,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
             specification: ISpecification,
             locked: bool = False,
     ) -> list[Aggregate[TId]]:
-        visitor = SQLAlchemyEvaluationVisitor(self._model_class)
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._model_class)
         specification.accept(visitor)
         stmt = visitor.result()
         if locked:

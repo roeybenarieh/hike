@@ -4,7 +4,7 @@ from typing import Any
 
 from redis import Redis
 
-from hike.ddd.specifications import IVisitor
+from hike.ddd.specifications import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
     BaseLeftRightSpecification,
@@ -68,7 +68,7 @@ def _redis_leaf(field_name: str, operand: object, op: str) -> str:
                 )
 
 
-class RedisEvaluationVisitor(IVisitor):
+class RedisEvaluationSpecificationVisitor(ISpecificationVisitor):
     """Translates a specification tree into a RediSearch FT.SEARCH query string.
 
     Usage::
