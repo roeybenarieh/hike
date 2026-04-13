@@ -3,9 +3,9 @@
 from typing import assert_type
 from uuid import UUID
 
-from cliff.ddd.entity import EntityID, Field, UuidEntity
-from cliff.ddd.value_object import ValueObject
-from cliff.ddd.specifications import (
+from hike.ddd.entity import EntityID, Field, UuidEntity
+from hike.ddd.value_object import ValueObject
+from hike.ddd.specifications import (
     AndSpecification,
     EqualSpecification,
     LessThanSpecification,
@@ -92,7 +92,7 @@ class TestFieldDescriptor:
         assert s.name.value == "Titanic"
 
     def test_class_access_returns_field_proxy(self) -> None:
-        from cliff.ddd.entity import FieldProxy
+        from hike.ddd.entity import FieldProxy
         assert isinstance(Ship.name, FieldProxy)
 
     def test_raw_value_auto_converted(self) -> None:

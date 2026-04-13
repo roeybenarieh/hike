@@ -18,9 +18,9 @@ aggregate, which applies them via the visitor pattern.
 
 from __future__ import annotations
 
-from cliff.ddd.entity import Field, UuidEntity
-from cliff.ddd.specifications import ISpecification
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.entity import Field, UuidEntity
+from hike.ddd.specifications import ISpecification
+from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------

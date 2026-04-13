@@ -38,7 +38,7 @@ class ISpecification(ABC):
 
     @final
     def is_satisfied(self, obj: object) -> bool:
-        from cliff.ddd.specifications.evaluation_visitors import InMemoryEvaluationVisitor
+        from hike.ddd.specifications.evaluation_visitors import InMemoryEvaluationVisitor
         visitor = InMemoryEvaluationVisitor(obj)
         self.accept(visitor)
         return visitor.result

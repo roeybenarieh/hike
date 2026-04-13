@@ -6,8 +6,8 @@ from typing import Any, cast
 
 import pytest
 
-from cliff.ddd.entity import Field, FieldProxy, UuidEntity
-from cliff.ddd.specifications import (
+from hike.ddd.entity import Field, FieldProxy, UuidEntity
+from hike.ddd.specifications import (
     AndSpecification,
     BaseFilterSpecification,
     EqualSpecification,
@@ -21,7 +21,7 @@ from cliff.ddd.specifications import (
     NotSpecification,
     OrSpecification,
 )
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------

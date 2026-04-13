@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from typing import cast
 
-from cliff.ddd.aggregate import UuidAggregate
-from cliff.ddd.uow import InMemoryDBContext
-from cliff.ddd.entity import Field
-from cliff.ddd.repository import AggregateDoesNotExistError, InMemoryRepository
-from cliff.ddd.uow import UnitOfWork
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.aggregate import UuidAggregate
+from hike.ddd.uow import InMemoryDBContext
+from hike.ddd.entity import Field
+from hike.ddd.repository import AggregateDoesNotExistError, InMemoryRepository
+from hike.ddd.uow import UnitOfWork
+from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 from dataclasses import field
 from datetime import datetime
 
-from cliff.ddd.entity import Field, UuidEntity
-from cliff.ddd.specifications import EqualSpecification
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.entity import Field, UuidEntity
+from hike.ddd.specifications import EqualSpecification
+from hike.ddd.value_object import ValueObject
 from examples.value_objects import Name
 
 

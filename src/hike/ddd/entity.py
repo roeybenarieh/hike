@@ -255,8 +255,8 @@ class Entity[TId: Hashable](DomainObject):
     Subclass a concrete base (e.g. ``UuidEntity``) and annotate ValueObject
     fields with ``Field[T]``:
 
-        from cliff.ddd.entity import Field, UuidEntity
-        from cliff.ddd.value_object import ValueObject
+        from hike.ddd.entity import Field, UuidEntity
+        from hike.ddd.value_object import ValueObject
 
         class Price(ValueObject[float]):
             value: float

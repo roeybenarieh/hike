@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
-from cliff.ddd.aggregate import Aggregate
-from cliff.ddd.repository import IRepository
+from hike.ddd.aggregate import Aggregate
+from hike.ddd.repository import IRepository
 
 if TYPE_CHECKING:
     pass

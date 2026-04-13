@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, final
 from .interfaces import ISpecification, IVisitor
 
 if TYPE_CHECKING:
-    from cliff.ddd.entity import FieldProxy
+    from hike.ddd.entity import FieldProxy
 
 
 ##### Composite Specifications ####

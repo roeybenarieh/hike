@@ -6,16 +6,16 @@ from uuid import UUID
 
 import pytest
 
-from cliff.ddd.aggregate import UuidAggregate
-from cliff.ddd.uow import InMemoryDBContext
-from cliff.ddd.entity import Field
-from cliff.ddd.repository import (
+from hike.ddd.aggregate import UuidAggregate
+from hike.ddd.uow import InMemoryDBContext
+from hike.ddd.entity import Field
+from hike.ddd.repository import (
     AggregateDoesNotExistError,
     AggregateAlreadyExistError,
     InMemoryRepository,
 )
-from cliff.ddd.uow import UnitOfWork
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.uow import UnitOfWork
+from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
