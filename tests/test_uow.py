@@ -7,12 +7,11 @@ from uuid import UUID
 import pytest
 
 from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.uow import InMemoryDBContext
 from hike.ddd.entity import Field
+from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import (
     AggregateDoesNotExistError,
     AggregateAlreadyExistError,
-    InMemoryRepository,
 )
 from hike.ddd.uow import UnitOfWork
 from hike.ddd.value_object import ValueObject

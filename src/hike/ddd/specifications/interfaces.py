@@ -34,17 +34,18 @@ class ISpecification(ABC):
         return NotSpecification(self)
 
     @abstractmethod
-    def accept(self, visitor: IVisitor) -> None: ...
+    def accept(self, visitor: ISpecificationVisitor) -> None: ...
 
     @final
     def is_satisfied(self, obj: object) -> bool:
-        from hike.ddd.specifications.evaluation_visitors import InMemoryEvaluationVisitor
-        visitor = InMemoryEvaluationVisitor(obj)
+        from hike.ddd.providers.in_memory import InMemoryEvaluationSpecificationVisitor
+
+        visitor = InMemoryEvaluationSpecificationVisitor(obj)
         self.accept(visitor)
         return visitor.result
 
 
-class IVisitor(ABC):
+class ISpecificationVisitor(ABC):
     @abstractmethod
     def visit_and(self, spec: AndSpecification) -> None: ...
 

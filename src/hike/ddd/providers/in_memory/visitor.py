@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from hike.ddd.specifications.interfaces import IVisitor
+from hike.ddd.specifications.interfaces import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
     BaseFilterSpecification,
@@ -12,7 +12,7 @@ from hike.ddd.specifications.specs import (
 from hike.ddd.value_object import ValueObject
 
 
-class InMemoryEvaluationVisitor(IVisitor):
+class InMemoryEvaluationSpecificationVisitor(ISpecificationVisitor):
     """Evaluates a specification tree against a single in-memory object.
 
     Usage::
