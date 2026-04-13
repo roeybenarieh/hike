@@ -18,7 +18,8 @@ aggregate, which applies them via the visitor pattern.
 
 from __future__ import annotations
 
-from hike.ddd.entity import Field, UuidEntity
+from hike.ddd.entity import UuidEntity
+from hike.ddd.common import DomainField
 from hike.ddd.specifications import ISpecification
 from hike.ddd.value_object import ValueObject
 
@@ -66,10 +67,10 @@ class ListingName(ValueObject[str]):
 class ProductListing(UuidEntity):
     """Entity representing a single product listing inside a catalog."""
 
-    price: Field[Price]
-    category: Field[Category]
-    rating: Field[Rating]
-    name: Field[ListingName]
+    price: DomainField[Price]
+    category: DomainField[Category]
+    rating: DomainField[Rating]
+    name: DomainField[ListingName]
 
     def __repr__(self) -> str:
         return (

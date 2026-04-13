@@ -1,4 +1,5 @@
-from hike.ddd.entity import Field, UuidEntity
+from hike.ddd.entity import UuidEntity
+from hike.ddd.common import DomainField
 from hike.ddd.value_object import ValueObject
 
 
@@ -12,7 +13,7 @@ class Price(ValueObject[float]):
 
 class Boat(UuidEntity):
     name: str
-    price: Field[Price]
+    price: DomainField[Price]
 
     def discount_price(self) -> Price:
         return Price(self.price.value * 0.9)

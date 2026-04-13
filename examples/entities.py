@@ -1,7 +1,8 @@
 from dataclasses import field
 from datetime import datetime
 
-from hike.ddd.entity import Field, UuidEntity
+from hike.ddd.entity import UuidEntity
+from hike.ddd.common import DomainField
 from hike.ddd.specifications import EqualSpecification
 from hike.ddd.value_object import ValueObject
 from examples.value_objects import Name
@@ -12,8 +13,8 @@ class DateTime(ValueObject[datetime]):
 
 
 class Ship(UuidEntity):
-    name: Field[Name]
-    created_at: Field[DateTime] = field(default_factory=datetime.now)
+    name: DomainField[Name]
+    created_at: DomainField[DateTime] = field(default_factory=datetime.now)
     # something: str # TODO: should be banned
 
 
