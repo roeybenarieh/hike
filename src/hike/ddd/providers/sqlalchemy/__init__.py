@@ -8,7 +8,7 @@ Requires the ``sqlalchemy`` extra::
 from __future__ import annotations
 
 try:
-    import sqlalchemy  # noqa: F401
+    import sqlalchemy  # noqa: F401  # pyright: ignore[reportUnusedImport]
 except ImportError as _exc:
     raise ImportError(
         "The sqlalchemy extra is required for this provider. "

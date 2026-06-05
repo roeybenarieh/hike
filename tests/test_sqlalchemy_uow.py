@@ -21,7 +21,7 @@ from sqlalchemy.orm import (
     relationship,
     sessionmaker,
 )
-from testcontainers.postgres import PostgresContainer
+from testcontainers.postgres import PostgresContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.ddd.aggregate import Aggregate, UuidAggregate
 from hike.ddd.entity import EntityID, Field, UuidEntity

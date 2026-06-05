@@ -447,7 +447,7 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
     return result
 
 
-def get_fields(entity: Entity | type[Entity]):
+def get_fields(entity: Entity[Any] | type[Entity[Any]]):
     return fields(cast(Any, entity))
 
 

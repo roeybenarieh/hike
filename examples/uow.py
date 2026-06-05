@@ -9,9 +9,10 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
+from uuid import UUID
 
-from hike.ddd.aggregate import UuidAggregate
+from hike.ddd.aggregate import Aggregate, UuidAggregate
 from hike.ddd.entity import UuidEntity, Field
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import AggregateDoesNotExistError
@@ -52,8 +53,8 @@ class Boat(UuidAggregate):
 # ---------------------------------------------------------------------------
 
 context = InMemoryDBContext()
-repo: InMemoryRepository[object] = InMemoryRepository()
-uow: UnitOfWork[dict, object] = UnitOfWork(context, repo=repo)
+repo: InMemoryRepository[UUID] = InMemoryRepository()
+uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID] = UnitOfWork(context, repo=repo)
 
 # ---------------------------------------------------------------------------
 # Save

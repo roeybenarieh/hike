@@ -8,7 +8,7 @@ Requires the ``redis`` extra::
 from __future__ import annotations
 
 try:
-    import redis  # noqa: F401
+    import redis  # noqa: F401  # pyright: ignore[reportUnusedImport]
 except ImportError as _exc:
     raise ImportError(
         "The redis extra is required for this provider. "

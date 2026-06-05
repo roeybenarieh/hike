@@ -8,7 +8,7 @@ Requires the ``pymongo`` extra::
 from __future__ import annotations
 
 try:
-    import pymongo  # noqa: F401
+    import pymongo  # noqa: F401  # pyright: ignore[reportUnusedImport]
 except ImportError as _exc:
     raise ImportError(
         "The pymongo extra is required for this provider. "

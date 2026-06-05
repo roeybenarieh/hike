@@ -42,7 +42,7 @@ class UnitOfWork[TSessions, TId]:
             context: DBContext[TSessions],
             repo: IRepository[TId, TSessions],
             *,
-            auto_commit=False
+            auto_commit: bool = False
     ):
         self._context = context
         self.repo = repo
