@@ -386,7 +386,7 @@ class Entity[TId: Hashable](DomainObject):
             cls.__annotations__ = {}
         for name, attr in cls.__dict__.items():
             if isinstance(attr, _FieldDescriptor) and name not in cls.__annotations__:
-                cls.__annotations__[name] = Field[attr.field_type]  # pyright: ignore[reportUnknownMemberType]
+                cls.__annotations__[name] = Field[Any]
 
                 # ── Step 2: turn the subclass into a dataclass ────────────────────────
         # eq=False  — don't overwrite our id-based __eq__/__hash__.
