@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, and_, not_, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute
 
-from hike.ddd.entity import Entity, FieldProxy
+from hike.ddd.entity import Entity, TerminalFieldProxy
 from hike.ddd.specifications import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
@@ -54,10 +54,10 @@ class ISQLAlchemyMapper(ABC):
         ...
 
 
-def _proxy_chain(proxy: FieldProxy) -> list[FieldProxy]:
-    """Return the FieldProxy chain ordered from root to leaf."""
-    chain: list[FieldProxy] = []
-    node: FieldProxy | None = proxy
+def _proxy_chain(proxy: TerminalFieldProxy) -> list[TerminalFieldProxy]:
+    """Return the proxy chain ordered from root to leaf."""
+    chain: list[TerminalFieldProxy] = []
+    node: TerminalFieldProxy | None = proxy
     while node is not None:
         chain.append(node)
         node = node.parent
@@ -118,7 +118,7 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         spec.right.accept(self)
         return left, self._pop_filters()
 
-    def _resolve_column(self, proxy: FieldProxy) -> InstrumentedAttribute[Any]:
+    def _resolve_column(self, proxy: TerminalFieldProxy) -> InstrumentedAttribute[Any]:
         """Walk the FieldProxy chain and return the SQLAlchemy column for the leaf field.
 
         Intermediate Entity-typed steps add JOINs; the leaf ValueObject step is

@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import cast
 
 from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.entity import UuidEntity, Field, DomainField
+from hike.ddd.entity import UuidEntity, Field
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import AggregateDoesNotExistError
 from hike.ddd.uow import UnitOfWork
@@ -43,7 +43,7 @@ class Engine(UuidEntity):
 
 class Boat(UuidAggregate):
     name: str
-    engine: DomainField[Engine]
+    engine: Field[Engine]
     price: Field[Price]
 
 

@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from hike.ddd.entity import Field, FieldProxy, UuidEntity
+from hike.ddd.entity import Field, TerminalFieldProxy, UuidEntity
 from hike.ddd.specifications import (
     AndSpecification,
     BaseFilterSpecification,
@@ -74,9 +74,11 @@ class ProductListing(UuidEntity):
 # ---------------------------------------------------------------------------
 
 
-def _field_value(listing: ProductListing, proxy: FieldProxy) -> Any:
-    field_val = getattr(listing, proxy.field_name)
-    return cast(ValueObject[Any], field_val).value if isinstance(field_val, ValueObject) else field_val
+def _field_value(obj: object, proxy: TerminalFieldProxy) -> Any:
+    val: Any = obj
+    for name in proxy.path:
+        val = getattr(val, name)
+    return cast(ValueObject[Any], val).value if isinstance(val, ValueObject) else val
 
 
 class ListingFilterSpecificationVisitor(ISpecificationVisitor):

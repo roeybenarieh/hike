@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, final
 from .interfaces import ISpecification, ISpecificationVisitor
 
 if TYPE_CHECKING:
-    from hike.ddd.entity import FieldProxy
+    from hike.ddd.entity import TerminalFieldProxy
 
 
 ##### Composite Specifications ####
@@ -41,7 +41,7 @@ class NotSpecification(ISpecification):
 
 ##### Leaf Specifications #####
 class BaseFilterSpecification(ISpecification, ABC):
-    def __init__(self, field: FieldProxy, operand: object) -> None:
+    def __init__(self, field: TerminalFieldProxy, operand: object) -> None:
         self.field = field
         self.operand = operand
 
