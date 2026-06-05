@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import Any
 
 from sqlalchemy import ColumnElement, Select, and_, not_, or_, select, true
-from sqlalchemy.orm import QueryableAttribute
+from sqlalchemy.orm import InstrumentedAttribute
 
+from hike.ddd.entity import Entity, FieldProxy
 from hike.ddd.specifications import ISpecificationVisitor
 from hike.ddd.specifications.specs import (
     AndSpecification,
-    BaseLeftRightSpecification,
+    BaseFilterSpecification,
     EqualSpecification,
     GreaterThanEqualSpecification,
     GreaterThanSpecification,
@@ -22,15 +24,86 @@ from hike.ddd.specifications.specs import (
 _EMPTY_FILTER: ColumnElement[Any] = true()
 
 
-class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
-    """Translates a specification tree into a SQLAlchemy SELECT with WHERE filters."""
+class ISQLAlchemyMapper(ABC):
+    """Bridge between domain entity classes and SQLAlchemy ORM constructs.
 
-    def __init__(self, table_object: type[QueryableAttribute[Any]]) -> None:
-        self.table_object = table_object
+    Implement this interface and pass it to ``SQLAlchemyEvaluationSpecificationVisitor``
+    (and ``SQLAlchemyRepository``) so the visitor knows how to map:
+
+    - A domain entity class → its SQLAlchemy mapped model class (for SELECT and JOINs).
+    - A (model class, field name) pair → the SQLAlchemy column to filter on.
+
+    Example::
+
+        class MyMapper(ISQLAlchemyMapper):
+            def get_model(self, entity_class):
+                return {Boat: BoatModel, Engine: EngineModel}[entity_class]
+
+            def get_column(self, model_class, field_name):
+                return getattr(model_class, field_name)
+    """
+
+    @abstractmethod
+    def get_model(self, entity_class: type[Entity[Any]]) -> type[Any]:
+        """Return the SQLAlchemy mapped class for *entity_class*."""
+        ...
+
+    @abstractmethod
+    def get_column(self, model_class: type, field_name: str) -> InstrumentedAttribute[Any]:
+        """Return the SQLAlchemy column attribute for *field_name* on *model_class*."""
+        ...
+
+
+def _proxy_chain(proxy: FieldProxy) -> list[FieldProxy]:
+    """Return the FieldProxy chain ordered from root to leaf."""
+    chain: list[FieldProxy] = []
+    node: FieldProxy | None = proxy
+    while node is not None:
+        chain.append(node)
+        node = node.parent
+    chain.reverse()
+    return chain
+
+
+class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
+    """Translates a specification tree into a SQLAlchemy SELECT with WHERE filters.
+
+    Uses the aggregate root class and an :class:`ISQLAlchemyMapper` to resolve
+    field paths — no SQLAlchemy ORM introspection required.
+
+    Path traversal rules (driven by the ``FieldProxy`` chain):
+
+    - **Intermediate steps** whose ``field_type`` is an :class:`~hike.ddd.entity.Entity`
+      subclass are treated as foreign-key relationships.  The mapper is asked for the
+      related model class and a JOIN is accumulated.
+    - **The leaf step** whose ``field_type`` is a ValueObject is resolved to a
+      SQLAlchemy column via the mapper.
+
+    Example::
+
+        mapper = MyMapper()
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(Boat, mapper)
+        (Boat.engine.price > 1_000).accept(visitor)
+        stmt = visitor.result()
+        # → SELECT boat.* FROM boat JOIN engine ON ... WHERE engine.price > 1000
+    """
+
+    def __init__(
+        self,
+        aggregate_class: type[Entity[Any]],
+        mapper: ISQLAlchemyMapper,
+    ) -> None:
+        self._mapper = mapper
+        self._root_model = mapper.get_model(aggregate_class)
         self.filters: ColumnElement[Any] = _EMPTY_FILTER
+        self._joins: list[type] = []
+        self._joined_models: set[type] = set()
 
     def result(self) -> Select[Any]:
-        return select(self.table_object).filter(self.filters)
+        stmt = select(self._root_model)
+        for join_target in self._joins:
+            stmt = stmt.join(join_target)
+        return stmt.filter(self.filters)
 
     def _pop_filters(self) -> ColumnElement[Any]:
         filters = self.filters
@@ -38,18 +111,40 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         return filters
 
     def _visit_left_right_spec(
-            self, spec: BaseLeftRightSpecification
+        self, spec: AndSpecification | OrSpecification
     ) -> tuple[ColumnElement[Any], ColumnElement[Any]]:
         spec.left.accept(self)
         left = self._pop_filters()
         spec.right.accept(self)
         return left, self._pop_filters()
 
+    def _resolve_column(self, proxy: FieldProxy) -> InstrumentedAttribute[Any]:
+        """Walk the FieldProxy chain and return the SQLAlchemy column for the leaf field.
+
+        Intermediate Entity-typed steps add JOINs; the leaf ValueObject step is
+        resolved via :meth:`ISQLAlchemyMapper.get_column`.
+        """
+        chain = _proxy_chain(proxy)
+        current_model = self._root_model
+
+        for i, step in enumerate(chain):
+            is_leaf = i == len(chain) - 1
+            if is_leaf:
+                return self._mapper.get_column(current_model, step.field_name)
+            # Intermediate step: field_type must be an Entity — resolve its model and JOIN.
+            related_model = self._mapper.get_model(step.field_type)  # pyright: ignore[reportArgumentType]
+            if related_model not in self._joined_models:
+                self._joins.append(related_model)
+                self._joined_models.add(related_model)
+            current_model = related_model
+
+        raise ValueError(f"Empty FieldProxy path for {proxy!r}")  # pragma: no cover
+
     def _visit_filter(
-            self, spec: EqualSpecification | NotEqualSpecification | GreaterThanSpecification |
-                        GreaterThanEqualSpecification | LessThanSpecification | LessThanEqualSpecification
-    ) -> tuple[QueryableAttribute[Any], Any]:
-        return getattr(self.table_object, spec.field.field_name), spec.operand
+        self,
+        spec: BaseFilterSpecification,
+    ) -> tuple[InstrumentedAttribute[Any], Any]:
+        return self._resolve_column(spec.field), spec.operand
 
     def visit_and(self, spec: AndSpecification) -> None:
         left, right = self._visit_left_right_spec(spec)

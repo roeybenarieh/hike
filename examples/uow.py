@@ -12,10 +12,9 @@ from __future__ import annotations
 from typing import cast
 
 from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.entity import UuidEntity
-from hike.ddd.common import DomainField
-from hike.ddd.repository import AggregateDoesNotExistError, InMemoryRepository
-from hike.ddd.uow import InMemoryDBContext
+from hike.ddd.entity import UuidEntity, Field, DomainField
+from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
+from hike.ddd.repository import AggregateDoesNotExistError
 from hike.ddd.uow import UnitOfWork
 from hike.ddd.value_object import ValueObject
 
@@ -38,14 +37,14 @@ class EngineName(ValueObject[str]):
 
 
 class Engine(UuidEntity):
-    name: DomainField[EngineName]
-    price: DomainField[Price]
+    name: Field[EngineName]
+    price: Field[Price]
 
 
 class Boat(UuidAggregate):
     name: str
     engine: DomainField[Engine]
-    price: DomainField[Price]
+    price: Field[Price]
 
 
 # ---------------------------------------------------------------------------

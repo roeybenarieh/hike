@@ -31,10 +31,11 @@ class InMemoryEvaluationSpecificationVisitor(ISpecificationVisitor):
         self.result: bool = True
 
     def _field_value(self, spec: BaseFilterSpecification) -> Any:
-        val = getattr(self._obj, spec.field.field_name)
+        val: Any = self._obj
+        for name in spec.field.path:
+            val = getattr(val, name)
         if isinstance(val, ValueObject):
-            val_any: Any = cast(Any, val)
-            return val_any.value
+            return cast(Any, val).value
         return val
 
     def _pop_result(self) -> bool:

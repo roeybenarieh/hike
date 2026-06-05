@@ -60,19 +60,19 @@ class MongoDBEvaluationSpecificationVisitor(ISpecificationVisitor):
         self.filters = {"$nor": [inner]}
 
     def visit_equal(self, spec: EqualSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$eq": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$eq": spec.operand}}
 
     def visit_not_equal(self, spec: NotEqualSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$ne": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$ne": spec.operand}}
 
     def visit_greater_than(self, spec: GreaterThanSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$gt": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$gt": spec.operand}}
 
     def visit_greater_than_equal(self, spec: GreaterThanEqualSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$gte": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$gte": spec.operand}}
 
     def visit_less_than(self, spec: LessThanSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$lt": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$lt": spec.operand}}
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
-        self.filters = {spec.field.field_name: {"$lte": spec.operand}}
+        self.filters = {".".join(spec.field.path): {"$lte": spec.operand}}

@@ -115,19 +115,19 @@ class RedisEvaluationSpecificationVisitor(ISpecificationVisitor):
         self.query = f"-({self._pop_query()})"
 
     def visit_equal(self, spec: EqualSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "eq")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "eq")
 
     def visit_not_equal(self, spec: NotEqualSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "ne")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "ne")
 
     def visit_greater_than(self, spec: GreaterThanSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "gt")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "gt")
 
     def visit_greater_than_equal(self, spec: GreaterThanEqualSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "gte")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "gte")
 
     def visit_less_than(self, spec: LessThanSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "lt")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "lt")
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
-        self.query = _redis_leaf(spec.field.field_name, spec.operand, "lte")
+        self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "lte")

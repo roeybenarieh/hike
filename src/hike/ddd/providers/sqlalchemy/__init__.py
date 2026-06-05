@@ -17,8 +17,10 @@ except ImportError as _exc:
 
 from hike.ddd.providers.sqlalchemy.db_context import SQLAlchemyDBContext
 from hike.ddd.providers.sqlalchemy.repository import SQLAlchemyRepository
+from hike.ddd.providers.sqlalchemy.visitor import ISQLAlchemyMapper
 
 __all__ = [
+    "ISQLAlchemyMapper",
     "SQLAlchemyDBContext",
     "SQLAlchemyRepository",
 ]

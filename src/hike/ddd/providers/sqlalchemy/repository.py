@@ -14,28 +14,34 @@ from hike.ddd.repository import (
 )
 from hike.ddd.specifications import ISpecification
 
-from .visitor import SQLAlchemyEvaluationSpecificationVisitor
+from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 
 
 class SQLAlchemyRepository(IRepository[TId, Session]):
     """Generic SQLAlchemy ORM repository.
 
-    ``model_class`` must be a SQLAlchemy mapped class whose column names match
-    the aggregate's dataclass field names after ``to_dict`` flattening.
+    ``aggregate_class`` is the domain aggregate root class.  ``mapper`` provides
+    the bridge between domain entity classes and SQLAlchemy ORM models/columns —
+    implement :class:`~hike.ddd.providers.sqlalchemy.visitor.ISQLAlchemyMapper`
+    to tell the repository which model class corresponds to the aggregate and
+    how each ValueObject field maps to a column.
+
     ``get_many`` translates the specification tree into a SQL WHERE clause via
-    ``SQLAlchemyEvaluationVisitor``.  ``locked=True`` adds ``FOR UPDATE``.
+    :class:`~hike.ddd.providers.sqlalchemy.visitor.SQLAlchemyEvaluationSpecificationVisitor`.
+    ``locked=True`` adds ``FOR UPDATE``.
 
     Install with: ``pip install hike[sqlalchemy]``
     """
 
     def __init__(
-            self,
-            model_class: type[Any],
-            aggregate_class: type[Aggregate[TId]],
+        self,
+        aggregate_class: type[Aggregate[TId]],
+        mapper: ISQLAlchemyMapper,
     ) -> None:
         super().__init__()
-        self._model_class = model_class
         self._aggregate_class = aggregate_class
+        self._mapper = mapper
+        self._model_class = mapper.get_model(aggregate_class)
 
     def _from_model(self, model: Any) -> Aggregate[TId]:
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
@@ -68,11 +74,11 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
         return self._from_model(model)
 
     def get_many(
-            self,
-            specification: ISpecification,
-            locked: bool = False,
+        self,
+        specification: ISpecification,
+        locked: bool = False,
     ) -> list[Aggregate[TId]]:
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._model_class)
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
         specification.accept(visitor)
         stmt = visitor.result()
         if locked:
