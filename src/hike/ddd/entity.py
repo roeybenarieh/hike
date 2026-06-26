@@ -16,7 +16,8 @@ from .specifications.specs import (
 )
 from .value_object import ValueObject
 
-_T = TypeVar("_T", bound="ValueObject[Any]")
+_T = TypeVar("_T")
+_TVO = TypeVar("_TVO", bound="ValueObject[Any]")
 
 
 class EntityID[TId: Hashable](ValueObject[TId]):
@@ -28,38 +29,60 @@ class EntityID[TId: Hashable](ValueObject[TId]):
     """
 
 
-class FieldProxy:
-    """Returned when a ``Field[T]``-annotated field is accessed at the *class* level.
+class TerminalFieldProxy:
+    """Class-level proxy for ``Field[ValueObject]`` fields.
 
-    You never create one of these yourself — it is produced by
-    ``_FieldDescriptor.__get__`` whenever the attribute is read from the class
-    rather than from an instance.
-
-    Its comparison operators produce Specification objects instead of booleans,
-    enabling SQLAlchemy-style query syntax:
+    Returned when a ``Field[T]``-annotated field is accessed at the class level
+    and ``T`` is a ``ValueObject``.  Its comparison operators produce
+    ``Specification`` objects for building queries:
 
         Boat.price < 100        →  LessThanSpecification
         Boat.price == 50        →  EqualSpecification
         (Boat.price >= 10) & (Boat.price < 100)   →  AndSpecification
 
-    The ``field_name``, ``field_type``, and ``entity_class`` attributes are used
-    by Visitor implementations to look up the actual runtime value on a concrete
-    entity instance.
+    Does NOT support attribute chaining — use ``Field[Entity]`` (which returns
+    a ``FieldProxy``) when you need to traverse to nested entity fields.
     """
 
-    def __init__(self, field_name: str, field_type: type, entity_class: type) -> None:
-        self.field_name = field_name  # e.g. "price"
-        self.field_type = field_type  # e.g. Price
-        self.entity_class = entity_class  # e.g. Boat
+    def __init__(
+        self,
+        field_name: str,
+        field_type: type,
+        entity_class: type,
+        parent: FieldProxy | None = None,
+    ) -> None:
+        self.field_name = field_name
+        self.field_type = field_type
+        self.entity_class = entity_class
+        self.parent = parent
 
-    def __eq__(self, other: object) -> EqualSpecification:  # type: ignore[override]
-        if isinstance(other, FieldProxy):
-            return EqualSpecification(self, other is self)  # type: ignore[arg-type]
+    @property
+    def path(self) -> list[str]:
+        """Full field-name chain from root to leaf, e.g. ``['engine', 'price']``."""
+        parts: list[str] = []
+        node: TerminalFieldProxy | None = self
+        while node is not None:
+            parts.append(node.field_name)
+            node = node.parent
+        parts.reverse()
+        return parts
+
+    @property
+    def root(self) -> TerminalFieldProxy:
+        """The root proxy — the one directly on the queried class."""
+        node: TerminalFieldProxy = self
+        while node.parent is not None:
+            node = node.parent
+        return node
+
+    def __eq__(self, other: object) -> EqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(other, TerminalFieldProxy):
+            return EqualSpecification(self, other is self)
         return EqualSpecification(self, other)
 
-    def __ne__(self, other: object) -> NotEqualSpecification:  # type: ignore[override]
-        if isinstance(other, FieldProxy):
-            return NotEqualSpecification(self, other is not self)  # type: ignore[arg-type]
+    def __ne__(self, other: object) -> NotEqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(other, TerminalFieldProxy):
+            return NotEqualSpecification(self, other is not self)
         return NotEqualSpecification(self, other)
 
     def __lt__(self, other: object) -> LessThanSpecification:
@@ -78,26 +101,60 @@ class FieldProxy:
         return hash((self.field_name, self.entity_class))
 
     def __repr__(self) -> str:
-        return f"{self.entity_class.__name__}.{self.field_name}"
+        return f"{self.root.entity_class.__name__}.{'.'.join(self.path)}"
+
+
+class FieldProxy(TerminalFieldProxy):
+    """Class-level proxy for ``Field[Entity]`` fields.
+
+    Extends ``TerminalFieldProxy`` with attribute chaining, enabling nested specs:
+
+        Boat.engine.price > 1_000   →  GreaterThanSpecification with path ["engine", "price"]
+
+    The ``path`` property returns the full list of field names from root to leaf.
+    Visitor implementations use it to traverse the object graph during evaluation.
+    """
+
+    def __getattr__(self, name: str) -> FieldProxy:
+        """Enable chaining: ``Boat.engine.price`` returns a nested FieldProxy."""
+        if name.startswith("_"):
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        for klass in self.field_type.__mro__:
+            if name in klass.__dict__ and isinstance(klass.__dict__[name], _FieldDescriptor):
+                desc: _FieldDescriptor[Any] = klass.__dict__[name]
+                return FieldProxy(name, desc.field_type, self.field_type, parent=self)
+        raise AttributeError(
+            f"'{self.field_type.__name__}' has no Field attribute '{name}'. "
+            f"Make sure it is annotated with Field[T]."
+        )
 
 
 class Field(Generic[_T]):
-    """Annotation wrapper for ValueObject fields on Entity subclasses.
+    """Annotation wrapper for any field on Entity subclasses — ValueObject or Entity-typed.
 
-    Use ``Field[T]`` instead of a bare ValueObject type annotation so that
-    Pyright resolves class-level and instance-level access correctly::
+    Use ``Field[T]`` for both cases::
 
-        class Ship(UuidEntity):
-            name: Field[Name]   # instead of: name: Name
+        class Engine(UuidEntity):
+            price: Field[Price]            # ValueObject field
+
+        class Boat(UuidEntity):
+            engine: Field[Engine]          # Entity field — enables Boat.engine.price > 1_000
+            price: Field[Price]            # ValueObject field — enables Boat.price == 100
 
     Pyright uses the descriptor protocol on this annotation type:
 
-    - ``Ship.name``         →  ``FieldProxy``       (class-level, for spec building)
-    - ``ship.name``         →  ``Name``              (instance-level, the ValueObject)
-    - ``Ship.name == "x"``  →  ``EqualSpecification``  (no ``# type: ignore`` needed)
+    - ``Boat.engine``        →  ``FieldProxy``      (class-level; supports chaining via __getattr__)
+    - ``Boat.engine.price``  →  ``FieldProxy``      (chained — FieldProxy.__getattr__ handles it)
+    - ``boat.engine``        →  ``Engine``           (instance-level, the entity)
+    - ``boat.price``         →  ``Price``            (instance-level, the value object)
+    - ``Boat.price == 100``  →  ``EqualSpecification``
 
-    The ``__set__`` signature tells ``@dataclass_transform`` that the generated
-    ``__init__`` parameter type is ``T``, not ``Field[T]``.
+    ``__get__`` uses self-type overloads to distinguish ValueObject fields
+    (returning ``TerminalFieldProxy``) from Entity fields (returning ``FieldProxy``),
+    so Pyright can enforce that only Entity-typed fields support chained access.
+
+    ``__set__`` uses a single signature so that ``@dataclass_transform`` correctly
+    infers the ``__init__`` parameter type as ``T`` rather than ``Field[T]``.
 
     At runtime this class is never instantiated — ``Entity.__init_subclass__``
     replaces every ``Field[T]`` annotation with a ``_FieldDescriptor[T]``
@@ -105,18 +162,18 @@ class Field(Generic[_T]):
     """
 
     @overload
+    def __get__(self: Field[_TVO], instance: None, owner: type) -> TerminalFieldProxy: ...
+
+    @overload
     def __get__(self, instance: None, owner: type) -> FieldProxy: ...
 
     @overload
     def __get__(self, instance: object, owner: type | None) -> _T: ...
 
-    def __get__(self, instance: object, owner: type | None = None) -> FieldProxy | _T:
-        # Never reached at runtime — see class docstring.
+    def __get__(self, instance: object, owner: type | None = None) -> TerminalFieldProxy | FieldProxy | _T:
         raise NotImplementedError  # pragma: no cover
 
     def __set__(self, instance: object, value: _T) -> None:
-        # Never reached at runtime — present only so @dataclass_transform infers
-        # the __init__ parameter type as T rather than Field[T].
         raise NotImplementedError  # pragma: no cover
 
 
@@ -136,12 +193,31 @@ def unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
         inner = args[0]
         # Bare class: Field[Price]
         if isinstance(inner, type) and issubclass(inner, ValueObject):
-            return inner  # type: ignore[return-value]
+            return cast(type[ValueObject[Any]], inner)
         # Parameterized generic: Field[EntityID[UUID]]
         bare = get_origin(inner)
         if isinstance(bare, type) and issubclass(bare, ValueObject):
-            return bare  # type: ignore[return-value]
+            return cast(type[ValueObject[Any]], bare)
     return None
+
+
+def _unwrap_annotation(ann_type: object) -> type | None:
+    """Return the inner ``T`` if *ann_type* is ``Field[T]``, else ``None``.
+
+    Accepts any class as ``T`` (not just ValueObject subclasses), enabling
+    ``Field[Engine]`` for Entity-typed fields.
+    """
+    origin = getattr(ann_type, "__origin__", None)
+    if origin is not Field:
+        return None
+    args: tuple[Any, ...] = getattr(ann_type, "__args__", ())
+    if not args:
+        return None
+    inner = args[0]
+    if isinstance(inner, type):
+        return inner
+    bare = get_origin(inner)
+    return bare if isinstance(bare, type) else None
 
 
 # Sentinel used to detect "field not yet set" without conflicting with None.
@@ -149,7 +225,7 @@ _MISSING = object()
 
 
 class _FieldDescriptor(Generic[_T]):
-    """Descriptor managing a single ValueObject-typed field on an Entity subclass.
+    """Descriptor managing a single field on an Entity subclass.
 
     Installed automatically by ``Entity.__init_subclass__`` for every
     ``Field[T]``-annotated attribute, or explicitly via ``vo()``.
@@ -160,10 +236,12 @@ class _FieldDescriptor(Generic[_T]):
        a ``FieldProxy`` whose comparison operators build Specification objects.
 
     2. *Instance-level read* (``ship.name``) — ``__get__(instance=ship)``
-       returns the stored ``ValueObject`` (type ``_T``).
+       returns the stored value (type ``_T``).
 
     3. *Assignment* (``self.name = "Titanic"`` inside ``__init__``) — ``__set__``
-       auto-converts to ``Name("Titanic")`` if the value isn't already the right type.
+       auto-converts raw values to the field type **only** if the type is a
+       ``ValueObject``.  For Entity-typed fields the value must already be the
+       correct type.
 
     Values are stored in ``instance.__dict__`` under the private key
     ``_vo_<name>`` so the descriptor stays in control on subsequent reads.
@@ -192,15 +270,19 @@ class _FieldDescriptor(Generic[_T]):
         val = instance.__dict__.get(self._private, _MISSING)
         if val is _MISSING:
             raise AttributeError(f"Field '{self.field_name}' not set")
-        return val  # type: ignore[return-value]
+        return cast(_T, val)
 
     def __set__(self, instance: object, value: object) -> None:
-        if not isinstance(value, self.field_type):
-            value = self.field_type(value)
-        instance.__dict__[self._private] = value
+        ft: type[Any] = self.field_type  # narrow to type[Any] for runtime ops
+        if isinstance(value, ft):
+            instance.__dict__[self._private] = value
+        elif issubclass(ft, ValueObject):
+            instance.__dict__[self._private] = ft(value)
+        else:
+            raise TypeError(f"Expected {ft.__name__}, got {type(value).__name__}")
 
 
-def vo(field_type: type[_T]) -> Field[_T]:
+def vo(field_type: type[_TVO]) -> Field[_TVO]:
     """Declare a ValueObject field on an Entity explicitly.
 
     An alternative to the ``Field[T]`` annotation style when you want the
@@ -213,7 +295,7 @@ def vo(field_type: type[_T]) -> Field[_T]:
     Both forms install a ``_FieldDescriptor`` and are fully equivalent at
     runtime and to Pyright.
     """
-    return _FieldDescriptor("", field_type)  # type: ignore[return-value]
+    return _FieldDescriptor("", field_type)  # pyright: ignore[reportReturnType]
 
 
 def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
@@ -231,7 +313,7 @@ def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
 
     At runtime it simply delegates to ``dataclasses.field``.
     """
-    return field(default_factory=default_factory)  # type: ignore[return-value]
+    return field(default_factory=default_factory)  # pyright: ignore[reportReturnType]
 
 
 @dataclass_transform(kw_only_default=True, field_specifiers=(vo, vo_field))
@@ -255,8 +337,8 @@ class Entity[TId: Hashable](DomainObject):
     Subclass a concrete base (e.g. ``UuidEntity``) and annotate ValueObject
     fields with ``Field[T]``:
 
-        from cliff.ddd.entity import Field, UuidEntity
-        from cliff.ddd.value_object import ValueObject
+        from hike.ddd.entity import Field, UuidEntity
+        from hike.ddd.value_object import ValueObject
 
         class Price(ValueObject[float]):
             value: float
@@ -304,7 +386,7 @@ class Entity[TId: Hashable](DomainObject):
             cls.__annotations__ = {}
         for name, attr in cls.__dict__.items():
             if isinstance(attr, _FieldDescriptor) and name not in cls.__annotations__:
-                cls.__annotations__[name] = Field[attr.field_type]  # type: ignore[valid-type]
+                cls.__annotations__[name] = Field[Any]
 
                 # ── Step 2: turn the subclass into a dataclass ────────────────────────
         # eq=False  — don't overwrite our id-based __eq__/__hash__.
@@ -324,16 +406,16 @@ class Entity[TId: Hashable](DomainObject):
             resolved = {}
 
         for name, ann_type in resolved.items():
-            inner = unwrap_field(ann_type)
+            inner = _unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
-                desc = _FieldDescriptor(name, inner)
+                desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
                 desc.__set_name__(cls, name)
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
             return False
-        return self.id == other.id  # type: ignore[attr-defined]
+        return self.id == cast(Entity[Any], other).id
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -350,6 +432,8 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
     """
     result: dict[str, Any] = {}
     for f in get_fields(entity):
+        if not f.init:
+            continue
         val: Any = getattr(cast(Any, entity), f.name)
         if isinstance(val, ValueObject):
             result[f.name] = cast(Any, val).value
@@ -363,7 +447,7 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
     return result
 
 
-def get_fields(entity: Entity | type[Entity]):
+def get_fields(entity: Entity[Any] | type[Entity[Any]]):
     return fields(cast(Any, entity))
 
 

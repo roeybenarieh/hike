@@ -1,9 +1,8 @@
-from dataclasses import field
 from datetime import datetime
 
-from cliff.ddd.entity import Field, UuidEntity
-from cliff.ddd.specifications import EqualSpecification
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.entity import Field, UuidEntity, vo_field
+from hike.ddd.specifications import EqualSpecification
+from hike.ddd.value_object import ValueObject
 from examples.value_objects import Name
 
 
@@ -13,7 +12,7 @@ class DateTime(ValueObject[datetime]):
 
 class Ship(UuidEntity):
     name: Field[Name]
-    created_at: Field[DateTime] = field(default_factory=datetime.now)
+    created_at: Field[DateTime] = vo_field(default_factory=lambda: DateTime(datetime.now()))
     # something: str # TODO: should be banned
 
 

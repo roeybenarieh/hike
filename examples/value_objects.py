@@ -1,4 +1,4 @@
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):

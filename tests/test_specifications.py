@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
-from cliff.ddd.entity import Field, FieldProxy, UuidEntity
-from cliff.ddd.specifications import (
+from hike.ddd.entity import Field, TerminalFieldProxy, UuidEntity
+from hike.ddd.specifications import (
     AndSpecification,
+    BaseFilterSpecification,
     EqualSpecification,
     GreaterThanEqualSpecification,
     GreaterThanSpecification,
     ISpecification,
-    IVisitor,
+    ISpecificationVisitor,
     LessThanEqualSpecification,
     LessThanSpecification,
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
 )
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------
@@ -71,12 +74,14 @@ class ProductListing(UuidEntity):
 # ---------------------------------------------------------------------------
 
 
-def _field_value(listing: ProductListing, proxy: FieldProxy) -> object:
-    field_val = getattr(listing, proxy.field_name)
-    return field_val.value if isinstance(field_val, ValueObject) else field_val  # type: ignore[union-attr]
+def _field_value(obj: object, proxy: TerminalFieldProxy) -> Any:
+    val: Any = obj
+    for name in proxy.path:
+        val = getattr(val, name)
+    return cast(ValueObject[Any], val).value if isinstance(val, ValueObject) else val
 
 
-class ListingFilterVisitor(IVisitor):
+class ListingFilterSpecificationVisitor(ISpecificationVisitor):
     def __init__(self, listing: ProductListing) -> None:
         self._listing = listing
         self.result: bool = False
@@ -97,30 +102,30 @@ class ListingFilterVisitor(IVisitor):
         spec.spec.accept(self)
         self.result = not self.result
 
-    def _actual(self, spec: EqualSpecification) -> object:  # type: ignore[override]
-        return _field_value(self._listing, spec.field)  # type: ignore[arg-type]
+    def _actual(self, spec: BaseFilterSpecification) -> Any:
+        return _field_value(self._listing, spec.field)
 
     def visit_equal(self, spec: EqualSpecification) -> None:
-        self.result = self._actual(spec) == spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) == spec.operand
 
     def visit_not_equal(self, spec: NotEqualSpecification) -> None:
-        self.result = self._actual(spec) != spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) != spec.operand
 
     def visit_greater_than(self, spec: GreaterThanSpecification) -> None:
-        self.result = self._actual(spec) > spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) > spec.operand
 
     def visit_greater_than_equal(self, spec: GreaterThanEqualSpecification) -> None:
-        self.result = self._actual(spec) >= spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) >= spec.operand
 
     def visit_less_than(self, spec: LessThanSpecification) -> None:
-        self.result = self._actual(spec) < spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) < spec.operand
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
-        self.result = self._actual(spec) <= spec.operand  # type: ignore[attr-defined]
+        self.result = self._actual(spec) <= spec.operand
 
 
 def _evaluate(listing: ProductListing, spec: ISpecification) -> bool:
-    visitor = ListingFilterVisitor(listing)
+    visitor = ListingFilterSpecificationVisitor(listing)
     spec.accept(visitor)
     return visitor.result
 

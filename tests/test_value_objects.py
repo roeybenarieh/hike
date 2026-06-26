@@ -2,7 +2,7 @@
 
 import pytest
 
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
@@ -49,7 +49,7 @@ class TestValueObjectEquality:
 
     def test_different_type_not_equal(self) -> None:
         # Price and Name with same raw value should not compare equal
-        assert Price(5) != Name("5")  # type: ignore[comparison-overlap]
+        assert Price(5) != Name("5")
 
 
 class TestValueObjectComparisons:
@@ -79,11 +79,11 @@ class TestValueObjectComparisons:
 
     def test_cross_type_comparison_raises(self) -> None:
         with pytest.raises(TypeError):
-            Price(5) < Name("something")  # type: ignore[operator]
+            Price(5) < Name("something")  # pyright: ignore[reportOperatorIssue, reportUnusedExpression]
 
 
 class TestValueObjectImmutability:
     def test_frozen_raises_on_set(self) -> None:
         p = Price(5)
         with pytest.raises((AttributeError, TypeError)):
-            p.value = 10  # type: ignore[misc]
+            p.value = 10  # pyright: ignore[reportAttributeAccessIssue]

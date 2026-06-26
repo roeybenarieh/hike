@@ -2,13 +2,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self
+from typing import Self
 
-from cliff.ddd.aggregate import Aggregate
-from cliff.ddd.repository import IRepository
-
-if TYPE_CHECKING:
-    pass
+from hike.ddd.repository import IRepository
 
 
 class DBContext[TSession](ABC):
@@ -39,29 +35,6 @@ class DBContext[TSession](ABC):
         """Close a transaction. Use after finishing a transaction successfully"""
 
 
-class InMemoryDBContext(DBContext[dict[Any, Aggregate[Any]]]):
-    """In-memory DBContext for testing and prototyping.
-
-    Supports rollback by snapshotting committed state on ``begin()``.
-    """
-
-    def __init__(self) -> None:
-        self._committed: dict[Any, Aggregate[Any]] = {}
-
-    def begin(self) -> None:
-        self._session = dict(self._committed)
-
-    def commit(self) -> None:
-        self._committed = dict(self.session)
-        self._session = None
-
-    def rollback(self) -> None:
-        self._session = None
-
-    def close(self) -> None:
-        self._session = None
-
-
 class UnitOfWork[TSessions, TId]:
 
     def __init__(
@@ -69,7 +42,7 @@ class UnitOfWork[TSessions, TId]:
             context: DBContext[TSessions],
             repo: IRepository[TId, TSessions],
             *,
-            auto_commit=False
+            auto_commit: bool = False
     ):
         self._context = context
         self.repo = repo

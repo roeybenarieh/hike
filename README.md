@@ -1,6 +1,6 @@
-# Cliff
+# Hike
 
-<img src="docs/cliff-icon.png" alt="cliff-icon" width="100%"/>
+<img src="docs/hike-icon.png" alt="hike-icon" width="100%"/>
 
 ## DDD
 
@@ -22,6 +22,8 @@ Each '.' should be an inner dictionary in PyMongo, no joining needed.
 create Async repository
 DBContext object
 unit of work - only one that is generic via the DBContext!!!
+
+MAYBE in the future: create IInsertionStrategy that would 
 
 ## Event driven
 

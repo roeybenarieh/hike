@@ -6,16 +6,15 @@ from uuid import UUID
 
 import pytest
 
-from cliff.ddd.aggregate import UuidAggregate
-from cliff.ddd.uow import InMemoryDBContext
-from cliff.ddd.entity import Field
-from cliff.ddd.repository import (
+from hike.ddd.aggregate import UuidAggregate
+from hike.ddd.entity import Field
+from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
+from hike.ddd.repository import (
     AggregateDoesNotExistError,
     AggregateAlreadyExistError,
-    InMemoryRepository,
 )
-from cliff.ddd.uow import UnitOfWork
-from cliff.ddd.value_object import ValueObject
+from hike.ddd.uow import UnitOfWork
+from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
@@ -68,7 +67,7 @@ def test_update() -> None:
         uow.repo.save(boat)
         uow.commit()
 
-    boat.price = Price(200.0)  # type: ignore[assignment]
+    boat.price = Price(200.0)
     with uow:
         uow.repo.update(boat)
         uow.commit()
@@ -104,7 +103,7 @@ def test_upsert_creates_then_updates() -> None:
         uow.repo.upsert(boat)  # create
         uow.commit()
 
-    boat.price = Price(2.0)  # type: ignore[assignment]
+    boat.price = Price(2.0)
     with uow:
         uow.repo.upsert(boat)  # update
         uow.commit()
