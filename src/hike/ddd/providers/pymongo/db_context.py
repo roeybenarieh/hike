@@ -25,7 +25,17 @@ class PyMongoDBContext(DBContext[ClientSession]):
 
     def __init__(self, client: MongoClient[dict[str, Any]]) -> None:
         super().__init__()
-        self._client = client
+        host, port = next(iter(client.topology_description.server_descriptions()))
+        self._client: MongoClient[dict[str, Any]] = MongoClient(
+            host=host,
+            port=port,
+            directConnection=True,
+            uuidRepresentation="standard",
+        )
+
+    @property
+    def client(self) -> MongoClient[dict[str, Any]]:
+        return self._client
 
     def begin(self) -> None:
         self._session = self._client.start_session()
