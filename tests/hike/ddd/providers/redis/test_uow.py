@@ -15,28 +15,11 @@ from redis import Redis
 from redis.client import Pipeline
 from testcontainers.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.entity import Field
 from hike.ddd.providers.redis import RedisDBContext, RedisRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
 from hike.ddd.uow import UnitOfWork
-from hike.ddd.value_object import ValueObject
 
-
-# ---------------------------------------------------------------------------
-# Domain model
-# ---------------------------------------------------------------------------
-
-
-class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
-
-
-class Boat(UuidAggregate):
-    name: str
-    price: Field[Price]
+from tests.hike.ddd.conftest import Boat, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +54,7 @@ def uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID]:
 
 
 def test_save_and_get_one(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat = Boat(name="Sea Spirit", price=Price(4_999.99))
+    boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
 
     with uow:
         uow.repo.save(boat)
@@ -80,12 +63,12 @@ def test_save_and_get_one(uow: UnitOfWork[Pipeline, UUID]) -> None:
     with uow:
         fetched = cast(Boat, uow.repo.get_one(boat.id.value))
 
-    assert fetched.name == "Sea Spirit"
+    assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
 def test_update(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat = Boat(name="Old Name", price=Price(100.0))
+    boat = Boat(name=Name("Old Name"), price=Price(100.0))
 
     with uow:
         uow.repo.save(boat)
@@ -103,8 +86,8 @@ def test_update(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 
 def test_get_many_with_spec(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat_a = Boat(name="Alpha", price=Price(10.0))
-    boat_b = Boat(name="Beta", price=Price(50.0))
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
 
     with uow:
         uow.repo.save(boat_a)
@@ -115,11 +98,11 @@ def test_get_many_with_spec(uow: UnitOfWork[Pipeline, UUID]) -> None:
         results = uow.repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
-    assert cast(Boat, results[0]).name == "Beta"
+    assert cast(Boat, results[0]).name == Name("Beta")
 
 
 def test_upsert_creates_then_updates(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat = Boat(name="Ghost", price=Price(1.0))
+    boat = Boat(name=Name("Ghost"), price=Price(1.0))
 
     with uow:
         uow.repo.upsert(boat)
@@ -137,7 +120,7 @@ def test_upsert_creates_then_updates(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 
 def test_delete(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat = Boat(name="Doomed", price=Price(0.01))
+    boat = Boat(name=Name("Doomed"), price=Price(0.01))
 
     with uow:
         uow.repo.save(boat)
@@ -153,7 +136,7 @@ def test_delete(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 
 def test_save_duplicate_raises(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    boat = Boat(name="Twin", price=Price(50.0))
+    boat = Boat(name=Name("Twin"), price=Price(50.0))
 
     with uow:
         uow.repo.save(boat)
@@ -174,7 +157,7 @@ def test_get_one_missing_raises(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 
 def test_delete_missing_raises(uow: UnitOfWork[Pipeline, UUID]) -> None:
-    ghost = Boat(name="Never Saved", price=Price(1.0))
+    ghost = Boat(name=Name("Never Saved"), price=Price(1.0))
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
@@ -183,7 +166,7 @@ def test_delete_missing_raises(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 def test_rollback_on_exception(uow: UnitOfWork[Pipeline, UUID]) -> None:
     """Write queued in pipeline must be discarded when the UoW block raises."""
-    boat = Boat(name="Rollback Boat", price=Price(99.0))
+    boat = Boat(name=Name("Rollback Boat"), price=Price(99.0))
 
     with pytest.raises(ValueError, match="simulated failure"):
         with uow:
@@ -197,7 +180,7 @@ def test_rollback_on_exception(uow: UnitOfWork[Pipeline, UUID]) -> None:
 
 def test_locked_get_one(uow: UnitOfWork[Pipeline, UUID]) -> None:
     """locked=True acquires a distributed lock; release_locks() clears it."""
-    boat = Boat(name="Locked", price=Price(10.0))
+    boat = Boat(name=Name("Locked"), price=Price(10.0))
 
     with uow:
         uow.repo.save(boat)
@@ -206,10 +189,10 @@ def test_locked_get_one(uow: UnitOfWork[Pipeline, UUID]) -> None:
     repo = cast(RedisRepository[UUID], uow.repo)
     with uow:
         fetched = cast(Boat, uow.repo.get_one(boat.id.value, locked=True))
-        assert fetched.name == "Locked"
+        assert fetched.name == Name("Locked")
         assert repo.release_locks  # lock was acquired (will be released on next entry)
 
     # Entering the next UoW block assigns a new session, which calls release_locks().
     with uow:
         fetched2 = cast(Boat, uow.repo.get_one(boat.id.value))
-        assert fetched2.name == "Locked"
+        assert fetched2.name == Name("Locked")

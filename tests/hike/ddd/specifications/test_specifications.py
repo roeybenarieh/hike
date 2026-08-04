@@ -6,7 +6,8 @@ from typing import Any, cast
 
 import pytest
 
-from hike.ddd.entity import Field, TerminalFieldProxy, UuidEntity
+from hike.ddd.entity import TerminalFieldProxy
+from hike.ddd.value_object import ValueObject
 from hike.ddd.specifications import (
     AndSpecification,
     BaseFilterSpecification,
@@ -21,52 +22,7 @@ from hike.ddd.specifications import (
     NotSpecification,
     OrSpecification,
 )
-from hike.ddd.value_object import ValueObject
-
-
-# ---------------------------------------------------------------------------
-# Value objects (mirrors examples/specification.py)
-# ---------------------------------------------------------------------------
-
-
-class Price(ValueObject[float]):
-    value: float
-
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
-
-
-class Category(ValueObject[str]):
-    value: str
-
-
-class Rating(ValueObject[float]):
-    value: float
-
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.value <= 5.0):
-            raise ValueError("Rating must be between 0 and 5")
-
-
-class ListingName(ValueObject[str]):
-    value: str
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
-
-
-# ---------------------------------------------------------------------------
-# Entity
-# ---------------------------------------------------------------------------
-
-
-class ProductListing(UuidEntity):
-    price: Field[Price]
-    category: Field[Category]
-    rating: Field[Rating]
-    name: Field[ListingName]
+from tests.hike.ddd.conftest import Category, ListingName, Price, ProductListing, Rating
 
 
 # ---------------------------------------------------------------------------
