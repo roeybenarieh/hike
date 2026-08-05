@@ -28,7 +28,7 @@ from hike.ddd.providers.sqlalchemy import ISQLAlchemyMapper, SQLAlchemyDBContext
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, BoatEngine, MotorBoat, Name, Price
+from tests.hike.ddd.conftest import Boat, BoatEngine, Checkpoint, Journey, MotorBoat, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +65,25 @@ class MotorBoatModel(Base):
     engine_id: Mapped[UUID] = mapped_column(ForeignKey("engines.id"), nullable=False)
     engine: Mapped[EngineModel] = relationship(EngineModel)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class JourneyModel(Base):
+    __tablename__ = "journeys"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    checkpoints: Mapped[list[CheckpointModel]] = relationship(
+        "CheckpointModel", cascade="all, delete-orphan", lazy="joined"
+    )
+
+
+class CheckpointModel(Base):
+    __tablename__ = "checkpoints"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    journey_id: Mapped[UUID] = mapped_column(ForeignKey("journeys.id"), nullable=False)
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +135,7 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
     def _boat_to_model(self, boat: MotorBoat) -> MotorBoatModel:
         return MotorBoatModel(
             id=boat.id.value,
-            name=boat.name,
+            name=boat.name.value,
             price=boat.price.value,
             engine_id=boat.engine.id.value,
         )
@@ -133,7 +152,7 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
         )
         boat = MotorBoat(
             id=EntityID(model.id),
-            name=model.name,
+            name=Name(model.name),
             price=Price(model.price),
             engine=engine,
         )
@@ -176,7 +195,7 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
             raise AggregateDoesNotExistError(aggregate)
         if hasattr(model, "version") and model.version != aggregate.version:
             raise OptimisticLockError(aggregate)
-        model.name = aggregate.name
+        model.name = aggregate.name.value
         model.price = aggregate.price.value
         model.engine_id = aggregate.engine.id.value
         if hasattr(model, "version"):
@@ -189,11 +208,64 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
         if model is None:
             self.session.add(self._boat_to_model(aggregate))
         else:
-            model.name = aggregate.name
+            model.name = aggregate.name.value
             model.price = aggregate.price.value
             model.engine_id = aggregate.engine.id.value
             if hasattr(model, "version"):
                 model.version += 1
+
+
+class JourneyMapper(ISQLAlchemyMapper):
+    def get_model(self, entity_class: type) -> type:
+        return JourneyModel
+
+    def get_column(self, model_class: type, field_name: str) -> Any:
+        return getattr(model_class, field_name)
+
+
+class JourneyRepository(SQLAlchemyRepository[UUID, Journey]):
+    def __init__(self) -> None:
+        super().__init__(Journey, JourneyMapper())
+
+    def _from_model(self, model: Any) -> Journey:
+        checkpoints = [
+            Checkpoint(id=EntityID(cp.id), name=Name(cp.name))
+            for cp in model.checkpoints
+        ]
+        journey = Journey(id=EntityID(model.id), name=Name(model.name), checkpoints=checkpoints)
+        journey.version = model.version
+        return journey
+
+    def save(self, aggregate: Journey) -> UUID:
+        try:
+            model = JourneyModel(
+                id=aggregate.id.value,
+                name=aggregate.name.value,
+                checkpoints=[
+                    CheckpointModel(id=cp.id.value, name=cp.name.value, journey_id=aggregate.id.value)
+                    for cp in aggregate.checkpoints
+                ],
+            )
+            self.session.add(model)
+            self.session.flush()
+        except Exception as exc:
+            raise AggregateAlreadyExistError(aggregate) from exc
+        aggregate.version = model.version
+        return aggregate.id  # type: ignore[return-value]
+
+    def update(self, aggregate: Journey) -> None:
+        model = self.session.get(JourneyModel, aggregate.id.value)
+        if model is None:
+            raise AggregateDoesNotExistError(aggregate)
+        if model.version != aggregate.version:
+            raise OptimisticLockError(aggregate)
+        model.name = aggregate.name.value
+        model.checkpoints = [
+            CheckpointModel(id=cp.id.value, name=cp.name.value, journey_id=aggregate.id.value)
+            for cp in aggregate.checkpoints
+        ]
+        model.version += 1
+        aggregate.version += 1
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +288,9 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
     yield  # type: ignore[misc]
     with pg_engine.connect() as conn:
         # Delete child tables before parent (FK constraints)
+        conn.execute(sa_delete(CheckpointModel))
         conn.execute(sa_delete(MotorBoatModel))
+        conn.execute(sa_delete(JourneyModel))
         conn.execute(sa_delete(BoatModel))
         conn.execute(sa_delete(EngineModel))
         conn.commit()
@@ -238,6 +312,14 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
     return UnitOfWork(ctx, repo=repo)
 
 
+@pytest.fixture
+def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo = JourneyRepository()
+    return UnitOfWork(ctx, repo=repo)
+
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -245,7 +327,7 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
 
 def make_motorboat(name: str, boat_price: float, engine_price: float) -> MotorBoat:
     engine = BoatEngine(name=Name("Engine"), price=Price(engine_price))
-    return MotorBoat(name=name, price=Price(boat_price), engine=engine)
+    return MotorBoat(name=Name(name), price=Price(boat_price), engine=engine)
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +503,7 @@ def test_motorboat_save_and_get_one(motorboat_uow: UnitOfWork[Session, UUID, Mot
     with motorboat_uow:
         fetched = motorboat_uow.repo.get_one(boat.id)
 
-    assert fetched.name == "Sea Spirit"
+    assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
     assert fetched.engine.price == Price(1_200.0)
 
@@ -440,7 +522,7 @@ def test_motorboat_filter_by_engine_price(motorboat_uow: UnitOfWork[Session, UUI
         results = motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
 
     assert len(results) == 1
-    assert results[0].name == "Yacht"
+    assert results[0].name == Name("Yacht")
 
 
 def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
@@ -461,7 +543,7 @@ def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID, MotorB
         results = motorboat_uow.repo.get_many(spec)
 
     assert len(results) == 1
-    assert results[0].name == "C"
+    assert results[0].name == Name("C")
 
 
 def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
@@ -481,3 +563,43 @@ def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, 
         fetched = motorboat_uow.repo.get_one(boat.id)
 
     assert fetched.engine.price == Price(3_000.0)
+
+
+# ---------------------------------------------------------------------------
+# Tests — Journey with embedded Checkpoint entities
+# ---------------------------------------------------------------------------
+
+
+def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with journey_uow:
+        journey_uow.repo.update(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2

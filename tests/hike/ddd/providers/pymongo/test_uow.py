@@ -20,10 +20,10 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyrigh
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.pymongo import PyMongoDBContext, PyMongoRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, UnknownError
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, Name, Price
+from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -85,15 +85,87 @@ def boats_collection(mongo_context: PyMongoDBContext) -> Collection[dict[str, An
     return col
 
 
+@pytest.fixture(scope="session")
+def journeys_collection(mongo_context: PyMongoDBContext) -> Collection[dict[str, Any]]:
+    db = mongo_context.client["test_db"]  # pyright: ignore[reportUnknownVariableType]
+    col: Collection[dict[str, Any]] = db["journeys"]  # pyright: ignore[reportUnknownVariableType]
+    col.create_index("id", unique=True)
+    return col
+
+
 @pytest.fixture(autouse=True)
-def clear_collection(boats_collection: Collection[dict[str, Any]]) -> None:  # type: ignore[misc]
+def clear_collection(
+    boats_collection: Collection[dict[str, Any]],
+    journeys_collection: Collection[dict[str, Any]],
+) -> None:  # type: ignore[misc]
     yield  # type: ignore[misc]
     boats_collection.delete_many({})
+    journeys_collection.delete_many({})
 
 
 @pytest.fixture
 def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Boat]:
     repo: PyMongoRepository[UUID, Boat] = PyMongoRepository(boats_collection, Boat)
+    return UnitOfWork(mongo_context, repo=repo)
+
+
+class JourneyRepository(PyMongoRepository[UUID, Journey]):
+    def __init__(self, collection: Collection[dict[str, Any]]) -> None:
+        super().__init__(collection, Journey)
+
+    @staticmethod
+    def _checkpoint_to_doc(cp: Checkpoint) -> dict[str, Any]:
+        return {"id": str(cp.id.value), "name": cp.name.value}
+
+    @staticmethod
+    def _checkpoint_from_doc(doc: dict[str, Any]) -> Checkpoint:
+        return Checkpoint(id=EntityID(UUID(doc["id"])), name=Name(doc["name"]))
+
+    def _build_doc(self, journey: Journey, version: int) -> dict[str, Any]:
+        return {
+            "id": journey.id.value,
+            "name": journey.name.value,
+            "checkpoints": [self._checkpoint_to_doc(cp) for cp in journey.checkpoints],
+            "_version": version,
+        }
+
+    def _from_doc(self, document: dict[str, Any]) -> Journey:
+        journey = Journey(
+            id=EntityID(document["id"]),
+            name=Name(document["name"]),
+            checkpoints=[self._checkpoint_from_doc(cp) for cp in document.get("checkpoints", [])],
+        )
+        journey.version = document.get("_version", 0)
+        return journey
+
+    def save(self, aggregate: Journey) -> UUID:
+        doc = self._build_doc(aggregate, version=0)
+        try:
+            result = self._collection.insert_one(doc, session=self._session)
+        except Exception as exc:
+            raise AggregateAlreadyExistError(aggregate) from exc
+        if not result.acknowledged:
+            raise UnknownError("insert_one not acknowledged")
+        aggregate.version = 0
+        return aggregate.id  # type: ignore[return-value]
+
+    def update(self, aggregate: Journey) -> None:
+        new_doc = self._build_doc(aggregate, version=aggregate.version + 1)
+        result = self._collection.replace_one(
+            {"id": aggregate.id.value, "_version": aggregate.version},
+            new_doc,
+            session=self._session,
+        )
+        if result.matched_count == 0:
+            if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
+                raise AggregateDoesNotExistError(aggregate)
+            raise OptimisticLockError(aggregate)
+        aggregate.version += 1
+
+
+@pytest.fixture
+def journey_uow(mongo_context: PyMongoDBContext, journeys_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Journey]:
+    repo = JourneyRepository(journeys_collection)
     return UnitOfWork(mongo_context, repo=repo)
 
 
@@ -239,17 +311,52 @@ def test_optimistic_lock_conflict(uow: UnitOfWork[ClientSession, UUID, Boat]) ->
     with uow:
         copy_b = uow.repo.get_one(boat.id)
 
-    assert copy_a._version == 0
-    assert copy_b._version == 0
+    assert copy_a.version == 0
+    assert copy_b.version == 0
 
     copy_a.price = Price(200.0)
     with uow:
         uow.repo.update(copy_a)
         uow.commit()
-    assert copy_a._version == 1
+    assert copy_a.version == 1
 
     copy_b.price = Price(300.0)
     with pytest.raises(OptimisticLockError):
         with uow:
             uow.repo.update(copy_b)
             uow.commit()
+
+
+def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[ClientSession, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints(journey_uow: UnitOfWork[ClientSession, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with journey_uow:
+        journey_uow.repo.update(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2

@@ -14,12 +14,18 @@ from hike.ddd.repository import (
 )
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, Name, Price
+from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def make_journey_uow() -> UnitOfWork[dict[Any, Any], UUID, Journey]:
+    context = InMemoryDBContext()
+    repo: InMemoryRepository[UUID, Journey] = InMemoryRepository()
+    return UnitOfWork(context, repo=repo)
 
 
 def make_uow() -> UnitOfWork[dict[Any, Any], UUID, Boat]:
@@ -98,7 +104,6 @@ def test_upsert_creates_then_updates() -> None:
         uow.commit()
 
     with uow:
-        # FIX: something
         fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(2.0)
@@ -178,3 +183,40 @@ def test_optimistic_lock_conflict() -> None:
         with uow:
             uow.repo.update(copy_b)
             uow.commit()
+
+
+def test_journey_save_and_get_one_with_checkpoints() -> None:
+    uow = make_journey_uow()
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with uow:
+        uow.repo.save(journey)
+        uow.commit()
+
+    with uow:
+        fetched = uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints() -> None:
+    uow = make_journey_uow()
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with uow:
+        uow.repo.save(journey)
+        uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with uow:
+        uow.repo.update(journey)
+        uow.commit()
+
+    with uow:
+        fetched = uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2

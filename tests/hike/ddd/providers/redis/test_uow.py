@@ -7,6 +7,8 @@ Run with::
 """
 from __future__ import annotations
 
+import json
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -19,7 +21,7 @@ from hike.ddd.providers.redis import RedisDBContext, RedisRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, Name, Price
+from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +29,7 @@ from tests.hike.ddd.conftest import Boat, Name, Price
 # ---------------------------------------------------------------------------
 
 KEY_PREFIX = "boats"
+JOURNEY_KEY_PREFIX = "journeys"
 
 
 @pytest.fixture(scope="session")
@@ -45,6 +48,45 @@ def flush_redis(redis_client: Redis) -> None:  # type: ignore[misc]
 def uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Boat]:
     ctx = RedisDBContext(redis_client)
     repo: RedisRepository[UUID, Boat] = RedisRepository(redis_client, Boat, KEY_PREFIX)
+    return UnitOfWork(ctx, repo=repo)
+
+
+class JourneyRepository(RedisRepository[UUID, Journey]):
+    def __init__(self, client: Redis, key_prefix: str) -> None:
+        super().__init__(client, Journey, key_prefix)
+
+    def _serialize(self, aggregate: Journey, *, version: int) -> str:
+        data: dict[str, Any] = {
+            "id": str(aggregate.id.value),
+            "name": aggregate.name.value,
+            "checkpoints": [
+                {"id": str(cp.id.value), "name": cp.name.value}
+                for cp in aggregate.checkpoints
+            ],
+            "_version": version,
+        }
+        return json.dumps(data)
+
+    def _deserialize(self, raw: bytes | str) -> Journey:
+        data: dict[str, Any] = json.loads(raw)
+        version: int = data.pop("_version", 0)
+        checkpoints = [
+            Checkpoint(id=EntityID(UUID(cp["id"])), name=Name(cp["name"]))
+            for cp in data.get("checkpoints", [])
+        ]
+        journey = Journey(
+            id=EntityID(UUID(data["id"])),
+            name=Name(data["name"]),
+            checkpoints=checkpoints,
+        )
+        journey.version = version
+        return journey
+
+
+@pytest.fixture
+def journey_uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Journey]:
+    ctx = RedisDBContext(redis_client)
+    repo = JourneyRepository(redis_client, JOURNEY_KEY_PREFIX)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -205,3 +247,38 @@ def test_optimistic_lock_conflict(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None
         with uow:
             uow.repo.update(copy_b)
             uow.commit()
+
+
+def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[Pipeline, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints(journey_uow: UnitOfWork[Pipeline, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with journey_uow:
+        journey_uow.repo.update(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2
