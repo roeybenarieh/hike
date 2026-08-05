@@ -9,7 +9,7 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from hike.ddd.aggregate import Aggregate, UuidAggregate
@@ -53,8 +53,8 @@ class Boat(UuidAggregate):
 # ---------------------------------------------------------------------------
 
 context = InMemoryDBContext()
-repo: InMemoryRepository[UUID] = InMemoryRepository()
-uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID] = UnitOfWork(context, repo=repo)
+repo: InMemoryRepository[UUID, Boat] = InMemoryRepository()
+uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, repo=repo)
 
 # ---------------------------------------------------------------------------
 # Save
@@ -81,7 +81,7 @@ with uow:
 with uow:
     results = uow.repo.get_many(Boat.engine.price > 1_000.0)
 
-print(f"Boats priced above 1000: {[cast(Boat, b).name for b in results]}")
+print(f"Boats priced above 1000: {[b.name for b in results]}")
 
 # ---------------------------------------------------------------------------
 # Update
@@ -93,7 +93,7 @@ with uow:
     uow.commit()
 
 with uow:
-    fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+    fetched = uow.repo.get_one(boat.id)
 print(f"Updated price: {fetched.price.value}")
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ except RuntimeError:
 
 with uow:
     try:
-        uow.repo.get_one(ghost.id.value)
+        uow.repo.get_one(ghost.id)
         print("ERROR: ghost should not exist")
     except AggregateDoesNotExistError:
         print("Rollback confirmed: ghost was not persisted")
