@@ -8,8 +8,14 @@ class Price(ValueObject[float]):
             raise ValueError("Price cannot be negative")
 
 
+class BoatName(ValueObject[str]):
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("Boat name cannot be empty")
+
+
 class Boat(UuidEntity):
-    name: str
+    name: Field[BoatName]
     price: Field[Price]
 
     def discount_price(self) -> Price:
@@ -17,7 +23,7 @@ class Boat(UuidEntity):
 
 
 def main() -> None:
-    boat = Boat(name="My Boat", price=Price(100))
+    boat = Boat(name=BoatName("My Boat"), price=Price(100))
 
     print(f"Boat: {boat}")
     print(f"Price value: {boat.price.value}")

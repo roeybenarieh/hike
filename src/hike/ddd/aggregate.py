@@ -45,18 +45,10 @@ class Aggregate[TId: Hashable](Entity[TId]):
     each successful ``update``.  Callers should not modify it directly.
     """
 
-    _version: int = field(default=0, init=False, repr=False)
+    version: int = field(default=0, init=False, repr=False)
     _events: list[DomainEvent] = field(  # pyright: ignore[reportUnknownVariableType]
         default_factory=list, init=False, repr=False
     )
-
-    @property
-    def version(self) -> int:
-        return self._version
-
-    @version.setter
-    def version(self, value: int) -> None:
-        self._version = value
 
     def get_events(self) -> list[DomainEvent]:
         return list(self._events)

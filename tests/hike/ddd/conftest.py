@@ -2,8 +2,9 @@
 
 All classes below are importable by any test module under ``tests/hike/ddd/``::
 
-    from tests.hike.ddd.conftest import Boat, BoatEngine, Category, Engine, \
-        ListingName, MotorBoat, Name, Price, ProductListing, Rating
+    from tests.hike.ddd.conftest import Boat, BoatEngine, Category, Checkpoint, \
+        Engine, Horsepower, Journey, ListingName, MotorBoat, Name, Price, \
+        ProductListing, Rating
 
 The ``boat``, ``engine``, and ``make_boat`` fixtures are auto-discovered by
 pytest and available to all tests under this directory, including provider
@@ -12,6 +13,7 @@ integration tests.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import field
 
 import pytest
 
@@ -37,6 +39,12 @@ class Name(ValueObject[str]):
             raise ValueError("Name cannot be empty")
 
 
+class Horsepower(ValueObject[int]):
+    def __post_init__(self) -> None:
+        if self.value < 0:
+            raise ValueError("Horsepower cannot be negative")
+
+
 class Category(ValueObject[str]):
     pass
 
@@ -60,7 +68,11 @@ class ListingName(ValueObject[str]):
 
 class Engine(UuidEntity):
     name: Field[Name]
-    horsepower: int
+    horsepower: Field[Horsepower]
+
+
+class Checkpoint(UuidEntity):
+    name: Field[Name]
 
 
 class BoatEngine(UuidEntity):
@@ -88,8 +100,13 @@ class Boat(UuidAggregate):
         return Price(self.price.value * 0.9)
 
 
+class Journey(UuidAggregate):
+    name: Field[Name]
+    checkpoints: list[Checkpoint] = field(default_factory=list)
+
+
 class MotorBoat(UuidAggregate):
-    name: str
+    name: Field[Name]
     price: Field[Price]
     engine: Field[BoatEngine]
 
@@ -101,7 +118,7 @@ class MotorBoat(UuidAggregate):
 
 @pytest.fixture
 def engine() -> Engine:
-    return Engine(name=Name("V8"), horsepower=200)
+    return Engine(name=Name("V8"), horsepower=Horsepower(200))
 
 
 @pytest.fixture

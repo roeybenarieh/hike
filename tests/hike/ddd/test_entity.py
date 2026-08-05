@@ -17,55 +17,55 @@ from hike.ddd.specifications import (
     OrSpecification,
 )
 
-from tests.hike.ddd.conftest import Boat, Engine, Name, Price
+from tests.hike.ddd.conftest import Boat, Engine, Horsepower, Name, Price
 
 
 class TestUuidEntityIdentity:
     def test_auto_generated_uuid(self) -> None:
-        e = Engine(name=Name("Titanic"), horsepower=100)
+        e = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
         from hike.ddd.entity import EntityID
         assert isinstance(e.id, EntityID)
         assert isinstance(e.id.value, UUID)
 
     def test_two_instances_have_different_ids(self) -> None:
-        e1 = Engine(name=Name("Titanic"), horsepower=100)
-        e2 = Engine(name=Name("Titanic"), horsepower=100)
+        e1 = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
+        e2 = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
         assert e1.id != e2.id
 
     def test_different_ids_not_equal(self) -> None:
-        e1 = Engine(name=Name("Titanic"), horsepower=100)
-        e2 = Engine(name=Name("Titanic"), horsepower=100)
+        e1 = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
+        e2 = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
         assert e1 != e2
 
     def test_same_id_equal(self) -> None:
-        e1 = Engine(name=Name("Titanic"), horsepower=100)
-        e2 = Engine(id=e1.id, name=Name("Renamed"), horsepower=200)
+        e1 = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
+        e2 = Engine(id=e1.id, name=Name("Renamed"), horsepower=Horsepower(200))
         assert e1 == e2
 
     def test_same_id_equal_despite_different_fields(self) -> None:
-        e1 = Engine(name=Name("V8"), horsepower=200)
-        e2 = Engine(id=e1.id, name=Name("V6"), horsepower=150)
+        e1 = Engine(name=Name("V8"), horsepower=Horsepower(200))
+        e2 = Engine(id=e1.id, name=Name("V6"), horsepower=Horsepower(150))
         assert e1 == e2
 
     def test_different_type_not_equal(self) -> None:
-        e = Engine(name=Name("V8"), horsepower=200)
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         b = Boat(id=e.id, name=Name("Sea Spirit"), price=Price(100))
         assert e != b
 
     def test_entity_hashable(self) -> None:
-        e1 = Engine(name=Name("V8"), horsepower=200)
-        e2 = Engine(name=Name("V6"), horsepower=150)
+        e1 = Engine(name=Name("V8"), horsepower=Horsepower(200))
+        e2 = Engine(name=Name("V6"), horsepower=Horsepower(150))
         assert hash(e1) != hash(e2)
 
     def test_same_id_same_hash(self) -> None:
-        e1 = Engine(name=Name("V8"), horsepower=200)
-        e2 = Engine(id=e1.id, name=Name("Renamed"), horsepower=100)
+        e1 = Engine(name=Name("V8"), horsepower=Horsepower(200))
+        e2 = Engine(id=e1.id, name=Name("Renamed"), horsepower=Horsepower(100))
         assert hash(e1) == hash(e2)
 
 
 class TestFieldDescriptor:
     def test_instance_access_returns_value_object(self) -> None:
-        e = Engine(name=Name("Titanic"), horsepower=100)
+        e = Engine(name=Name("Titanic"), horsepower=Horsepower(100))
         assert isinstance(e.name, Name)
         assert e.name.value == "Titanic"
 
@@ -75,7 +75,7 @@ class TestFieldDescriptor:
 
     def test_raw_value_auto_converted(self) -> None:
         # Field[Name] auto-converts raw str to Name
-        e = Engine(name="Titanic", horsepower=100)  # pyright: ignore[reportArgumentType]
+        e = Engine(name="Titanic", horsepower=Horsepower(100))  # pyright: ignore[reportArgumentType]
         assert isinstance(e.name, Name)
 
     def test_price_field_on_boat(self) -> None:
@@ -88,9 +88,10 @@ class TestFieldDescriptor:
         assert isinstance(discounted, Price)
         assert abs(discounted.value - 90.0) < 1e-9
 
-    def test_plain_int_field_unchanged(self) -> None:
-        e = Engine(name=Name("V8"), horsepower=200)
-        assert e.horsepower == 200
+    def test_horsepower_field_is_value_object(self) -> None:
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
+        assert isinstance(e.horsepower, Horsepower)
+        assert e.horsepower.value == 200
 
 
 class TestFieldProxySpecifications:
@@ -179,11 +180,11 @@ class TestStaticTypes:
 
 class TestToDict:
     def test_non_vo_field_is_kept_as_is(self) -> None:
-        e = Engine(name=Name("V8"), horsepower=200)
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert to_dict(e)["horsepower"] == 200
 
     def test_value_object_name_field_is_flattened(self) -> None:
-        e = Engine(name=Name("V8"), horsepower=200)
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert to_dict(e)["name"] == "V8"
 
     def test_value_object_price_field_is_flattened(self) -> None:
@@ -197,7 +198,7 @@ class TestToDict:
         assert d["id"] == b.id.value
 
     def test_entity_init_fields_are_present(self) -> None:
-        e = Engine(name=Name("V8"), horsepower=200)
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert set(to_dict(e).keys()) == {"id", "name", "horsepower"}
 
     def test_aggregate_init_fields_are_present(self) -> None:
@@ -206,5 +207,5 @@ class TestToDict:
 
     def test_get_fields_returns_dataclass_fields(self) -> None:
         # Engine (UuidEntity) has no non-init fields, so the set is exact.
-        e = Engine(name=Name("V8"), horsepower=200)
+        e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert {f.name for f in get_fields(e)} == {"id", "name", "horsepower"}

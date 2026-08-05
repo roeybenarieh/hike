@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field, fields
-from typing import Any, Generic, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
+from typing import Any, ClassVar, Generic, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
 from uuid import UUID, uuid4
 
 from .common import DomainObject
@@ -405,7 +405,21 @@ class Entity[TId: Hashable](DomainObject):
         except Exception:
             resolved = {}
 
+        non_init_names = {f.name for f in fields(cast(Any, cls)) if not f.init}
         for name, ann_type in resolved.items():
+            if name.startswith("_") or get_origin(ann_type) is ClassVar or name in non_init_names:
+                continue
+            if get_origin(ann_type) is not Field:
+                _list_args: tuple[Any, ...] = getattr(ann_type, "__args__", ())
+                elem = _list_args[0] if _list_args else None
+                elem_cls = elem if isinstance(elem, type) else get_origin(elem)
+                if not (get_origin(ann_type) is list and isinstance(elem_cls, type) and issubclass(elem_cls, DomainObject)):
+                    raise TypeError(
+                        f"{cls.__name__}.{name}: Entity fields must be declared as "
+                        f"Field[T] or list[T] where T is a DomainObject subclass, got {ann_type!r}. "
+                        f"Wrap the raw type in a ValueObject."
+                    )
+                continue
             inner = _unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
                 desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
