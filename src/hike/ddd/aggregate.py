@@ -39,11 +39,24 @@ class Aggregate[TId: Hashable](Entity[TId]):
         class Order(Aggregate[UUID]):
             id: Field[EntityID[UUID]] = vo_field(default_factory=lambda: EntityID(uuid4()))
             total: Field[Money]
+
+    ``version`` is a monotonically increasing integer managed by repositories
+    for optimistic concurrency control.  It starts at 0 and is incremented by
+    each successful ``update``.  Callers should not modify it directly.
     """
 
+    _version: int = field(default=0, init=False, repr=False)
     _events: list[DomainEvent] = field(  # pyright: ignore[reportUnknownVariableType]
         default_factory=list, init=False, repr=False
     )
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    @version.setter
+    def version(self, value: int) -> None:
+        self._version = value
 
     def get_events(self) -> list[DomainEvent]:
         return list(self._events)

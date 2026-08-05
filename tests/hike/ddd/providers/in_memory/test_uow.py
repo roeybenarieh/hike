@@ -8,8 +8,9 @@ import pytest
 
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import (
-    AggregateDoesNotExistError,
     AggregateAlreadyExistError,
+    AggregateDoesNotExistError,
+    OptimisticLockError,
 )
 from hike.ddd.uow import UnitOfWork
 
@@ -147,3 +148,33 @@ def test_rollback_on_exception() -> None:
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
             uow.repo.get_one(boat.id)
+
+
+def test_optimistic_lock_conflict() -> None:
+    """Second writer loses when it holds a stale version."""
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
+    uow = make_uow()
+
+    with uow:
+        uow.repo.save(boat)
+        uow.commit()
+
+    with uow:
+        copy_a = uow.repo.get_one(boat.id)
+    with uow:
+        copy_b = uow.repo.get_one(boat.id)
+
+    assert copy_a.version == 0
+    assert copy_b.version == 0
+
+    copy_a.price = Price(200.0)
+    with uow:
+        uow.repo.update(copy_a)
+        uow.commit()
+    assert copy_a.version == 1
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with uow:
+            uow.repo.update(copy_b)
+            uow.commit()

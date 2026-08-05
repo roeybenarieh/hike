@@ -316,7 +316,7 @@ def vo_field(*, default_factory: Callable[[], _T]) -> Field[_T]:
     return field(default_factory=default_factory)  # pyright: ignore[reportReturnType]
 
 
-@dataclass_transform(kw_only_default=True, field_specifiers=(vo, vo_field))
+@dataclass_transform(kw_only_default=True, field_specifiers=(vo, vo_field, field))
 class Entity[TId: Hashable](DomainObject):
     """Base class for DDD entities, generic over the raw ID type ``TId``.
 

@@ -7,7 +7,6 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import cast
 from uuid import UUID
 
 import pytest
@@ -17,7 +16,7 @@ from testcontainers.redis import RedisContainer  # pyright: ignore[reportMissing
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.redis import RedisDBContext, RedisRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
 from tests.hike.ddd.conftest import Boat, Name, Price
@@ -179,21 +178,30 @@ def test_rollback_on_exception(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
             uow.repo.get_one(boat.id)
 
 
-def test_locked_get_one(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
-    """locked=True acquires a distributed lock; release_locks() clears it."""
-    boat = Boat(name=Name("Locked"), price=Price(10.0))
+def test_optimistic_lock_conflict(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
+    """Second writer loses when it holds a stale version."""
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
 
     with uow:
         uow.repo.save(boat)
         uow.commit()
 
-    repo = cast(RedisRepository[UUID, Boat], uow.repo)
     with uow:
-        fetched = uow.repo.get_one(boat.id, locked=True)
-        assert fetched.name == Name("Locked")
-        assert repo.release_locks  # lock was acquired (will be released on next entry)
+        copy_a = uow.repo.get_one(boat.id)
+    with uow:
+        copy_b = uow.repo.get_one(boat.id)
 
-    # Entering the next UoW block assigns a new session, which calls release_locks().
+    assert copy_a._version == 0
+    assert copy_b._version == 0
+
+    copy_a.price = Price(200.0)
     with uow:
-        fetched2 = uow.repo.get_one(boat.id)
-        assert fetched2.name == Name("Locked")
+        uow.repo.update(copy_a)
+        uow.commit()
+    assert copy_a._version == 1
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with uow:
+            uow.repo.update(copy_b)
+            uow.commit()

@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Float, ForeignKey, String, Uuid, create_engine, delete as sa_delete
+from sqlalchemy import Float, ForeignKey, Integer, String, Uuid, create_engine, delete as sa_delete
 from sqlalchemy.engine import Engine as SAEngine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -25,7 +25,7 @@ from testcontainers.postgres import PostgresContainer  # pyright: ignore[reportM
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.sqlalchemy import ISQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
 from tests.hike.ddd.conftest import Boat, BoatEngine, MotorBoat, Name, Price
@@ -45,6 +45,7 @@ class BoatModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class EngineModel(Base):
@@ -63,6 +64,7 @@ class MotorBoatModel(Base):
     price: Mapped[float] = mapped_column(Float, nullable=False)
     engine_id: Mapped[UUID] = mapped_column(ForeignKey("engines.id"), nullable=False)
     engine: Mapped[EngineModel] = relationship(EngineModel)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 # ---------------------------------------------------------------------------
@@ -129,12 +131,15 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
             name=Name(model.engine.name),
             price=Price(model.engine.price),
         )
-        return MotorBoat(
+        boat = MotorBoat(
             id=EntityID(model.id),
             name=model.name,
             price=Price(model.price),
             engine=engine,
         )
+        if hasattr(model, "version"):
+            boat.version = model.version
+        return boat
 
     # ------------------------------------------------------------------
     # Upsert engine before saving/updating the boat
@@ -155,10 +160,13 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
     def save(self, aggregate: MotorBoat) -> UUID:
         self._sync_engine(aggregate.engine)
         try:
-            self.session.add(self._boat_to_model(aggregate))
+            model = self._boat_to_model(aggregate)
+            self.session.add(model)
             self.session.flush()
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
+        if hasattr(model, "version"):
+            aggregate.version = model.version
         return aggregate.id  # type: ignore[return-value]
 
     def update(self, aggregate: MotorBoat) -> None:
@@ -166,9 +174,14 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
         model = self.session.get(MotorBoatModel, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
+        if hasattr(model, "version") and model.version != aggregate.version:
+            raise OptimisticLockError(aggregate)
         model.name = aggregate.name
         model.price = aggregate.price.value
         model.engine_id = aggregate.engine.id.value
+        if hasattr(model, "version"):
+            model.version += 1
+            aggregate.version += 1
 
     def upsert(self, aggregate: MotorBoat) -> None:
         self._sync_engine(aggregate.engine)
@@ -179,6 +192,8 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
             model.name = aggregate.name
             model.price = aggregate.price.value
             model.engine_id = aggregate.engine.id.value
+            if hasattr(model, "version"):
+                model.version += 1
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +359,35 @@ def test_rollback_on_exception(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
             uow.repo.get_one(boat.id)
+
+
+def test_optimistic_lock_conflict(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    """Second writer loses when it holds a stale version."""
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
+
+    with uow:
+        uow.repo.save(boat)
+        uow.commit()
+
+    with uow:
+        copy_a = uow.repo.get_one(boat.id)
+    with uow:
+        copy_b = uow.repo.get_one(boat.id)
+
+    assert copy_a.version == 0
+    assert copy_b.version == 0
+
+    copy_a.price = Price(200.0)
+    with uow:
+        uow.repo.update(copy_a)
+        uow.commit()
+    assert copy_a.version == 1
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with uow:
+            uow.repo.update(copy_b)
+            uow.commit()
 
 
 def test_get_one_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
