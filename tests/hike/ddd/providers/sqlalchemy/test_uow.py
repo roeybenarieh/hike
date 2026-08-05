@@ -21,7 +21,7 @@ from sqlalchemy.orm import (
     relationship,
     sessionmaker,
 )
-from testcontainers.postgres import PostgresContainer  # pyright: ignore[reportMissingTypeStubs]
+from testcontainers.community.postgres import PostgresContainer  # pyright: ignore[reportMissingImports]
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.sqlalchemy import ISQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository

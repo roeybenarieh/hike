@@ -12,7 +12,7 @@ from uuid import UUID
 import pytest
 from redis import Redis
 from redis.client import Pipeline
-from testcontainers.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
+from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingImports]
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.redis import RedisDBContext, RedisRepository
@@ -191,14 +191,14 @@ def test_optimistic_lock_conflict(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None
     with uow:
         copy_b = uow.repo.get_one(boat.id)
 
-    assert copy_a._version == 0
-    assert copy_b._version == 0
+    assert copy_a.version == 0
+    assert copy_b.version == 0
 
     copy_a.price = Price(200.0)
     with uow:
         uow.repo.update(copy_a)
         uow.commit()
-    assert copy_a._version == 1
+    assert copy_a.version == 1
 
     copy_b.price = Price(300.0)
     with pytest.raises(OptimisticLockError):

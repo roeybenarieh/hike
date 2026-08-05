@@ -28,5 +28,5 @@ build-backend = "uv_build"
 dev = [
     "hike[all]",
     "pytest>=9.0.3",
-    "testcontainers[mongodb,postgres,redis]>=4.14.2",
+    "testcontainers[mongodb,postgres,redis]>=4.15.0",
 ]
