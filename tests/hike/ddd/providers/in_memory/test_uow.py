@@ -1,31 +1,19 @@
-"""Tests for UnitOfWork + InMemoryRepository."""
+"""Integration tests for UnitOfWork + InMemoryRepository."""
 from __future__ import annotations
 
-from typing import cast
+from typing import Any
 from uuid import UUID
 
 import pytest
 
-from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.entity import Field
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import (
     AggregateDoesNotExistError,
     AggregateAlreadyExistError,
 )
 from hike.ddd.uow import UnitOfWork
-from hike.ddd.value_object import ValueObject
 
-
-class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
-
-
-class Boat(UuidAggregate):
-    name: str
-    price: Field[Price]
+from tests.hike.ddd.conftest import Boat, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -33,9 +21,9 @@ class Boat(UuidAggregate):
 # ---------------------------------------------------------------------------
 
 
-def make_uow() -> UnitOfWork[dict, UUID]:
+def make_uow() -> UnitOfWork[dict[Any, Any], UUID, Boat]:
     context = InMemoryDBContext()
-    repo: InMemoryRepository[UUID] = InMemoryRepository()
+    repo: InMemoryRepository[UUID, Boat] = InMemoryRepository()
     return UnitOfWork(context, repo=repo)
 
 
@@ -45,7 +33,7 @@ def make_uow() -> UnitOfWork[dict, UUID]:
 
 
 def test_save_and_get_one() -> None:
-    boat = Boat(name="Sea Spirit", price=Price(4_999.99))
+    boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
     uow = make_uow()
 
     with uow:
@@ -53,14 +41,14 @@ def test_save_and_get_one() -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
-    assert fetched.name == "Sea Spirit"
+    assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
 def test_update() -> None:
-    boat = Boat(name="Old Name", price=Price(100.0))
+    boat = Boat(name=Name("Old Name"), price=Price(100.0))
     uow = make_uow()
 
     with uow:
@@ -73,14 +61,14 @@ def test_update() -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(200.0)
 
 
 def test_get_many_with_spec() -> None:
-    boat_a = Boat(name="Alpha", price=Price(10.0))
-    boat_b = Boat(name="Beta", price=Price(50.0))
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
     uow = make_uow()
 
     with uow:
@@ -92,11 +80,11 @@ def test_get_many_with_spec() -> None:
         results = uow.repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
-    assert cast(Boat, results[0]).name == "Beta"
+    assert results[0].name == Name("Beta")
 
 
 def test_upsert_creates_then_updates() -> None:
-    boat = Boat(name="Ghost", price=Price(1.0))
+    boat = Boat(name=Name("Ghost"), price=Price(1.0))
     uow = make_uow()
 
     with uow:
@@ -109,13 +97,14 @@ def test_upsert_creates_then_updates() -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        # FIX: something
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(2.0)
 
 
 def test_delete() -> None:
-    boat = Boat(name="Doomed", price=Price(0.01))
+    boat = Boat(name=Name("Doomed"), price=Price(0.01))
     uow = make_uow()
 
     with uow:
@@ -128,11 +117,11 @@ def test_delete() -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)
 
 
 def test_save_duplicate_raises() -> None:
-    boat = Boat(name="Twin", price=Price(50.0))
+    boat = Boat(name=Name("Twin"), price=Price(50.0))
     uow = make_uow()
 
     with uow:
@@ -147,7 +136,7 @@ def test_save_duplicate_raises() -> None:
 
 def test_rollback_on_exception() -> None:
     """Exception inside the UoW block must abort the transaction."""
-    boat = Boat(name="Rollback Boat", price=Price(99.0))
+    boat = Boat(name=Name("Rollback Boat"), price=Price(99.0))
     uow = make_uow()
 
     with pytest.raises(ValueError, match="simulated failure"):
@@ -157,4 +146,4 @@ def test_rollback_on_exception() -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)

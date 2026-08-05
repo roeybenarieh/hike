@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from hike.ddd.aggregate import Aggregate
 from hike.ddd.common import DomainError
+from hike.ddd.entity import EntityID
 from hike.ddd.specifications import ISpecification
 
 TId = TypeVar("TId")
 TSession = TypeVar("TSession")
+TAggregate = TypeVar("TAggregate", bound=Aggregate[Any])
 
 
 class RepositoryError(DomainError): ...
@@ -33,9 +35,10 @@ class LockTimeoutError(RepositoryError):
     """Raised when a pessimistic lock cannot be acquired within the allowed time."""
 
 
-# HACK: as of time of writing this class, there is no way to statically enforce
-# that TId is really the id type of TAggregate (no higher-kinded types in Python).
-class IRepository(Generic[TId, TSession], ABC):
+# HACK: Python has no higher-kinded types, so we cannot statically enforce that
+# TId is TAggregate's ID type, nor that TAggregate is parameterized by TId.
+# Subclasses must keep them consistent by convention.
+class IRepository(Generic[TId, TSession, TAggregate], ABC):
     _session: TSession | None = None
 
     @property
@@ -49,7 +52,7 @@ class IRepository(Generic[TId, TSession], ABC):
         self._session = value
 
     @abstractmethod
-    def save(self, aggregate: Aggregate[TId]) -> TId:
+    def save(self, aggregate: TAggregate) -> TId:
         """Save a new aggregate.
 
         :param aggregate: The aggregate to save.
@@ -57,7 +60,7 @@ class IRepository(Generic[TId, TSession], ABC):
         """
 
     @abstractmethod
-    def delete(self, aggregate: Aggregate[TId]) -> None:
+    def delete(self, aggregate: TAggregate) -> None:
         """Delete an aggregate.
 
         :param aggregate: The aggregate to delete.
@@ -65,7 +68,7 @@ class IRepository(Generic[TId, TSession], ABC):
         """
 
     @abstractmethod
-    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
+    def get_one(self, identifier: EntityID[TId], locked: bool = False) -> TAggregate:
         """Get one aggregate by id.
 
         :param identifier: The identifier of the aggregate.
@@ -78,7 +81,7 @@ class IRepository(Generic[TId, TSession], ABC):
             self,
             specification: ISpecification,
             locked: bool = False,
-    ) -> list[Aggregate[TId]]:
+    ) -> list[TAggregate]:
         """Get multiple aggregates.
 
         Note: the query capabilities of this method is limited. extend this repository
@@ -88,7 +91,7 @@ class IRepository(Generic[TId, TSession], ABC):
         """
 
     @abstractmethod
-    def update(self, aggregate: Aggregate[TId]) -> None:
+    def update(self, aggregate: TAggregate) -> None:
         """Update a given aggregate.
 
         :param aggregate: The aggregate to update.
@@ -96,7 +99,7 @@ class IRepository(Generic[TId, TSession], ABC):
         """
 
     @abstractmethod
-    def upsert(self, aggregate: Aggregate[TId]) -> None:
+    def upsert(self, aggregate: TAggregate) -> None:
         """Update a given aggregate; create it if it does not exist.
 
         :param aggregate: The aggregate to update/create.

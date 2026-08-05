@@ -1,20 +1,8 @@
-"""Tests for ValueObject based on examples/value_objects.py."""
+"""Tests for ValueObject."""
 
 import pytest
 
-from hike.ddd.value_object import ValueObject
-
-
-class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
-
-
-class Name(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+from tests.hike.ddd.conftest import Name, Price
 
 
 class TestValueObjectValidation:
@@ -48,7 +36,6 @@ class TestValueObjectEquality:
         assert p1 == p3
 
     def test_different_type_not_equal(self) -> None:
-        # Price and Name with same raw value should not compare equal
         assert Price(5) != Name("5")
 
 

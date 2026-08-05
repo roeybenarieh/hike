@@ -7,7 +7,7 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -23,48 +23,12 @@ from sqlalchemy.orm import (
 )
 from testcontainers.postgres import PostgresContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.ddd.aggregate import Aggregate, UuidAggregate
-from hike.ddd.entity import EntityID, Field, UuidEntity
+from hike.ddd.entity import EntityID
 from hike.ddd.providers.sqlalchemy import ISQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
 from hike.ddd.uow import UnitOfWork
-from hike.ddd.value_object import ValueObject
 
-
-# ---------------------------------------------------------------------------
-# Domain model — flat aggregate (existing tests)
-# ---------------------------------------------------------------------------
-
-
-class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
-
-
-class Boat(UuidAggregate):
-    name: str
-    price: Field[Price]
-
-
-# ---------------------------------------------------------------------------
-# Domain model — aggregate with nested entity
-# ---------------------------------------------------------------------------
-
-
-class EngineName(ValueObject[str]): ...
-
-
-class BoatEngine(UuidEntity):
-    """Engine entity embedded inside a MotorBoat aggregate."""
-    name: Field[EngineName]
-    price: Field[Price]
-
-
-class MotorBoat(UuidAggregate):
-    name: str
-    price: Field[Price]
-    engine: Field[BoatEngine]
+from tests.hike.ddd.conftest import Boat, BoatEngine, MotorBoat, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +96,7 @@ class MotorBoatMapper(ISQLAlchemyMapper):
 # ---------------------------------------------------------------------------
 
 
-class MotorBoatRepository(SQLAlchemyRepository[UUID]):
+class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
     def __init__(self) -> None:
         super().__init__(MotorBoat, MotorBoatMapper())
 
@@ -162,7 +126,7 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID]):
     def _from_model(self, model: Any) -> MotorBoat:
         engine = BoatEngine(
             id=EntityID(model.engine.id),
-            name=EngineName(model.engine.name),
+            name=Name(model.engine.name),
             price=Price(model.engine.price),
         )
         return MotorBoat(
@@ -188,36 +152,33 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID]):
     # CRUD overrides
     # ------------------------------------------------------------------
 
-    def save(self, aggregate: Aggregate[UUID]) -> UUID:
-        boat = cast(MotorBoat, aggregate)
-        self._sync_engine(boat.engine)
+    def save(self, aggregate: MotorBoat) -> UUID:
+        self._sync_engine(aggregate.engine)
         try:
-            self.session.add(self._boat_to_model(boat))
+            self.session.add(self._boat_to_model(aggregate))
             self.session.flush()
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
-        return boat.id  # type: ignore[return-value]
+        return aggregate.id  # type: ignore[return-value]
 
-    def update(self, aggregate: Aggregate[UUID]) -> None:
-        boat = cast(MotorBoat, aggregate)
-        self._sync_engine(boat.engine)
-        model = self.session.get(MotorBoatModel, boat.id.value)
+    def update(self, aggregate: MotorBoat) -> None:
+        self._sync_engine(aggregate.engine)
+        model = self.session.get(MotorBoatModel, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
-        model.name = boat.name
-        model.price = boat.price.value
-        model.engine_id = boat.engine.id.value
+        model.name = aggregate.name
+        model.price = aggregate.price.value
+        model.engine_id = aggregate.engine.id.value
 
-    def upsert(self, aggregate: Aggregate[UUID]) -> None:
-        boat = cast(MotorBoat, aggregate)
-        self._sync_engine(boat.engine)
-        model = self.session.get(MotorBoatModel, boat.id.value)
+    def upsert(self, aggregate: MotorBoat) -> None:
+        self._sync_engine(aggregate.engine)
+        model = self.session.get(MotorBoatModel, aggregate.id.value)
         if model is None:
-            self.session.add(self._boat_to_model(boat))
+            self.session.add(self._boat_to_model(aggregate))
         else:
-            model.name = boat.name
-            model.price = boat.price.value
-            model.engine_id = boat.engine.id.value
+            model.name = aggregate.name
+            model.price = aggregate.price.value
+            model.engine_id = aggregate.engine.id.value
 
 
 # ---------------------------------------------------------------------------
@@ -247,15 +208,15 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
 
 
 @pytest.fixture
-def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID]:
+def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID] = SQLAlchemyRepository(Boat, BoatMapper())
+    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, BoatMapper())
     return UnitOfWork(ctx, repo=repo)
 
 
 @pytest.fixture
-def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID]:
+def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
     repo = MotorBoatRepository()
@@ -268,7 +229,7 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID]:
 
 
 def make_motorboat(name: str, boat_price: float, engine_price: float) -> MotorBoat:
-    engine = BoatEngine(name=EngineName("Engine"), price=Price(engine_price))
+    engine = BoatEngine(name=Name("Engine"), price=Price(engine_price))
     return MotorBoat(name=name, price=Price(boat_price), engine=engine)
 
 
@@ -277,22 +238,22 @@ def make_motorboat(name: str, boat_price: float, engine_price: float) -> MotorBo
 # ---------------------------------------------------------------------------
 
 
-def test_save_and_get_one(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Sea Spirit", price=Price(4_999.99))
+def test_save_and_get_one(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
 
     with uow:
         uow.repo.save(boat)
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
-    assert fetched.name == "Sea Spirit"
+    assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
-def test_update(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Old Name", price=Price(100.0))
+def test_update(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Old Name"), price=Price(100.0))
 
     with uow:
         uow.repo.save(boat)
@@ -304,14 +265,14 @@ def test_update(uow: UnitOfWork[Session, UUID]) -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(200.0)
 
 
-def test_get_many_with_spec(uow: UnitOfWork[Session, UUID]) -> None:
-    boat_a = Boat(name="Alpha", price=Price(10.0))
-    boat_b = Boat(name="Beta", price=Price(50.0))
+def test_get_many_with_spec(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
 
     with uow:
         uow.repo.save(boat_a)
@@ -322,11 +283,11 @@ def test_get_many_with_spec(uow: UnitOfWork[Session, UUID]) -> None:
         results = uow.repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
-    assert cast(Boat, results[0]).name == "Beta"
+    assert results[0].name == Name("Beta")
 
 
-def test_upsert_creates_then_updates(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Ghost", price=Price(1.0))
+def test_upsert_creates_then_updates(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Ghost"), price=Price(1.0))
 
     with uow:
         uow.repo.upsert(boat)
@@ -338,13 +299,13 @@ def test_upsert_creates_then_updates(uow: UnitOfWork[Session, UUID]) -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(2.0)
 
 
-def test_delete(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Doomed", price=Price(0.01))
+def test_delete(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Doomed"), price=Price(0.01))
 
     with uow:
         uow.repo.save(boat)
@@ -356,11 +317,11 @@ def test_delete(uow: UnitOfWork[Session, UUID]) -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)
 
 
-def test_save_duplicate_raises(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Twin", price=Price(50.0))
+def test_save_duplicate_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Twin"), price=Price(50.0))
 
     with uow:
         uow.repo.save(boat)
@@ -372,8 +333,8 @@ def test_save_duplicate_raises(uow: UnitOfWork[Session, UUID]) -> None:
             uow.commit()
 
 
-def test_rollback_on_exception(uow: UnitOfWork[Session, UUID]) -> None:
-    boat = Boat(name="Rollback Boat", price=Price(99.0))
+def test_rollback_on_exception(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Rollback Boat"), price=Price(99.0))
 
     with pytest.raises(ValueError, match="simulated failure"):
         with uow:
@@ -382,19 +343,19 @@ def test_rollback_on_exception(uow: UnitOfWork[Session, UUID]) -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)
 
 
-def test_get_one_missing_raises(uow: UnitOfWork[Session, UUID]) -> None:
+def test_get_one_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     from uuid import uuid4
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(uuid4())
+            uow.repo.get_one(EntityID(uuid4()))
 
 
-def test_delete_missing_raises(uow: UnitOfWork[Session, UUID]) -> None:
-    ghost = Boat(name="Never Saved", price=Price(1.0))
+def test_delete_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    ghost = Boat(name=Name("Never Saved"), price=Price(1.0))
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
@@ -406,7 +367,7 @@ def test_delete_missing_raises(uow: UnitOfWork[Session, UUID]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_motorboat_save_and_get_one(motorboat_uow: UnitOfWork[Session, UUID]) -> None:
+def test_motorboat_save_and_get_one(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
     boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
 
     with motorboat_uow:
@@ -414,14 +375,14 @@ def test_motorboat_save_and_get_one(motorboat_uow: UnitOfWork[Session, UUID]) ->
         motorboat_uow.commit()
 
     with motorboat_uow:
-        fetched = cast(MotorBoat, motorboat_uow.repo.get_one(boat.id.value))
+        fetched = motorboat_uow.repo.get_one(boat.id)
 
     assert fetched.name == "Sea Spirit"
     assert fetched.price == Price(4_999.99)
     assert fetched.engine.price == Price(1_200.0)
 
 
-def test_motorboat_filter_by_engine_price(motorboat_uow: UnitOfWork[Session, UUID]) -> None:
+def test_motorboat_filter_by_engine_price(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
     """MotorBoat.engine.price > X produces a JOIN query and returns correct boats."""
     expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
     cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
@@ -435,10 +396,10 @@ def test_motorboat_filter_by_engine_price(motorboat_uow: UnitOfWork[Session, UUI
         results = motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
 
     assert len(results) == 1
-    assert cast(MotorBoat, results[0]).name == "Yacht"
+    assert results[0].name == "Yacht"
 
 
-def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID]) -> None:
+def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
     """Spec combining boat price and engine price produces correct SQL with one JOIN."""
     a = make_motorboat("A", boat_price=1_000.0, engine_price=500.0)
     b = make_motorboat("B", boat_price=5_000.0, engine_price=500.0)
@@ -456,10 +417,10 @@ def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID]) -> No
         results = motorboat_uow.repo.get_many(spec)
 
     assert len(results) == 1
-    assert cast(MotorBoat, results[0]).name == "C"
+    assert results[0].name == "C"
 
 
-def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID]) -> None:
+def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
     boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
 
     with motorboat_uow:
@@ -473,6 +434,6 @@ def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID])
         motorboat_uow.commit()
 
     with motorboat_uow:
-        fetched = cast(MotorBoat, motorboat_uow.repo.get_one(boat.id.value))
+        fetched = motorboat_uow.repo.get_one(boat.id)
 
     assert fetched.engine.price == Price(3_000.0)
