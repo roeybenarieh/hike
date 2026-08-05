@@ -216,56 +216,16 @@ class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
 
 
 class JourneyMapper(ISQLAlchemyMapper):
+    _entity_to_model: dict[type, type] = {
+        Journey: JourneyModel,
+        Checkpoint: CheckpointModel,
+    }
+
     def get_model(self, entity_class: type) -> type:
-        return JourneyModel
+        return self._entity_to_model[entity_class]
 
     def get_column(self, model_class: type, field_name: str) -> Any:
         return getattr(model_class, field_name)
-
-
-class JourneyRepository(SQLAlchemyRepository[UUID, Journey]):
-    def __init__(self) -> None:
-        super().__init__(Journey, JourneyMapper())
-
-    def _from_model(self, model: Any) -> Journey:
-        checkpoints = [
-            Checkpoint(id=EntityID(cp.id), name=Name(cp.name))
-            for cp in model.checkpoints
-        ]
-        journey = Journey(id=EntityID(model.id), name=Name(model.name), checkpoints=checkpoints)
-        journey.version = model.version
-        return journey
-
-    def save(self, aggregate: Journey) -> UUID:
-        try:
-            model = JourneyModel(
-                id=aggregate.id.value,
-                name=aggregate.name.value,
-                checkpoints=[
-                    CheckpointModel(id=cp.id.value, name=cp.name.value, journey_id=aggregate.id.value)
-                    for cp in aggregate.checkpoints
-                ],
-            )
-            self.session.add(model)
-            self.session.flush()
-        except Exception as exc:
-            raise AggregateAlreadyExistError(aggregate) from exc
-        aggregate.version = model.version
-        return aggregate.id  # type: ignore[return-value]
-
-    def update(self, aggregate: Journey) -> None:
-        model = self.session.get(JourneyModel, aggregate.id.value)
-        if model is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if model.version != aggregate.version:
-            raise OptimisticLockError(aggregate)
-        model.name = aggregate.name.value
-        model.checkpoints = [
-            CheckpointModel(id=cp.id.value, name=cp.name.value, journey_id=aggregate.id.value)
-            for cp in aggregate.checkpoints
-        ]
-        model.version += 1
-        aggregate.version += 1
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +276,7 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
 def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo = JourneyRepository()
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, JourneyMapper())
     return UnitOfWork(ctx, repo=repo)
 
 

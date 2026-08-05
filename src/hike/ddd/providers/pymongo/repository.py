@@ -5,7 +5,7 @@ from typing import Any
 from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 
-from hike.ddd.entity import EntityID, get_fields, to_dict
+from hike.ddd.entity import EntityID, from_dict, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -51,9 +51,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
 
     def _from_doc(self, document: dict[str, Any]) -> TAggregate:
         """Reconstruct an aggregate from a MongoDB document."""
-        init_field_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
-        doc = {k: v for k, v in document.items() if k in init_field_names}
-        aggregate = self._aggregate_class(**doc)
+        aggregate: TAggregate = from_dict(self._aggregate_class, document)
         aggregate.version = document.get("_version", 0)
         return aggregate
 

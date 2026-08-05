@@ -438,11 +438,10 @@ class Entity[TId: Hashable](DomainObject):
 ##### Entity utility functions ####
 
 def to_dict(entity: Entity[Any]) -> dict[str, Any]:
-    """Serialize *entity* to a plain dict suitable for MongoDB storage.
+    """Serialize *entity* to a plain dict.
 
-    ValueObject fields are flattened to their raw ``.value`` so the document
-    stores e.g. ``{"price": 4.99}`` rather than ``{"price": {"value": 4.99}}``.
-    List fields are serialized element-by-element with the same rule.
+    ValueObject fields are flattened to their raw ``.value``.
+    Entity fields in lists are recursively serialized via ``to_dict``.
     """
     result: dict[str, Any] = {}
     for f in get_fields(entity):
@@ -453,12 +452,42 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
             result[f.name] = cast(Any, val).value
         elif isinstance(val, list):
             result[f.name] = [
-                cast(Any, v).value if isinstance(v, ValueObject) else v
+                cast(Any, v).value if isinstance(v, ValueObject)
+                else to_dict(cast(Entity[Any], v)) if isinstance(v, Entity)
+                else v
                 for v in cast(list[Any], val)
             ]
         else:
             result[f.name] = val
     return result
+
+
+def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
+    """Reconstruct an entity from a plain dict produced by ``to_dict``.
+
+    Handles nested ``list[Entity]`` fields by recursing into element dicts and
+    calling ``from_dict`` with the declared element type.  Scalar ValueObject
+    fields are reconstructed automatically by ``_FieldDescriptor.__set__``.
+    """
+    try:
+        hints: dict[str, Any] = get_type_hints(entity_class)
+    except Exception:
+        hints = {}
+    init_names = {f.name for f in fields(cast(Any, entity_class)) if f.init}
+    kwargs: dict[str, Any] = {}
+    for name in init_names:
+        if name not in data:
+            continue
+        val = data[name]
+        ann = hints.get(name)
+        if ann is not None and get_origin(ann) is list:
+            list_args: tuple[Any, ...] = getattr(ann, "__args__", ())
+            elem_cls = list_args[0] if list_args else None
+            if isinstance(elem_cls, type) and issubclass(elem_cls, Entity):
+                kwargs[name] = [from_dict(cast(type[Any], elem_cls), item) for item in cast(list[Any], val)]
+                continue
+        kwargs[name] = val
+    return cast(Any, entity_class)(**kwargs)
 
 
 def get_fields(entity: Entity[Any] | type[Entity[Any]]):

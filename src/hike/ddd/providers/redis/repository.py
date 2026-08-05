@@ -8,7 +8,7 @@ from typing import Any, cast
 from redis import Redis
 from redis.client import Pipeline
 
-from hike.ddd.entity import EntityID, get_fields, to_dict
+from hike.ddd.entity import EntityID, from_dict, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -81,9 +81,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
     def _deserialize(self, raw: bytes | str) -> TAggregate:
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
         version: int = data.pop("_version", 0)
-        init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
-        filtered = {k: v for k, v in data.items() if k in init_names}
-        aggregate = self._aggregate_class(**filtered)
+        aggregate: TAggregate = from_dict(self._aggregate_class, data)
         aggregate.version = version
         return aggregate
 

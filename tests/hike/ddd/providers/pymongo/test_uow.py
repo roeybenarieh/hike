@@ -20,7 +20,7 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyrigh
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.pymongo import PyMongoDBContext, PyMongoRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, UnknownError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
 from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
@@ -109,63 +109,9 @@ def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, 
     return UnitOfWork(mongo_context, repo=repo)
 
 
-class JourneyRepository(PyMongoRepository[UUID, Journey]):
-    def __init__(self, collection: Collection[dict[str, Any]]) -> None:
-        super().__init__(collection, Journey)
-
-    @staticmethod
-    def _checkpoint_to_doc(cp: Checkpoint) -> dict[str, Any]:
-        return {"id": str(cp.id.value), "name": cp.name.value}
-
-    @staticmethod
-    def _checkpoint_from_doc(doc: dict[str, Any]) -> Checkpoint:
-        return Checkpoint(id=EntityID(UUID(doc["id"])), name=Name(doc["name"]))
-
-    def _build_doc(self, journey: Journey, version: int) -> dict[str, Any]:
-        return {
-            "id": journey.id.value,
-            "name": journey.name.value,
-            "checkpoints": [self._checkpoint_to_doc(cp) for cp in journey.checkpoints],
-            "_version": version,
-        }
-
-    def _from_doc(self, document: dict[str, Any]) -> Journey:
-        journey = Journey(
-            id=EntityID(document["id"]),
-            name=Name(document["name"]),
-            checkpoints=[self._checkpoint_from_doc(cp) for cp in document.get("checkpoints", [])],
-        )
-        journey.version = document.get("_version", 0)
-        return journey
-
-    def save(self, aggregate: Journey) -> UUID:
-        doc = self._build_doc(aggregate, version=0)
-        try:
-            result = self._collection.insert_one(doc, session=self._session)
-        except Exception as exc:
-            raise AggregateAlreadyExistError(aggregate) from exc
-        if not result.acknowledged:
-            raise UnknownError("insert_one not acknowledged")
-        aggregate.version = 0
-        return aggregate.id  # type: ignore[return-value]
-
-    def update(self, aggregate: Journey) -> None:
-        new_doc = self._build_doc(aggregate, version=aggregate.version + 1)
-        result = self._collection.replace_one(
-            {"id": aggregate.id.value, "_version": aggregate.version},
-            new_doc,
-            session=self._session,
-        )
-        if result.matched_count == 0:
-            if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
-                raise AggregateDoesNotExistError(aggregate)
-            raise OptimisticLockError(aggregate)
-        aggregate.version += 1
-
-
 @pytest.fixture
 def journey_uow(mongo_context: PyMongoDBContext, journeys_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Journey]:
-    repo = JourneyRepository(journeys_collection)
+    repo: PyMongoRepository[UUID, Journey] = PyMongoRepository(journeys_collection, Journey)
     return UnitOfWork(mongo_context, repo=repo)
 
 

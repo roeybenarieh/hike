@@ -7,8 +7,6 @@ Run with::
 """
 from __future__ import annotations
 
-import json
-from typing import Any
 from uuid import UUID
 
 import pytest
@@ -51,42 +49,10 @@ def uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Boat]:
     return UnitOfWork(ctx, repo=repo)
 
 
-class JourneyRepository(RedisRepository[UUID, Journey]):
-    def __init__(self, client: Redis, key_prefix: str) -> None:
-        super().__init__(client, Journey, key_prefix)
-
-    def _serialize(self, aggregate: Journey, *, version: int) -> str:
-        data: dict[str, Any] = {
-            "id": str(aggregate.id.value),
-            "name": aggregate.name.value,
-            "checkpoints": [
-                {"id": str(cp.id.value), "name": cp.name.value}
-                for cp in aggregate.checkpoints
-            ],
-            "_version": version,
-        }
-        return json.dumps(data)
-
-    def _deserialize(self, raw: bytes | str) -> Journey:
-        data: dict[str, Any] = json.loads(raw)
-        version: int = data.pop("_version", 0)
-        checkpoints = [
-            Checkpoint(id=EntityID(UUID(cp["id"])), name=Name(cp["name"]))
-            for cp in data.get("checkpoints", [])
-        ]
-        journey = Journey(
-            id=EntityID(UUID(data["id"])),
-            name=Name(data["name"]),
-            checkpoints=checkpoints,
-        )
-        journey.version = version
-        return journey
-
-
 @pytest.fixture
 def journey_uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Journey]:
     ctx = RedisDBContext(redis_client)
-    repo = JourneyRepository(redis_client, JOURNEY_KEY_PREFIX)
+    repo: RedisRepository[UUID, Journey] = RedisRepository(redis_client, Journey, JOURNEY_KEY_PREFIX)
     return UnitOfWork(ctx, repo=repo)
 
 
