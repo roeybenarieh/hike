@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
+from hike.ddd.aggregate import Aggregate
 from hike.ddd.repository import IRepository
 
 
@@ -35,12 +36,12 @@ class DBContext[TSession](ABC):
         """Close a transaction. Use after finishing a transaction successfully"""
 
 
-class UnitOfWork[TSessions, TId]:
+class UnitOfWork[TSessions, TId, TAggregate: Aggregate[Any]]:
 
     def __init__(
             self,
             context: DBContext[TSessions],
-            repo: IRepository[TId, TSessions],
+            repo: IRepository[TId, TSessions, TAggregate],
             *,
             auto_commit: bool = False
     ):

@@ -9,13 +9,13 @@ from redis import Redis
 from redis.client import Pipeline
 from redis.lock import Lock as RedisLock
 
-from hike.ddd.aggregate import Aggregate
-from hike.ddd.entity import get_fields, to_dict
+from hike.ddd.entity import EntityID, get_fields, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
     IRepository,
     LockTimeoutError,
+    TAggregate,
     TId,
 )
 from hike.ddd.specifications import ISpecification
@@ -36,7 +36,7 @@ def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
     return obj
 
 
-class RedisRepository(IRepository[TId, Pipeline]):
+class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
     """Generic Redis repository with distributed locking via ``redis.lock.Lock``.
 
     Aggregates are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.
@@ -62,7 +62,7 @@ class RedisRepository(IRepository[TId, Pipeline]):
     def __init__(
             self,
             client: Redis,  # redis-py stubs pre-parameterize Redis
-            aggregate_class: type[Aggregate[TId]],
+            aggregate_class: type[TAggregate],
             key_prefix: str,
             *,
             lock_timeout: float = 30.0,
@@ -112,30 +112,30 @@ class RedisRepository(IRepository[TId, Pipeline]):
     def _key(self, raw_id: Any) -> str:
         return f"{self._key_prefix}:{raw_id}"
 
-    def _serialize(self, aggregate: Aggregate[TId]) -> str:
+    def _serialize(self, aggregate: TAggregate) -> str:
         return json.dumps(to_dict(aggregate), cls=_AggregateEncoder)
 
-    def _deserialize(self, raw: bytes | str) -> Aggregate[TId]:
+    def _deserialize(self, raw: bytes | str) -> TAggregate:
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         filtered = {k: v for k, v in data.items() if k in init_names}
         return self._aggregate_class(**filtered)
 
-    def save(self, aggregate: Aggregate[TId]) -> TId:
+    def save(self, aggregate: TAggregate) -> TId:
         key = self._key(aggregate.id.value)
         if self._client.exists(key):
             raise AggregateAlreadyExistError(aggregate)
         self.session.set(key, self._serialize(aggregate))
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: Aggregate[TId]) -> None:
+    def delete(self, aggregate: TAggregate) -> None:
         key = self._key(aggregate.id.value)
         if not self._client.exists(key):
             raise AggregateDoesNotExistError(aggregate)
         self.session.delete(key)
 
-    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
-        key = self._key(identifier)
+    def get_one(self, identifier: EntityID[TId], locked: bool = False) -> TAggregate:
+        key = self._key(identifier.value)
         if locked:
             self._acquire_lock(key)
         raw = cast(bytes | None, self._client.get(key))
@@ -147,8 +147,8 @@ class RedisRepository(IRepository[TId, Pipeline]):
             self,
             specification: ISpecification,
             locked: bool = False,
-    ) -> list[Aggregate[TId]]:
-        result: list[Aggregate[TId]] = []
+    ) -> list[TAggregate]:
+        result: list[TAggregate] = []
         for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
             raw = cast(bytes | None, self._client.get(key))
             if raw is None:
@@ -160,11 +160,11 @@ class RedisRepository(IRepository[TId, Pipeline]):
                 result.append(aggregate)
         return result
 
-    def update(self, aggregate: Aggregate[TId]) -> None:
+    def update(self, aggregate: TAggregate) -> None:
         key = self._key(aggregate.id.value)
         if not self._client.exists(key):
             raise AggregateDoesNotExistError(aggregate)
         self.session.set(key, self._serialize(aggregate))
 
-    def upsert(self, aggregate: Aggregate[TId]) -> None:
+    def upsert(self, aggregate: TAggregate) -> None:
         self.session.set(self._key(aggregate.id.value), self._serialize(aggregate))

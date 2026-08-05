@@ -8,7 +8,7 @@ Run with::
 from __future__ import annotations
 
 import time
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -18,6 +18,7 @@ from pymongo.synchronous.client_session import ClientSession
 from testcontainers.core.container import DockerContainer  # pyright: ignore[reportMissingTypeStubs]
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyright: ignore[reportMissingTypeStubs]
 
+from hike.ddd.entity import EntityID
 from hike.ddd.providers.pymongo import PyMongoDBContext, PyMongoRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
 from hike.ddd.uow import UnitOfWork
@@ -91,8 +92,8 @@ def clear_collection(boats_collection: Collection[dict[str, Any]]) -> None:  # t
 
 
 @pytest.fixture
-def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID]:
-    repo: PyMongoRepository[UUID] = PyMongoRepository(boats_collection, Boat)
+def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Boat]:
+    repo: PyMongoRepository[UUID, Boat] = PyMongoRepository(boats_collection, Boat)
     return UnitOfWork(mongo_context, repo=repo)
 
 
@@ -101,7 +102,7 @@ def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, 
 # ---------------------------------------------------------------------------
 
 
-def test_save_and_get_one(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_save_and_get_one(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
 
     with uow:
@@ -109,13 +110,13 @@ def test_save_and_get_one(uow: UnitOfWork[ClientSession, UUID]) -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
-def test_update(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_update(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Old Name"), price=Price(100.0))
 
     with uow:
@@ -128,12 +129,12 @@ def test_update(uow: UnitOfWork[ClientSession, UUID]) -> None:
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(200.0)
 
 
-def test_get_many_with_spec(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_get_many_with_spec(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
     boat_b = Boat(name=Name("Beta"), price=Price(50.0))
 
@@ -146,10 +147,10 @@ def test_get_many_with_spec(uow: UnitOfWork[ClientSession, UUID]) -> None:
         results = uow.repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
-    assert cast(Boat, results[0]).name == Name("Beta")
+    assert results[0].name == Name("Beta")
 
 
-def test_upsert_creates_then_updates(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_upsert_creates_then_updates(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Ghost"), price=Price(1.0))
 
     with uow:
@@ -162,12 +163,12 @@ def test_upsert_creates_then_updates(uow: UnitOfWork[ClientSession, UUID]) -> No
         uow.commit()
 
     with uow:
-        fetched = cast(Boat, uow.repo.get_one(boat.id.value))
+        fetched = uow.repo.get_one(boat.id)
 
     assert fetched.price == Price(2.0)
 
 
-def test_delete(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_delete(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Doomed"), price=Price(0.01))
 
     with uow:
@@ -180,10 +181,10 @@ def test_delete(uow: UnitOfWork[ClientSession, UUID]) -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)
 
 
-def test_save_duplicate_raises(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_save_duplicate_raises(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Twin"), price=Price(50.0))
 
     with uow:
@@ -196,15 +197,15 @@ def test_save_duplicate_raises(uow: UnitOfWork[ClientSession, UUID]) -> None:
             uow.commit()
 
 
-def test_get_one_missing_raises(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_get_one_missing_raises(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     from uuid import uuid4
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(uuid4())
+            uow.repo.get_one(EntityID(uuid4()))
 
 
-def test_delete_missing_raises(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_delete_missing_raises(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     ghost = Boat(name=Name("Never Saved"), price=Price(1.0))
 
     with uow:
@@ -212,7 +213,7 @@ def test_delete_missing_raises(uow: UnitOfWork[ClientSession, UUID]) -> None:
             uow.repo.delete(ghost)
 
 
-def test_rollback_on_exception(uow: UnitOfWork[ClientSession, UUID]) -> None:
+def test_rollback_on_exception(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     boat = Boat(name=Name("Rollback Boat"), price=Price(99.0))
 
     with pytest.raises(ValueError, match="simulated failure"):
@@ -222,4 +223,4 @@ def test_rollback_on_exception(uow: UnitOfWork[ClientSession, UUID]) -> None:
 
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id.value)
+            uow.repo.get_one(boat.id)

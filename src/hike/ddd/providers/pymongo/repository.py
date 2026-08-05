@@ -5,12 +5,12 @@ from typing import Any
 from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 
-from hike.ddd.aggregate import Aggregate
-from hike.ddd.entity import get_fields, to_dict
+from hike.ddd.entity import EntityID, get_fields, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
     IRepository,
+    TAggregate,
     TId,
     UnknownError,
 )
@@ -19,7 +19,7 @@ from hike.ddd.specifications import ISpecification
 from .visitor import MongoDBEvaluationSpecificationVisitor
 
 
-class PyMongoRepository(IRepository[TId, ClientSession]):
+class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
     """Generic MongoDB repository.
 
     Serialization (``to_dict``) flattens ValueObject fields to their raw
@@ -41,23 +41,23 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
     def __init__(
             self,
             collection: Collection[dict[str, Any]],
-            aggregate_class: type[Aggregate[TId]],
+            aggregate_class: type[TAggregate],
     ) -> None:
         super().__init__()
         self._collection = collection
         self._aggregate_class = aggregate_class
 
-    def _from_doc(self, document: dict[str, Any]) -> Aggregate[TId]:
+    def _from_doc(self, document: dict[str, Any]) -> TAggregate:
         """Reconstruct an aggregate from a MongoDB document."""
         init_field_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         doc = {k: v for k, v in document.items() if k in init_field_names}
         return self._aggregate_class(**doc)
 
     @staticmethod
-    def _id_filter(aggregate: Aggregate[TId]) -> dict[str, TId]:
+    def _id_filter(aggregate: TAggregate) -> dict[str, Any]:
         return {"id": aggregate.id.value}
 
-    def save(self, aggregate: Aggregate[TId]) -> TId:
+    def save(self, aggregate: TAggregate) -> TId:
         doc = to_dict(aggregate)
         try:
             result = self._collection.insert_one(doc, session=self._session)
@@ -67,7 +67,7 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
             raise UnknownError("insert_one not acknowledged")
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: Aggregate[TId]) -> None:
+    def delete(self, aggregate: TAggregate) -> None:
         result = self._collection.delete_one(
             self._id_filter(aggregate),
             session=self._session,
@@ -75,8 +75,8 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
         if result.deleted_count == 0:
             raise AggregateDoesNotExistError(aggregate)
 
-    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
-        document = self._collection.find_one({"id": identifier}, session=self._session)
+    def get_one(self, identifier: EntityID[TId], locked: bool = False) -> TAggregate:
+        document = self._collection.find_one({"id": identifier.value}, session=self._session)
         if document is None:
             raise AggregateDoesNotExistError(identifier)
         return self._from_doc(document)
@@ -85,13 +85,13 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
             self,
             specification: ISpecification,
             locked: bool = False,
-    ) -> list[Aggregate[TId]]:
+    ) -> list[TAggregate]:
         visitor = MongoDBEvaluationSpecificationVisitor()
         specification.accept(visitor)
         cursor = self._collection.find(visitor.filters, session=self._session)
         return [self._from_doc(doc) for doc in cursor]
 
-    def update(self, aggregate: Aggregate[TId]) -> None:
+    def update(self, aggregate: TAggregate) -> None:
         result = self._collection.replace_one(
             self._id_filter(aggregate),
             to_dict(aggregate),
@@ -100,7 +100,7 @@ class PyMongoRepository(IRepository[TId, ClientSession]):
         if result.matched_count == 0:
             raise AggregateDoesNotExistError(aggregate)
 
-    def upsert(self, aggregate: Aggregate[TId]) -> None:
+    def upsert(self, aggregate: TAggregate) -> None:
         self._collection.replace_one(
             self._id_filter(aggregate),
             to_dict(aggregate),

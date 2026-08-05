@@ -4,12 +4,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from hike.ddd.aggregate import Aggregate
-from hike.ddd.entity import get_fields, to_dict
+from hike.ddd.entity import EntityID, get_fields, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
     IRepository,
+    TAggregate,
     TId,
 )
 from hike.ddd.specifications import ISpecification
@@ -17,7 +17,7 @@ from hike.ddd.specifications import ISpecification
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 
 
-class SQLAlchemyRepository(IRepository[TId, Session]):
+class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
     """Generic SQLAlchemy ORM repository.
 
     ``aggregate_class`` is the domain aggregate root class.  ``mapper`` provides
@@ -35,7 +35,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
 
     def __init__(
         self,
-        aggregate_class: type[Aggregate[TId]],
+        aggregate_class: type[TAggregate],
         mapper: ISQLAlchemyMapper,
     ) -> None:
         super().__init__()
@@ -43,12 +43,12 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
         self._mapper = mapper
         self._model_class = mapper.get_model(aggregate_class)
 
-    def _from_model(self, model: Any) -> Aggregate[TId]:
+    def _from_model(self, model: Any) -> TAggregate:
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         data = {k: getattr(model, k) for k in init_names if hasattr(model, k)}
         return self._aggregate_class(**data)
 
-    def save(self, aggregate: Aggregate[TId]) -> TId:
+    def save(self, aggregate: TAggregate) -> TId:
         model = self._model_class(**to_dict(aggregate))
         try:
             self.session.add(model)
@@ -57,16 +57,16 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
             raise AggregateAlreadyExistError(aggregate) from exc
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: Aggregate[TId]) -> None:
+    def delete(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
         self.session.delete(model)
 
-    def get_one(self, identifier: TId, locked: bool = False) -> Aggregate[TId]:
+    def get_one(self, identifier: EntityID[TId], locked: bool = False) -> TAggregate:
         model = self.session.get(
             self._model_class,
-            identifier,
+            identifier.value,
             with_for_update=True if locked else None,
         )
         if model is None:
@@ -77,7 +77,7 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
         self,
         specification: ISpecification,
         locked: bool = False,
-    ) -> list[Aggregate[TId]]:
+    ) -> list[TAggregate]:
         visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
         specification.accept(visitor)
         stmt = visitor.result()
@@ -86,14 +86,14 @@ class SQLAlchemyRepository(IRepository[TId, Session]):
         rows = self.session.scalars(stmt).all()
         return [self._from_model(row) for row in rows]
 
-    def update(self, aggregate: Aggregate[TId]) -> None:
+    def update(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
         for key, val in to_dict(aggregate).items():
             setattr(model, key, val)
 
-    def upsert(self, aggregate: Aggregate[TId]) -> None:
+    def upsert(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             self.session.add(self._model_class(**to_dict(aggregate)))
