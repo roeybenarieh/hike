@@ -7,7 +7,8 @@ import pytest
 
 from hike.ddd.aggregate import Rule, RuleBrokenError, UuidAggregate
 from hike.ddd.domain_event import DomainEvent
-from hike.ddd.entity import EntityID
+from hike.ddd.entity import EntityID, Field
+from hike.ddd.value_object import ValueObject
 
 from tests.hike.ddd.conftest import Boat, Name, Price
 
@@ -21,12 +22,15 @@ from tests.hike.ddd.conftest import Boat, Name, Price
 # ---------------------------------------------------------------------------
 
 
+class ShipName(ValueObject[str]): ...
+
+
 class ShipSold(DomainEvent):
     pass
 
 
 class Ship(UuidAggregate):
-    name: str
+    name: Field[ShipName]
 
     def sell(self) -> None:
         self._events.append(ShipSold())
@@ -64,39 +68,39 @@ class PriceBelowRule(Rule[Boat]):
 
 class TestDomainEvents:
     def test_new_aggregate_has_no_events(self) -> None:
-        ship = Ship(name="Titanic")
+        ship = Ship(name=ShipName("Titanic"))
         assert ship.get_events() == []
 
     def test_action_records_event(self) -> None:
-        ship = Ship(name="Titanic")
+        ship = Ship(name=ShipName("Titanic"))
         ship.sell()
         events = ship.get_events()
         assert len(events) == 1
         assert isinstance(events[0], ShipSold)
 
     def test_multiple_events_preserved_in_order(self) -> None:
-        ship = Ship(name="Titanic")
+        ship = Ship(name=ShipName("Titanic"))
         ship.sell()
         ship.sell()
         assert len(ship.get_events()) == 2
 
     def test_get_events_returns_a_copy(self) -> None:
-        ship = Ship(name="Titanic")
+        ship = Ship(name=ShipName("Titanic"))
         ship.sell()
         snapshot = ship.get_events()
         snapshot.clear()
         assert len(ship.get_events()) == 1
 
     def test_clear_events_empties_list(self) -> None:
-        ship = Ship(name="Titanic")
+        ship = Ship(name=ShipName("Titanic"))
         ship.sell()
         ship.sell()
         ship.clear_events()
         assert ship.get_events() == []
 
     def test_events_not_shared_across_instances(self) -> None:
-        s1 = Ship(name="Alpha")
-        s2 = Ship(name="Beta")
+        s1 = Ship(name=ShipName("Alpha"))
+        s2 = Ship(name=ShipName("Beta"))
         s1.sell()
         assert s2.get_events() == []
 

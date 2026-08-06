@@ -31,8 +31,11 @@ class AggregateDoesNotExistError(AggregateError): ...
 class AggregateAlreadyExistError(AggregateError): ...
 
 
-class LockTimeoutError(RepositoryError):
-    """Raised when a pessimistic lock cannot be acquired within the allowed time."""
+class OptimisticLockError(AggregateError):
+    """Raised when an aggregate has been modified by another writer since it was read.
+
+    Callers should re-fetch the aggregate and retry their operation.
+    """
 
 
 # HACK: Python has no higher-kinded types, so we cannot statically enforce that
@@ -65,42 +68,47 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
 
         :param aggregate: The aggregate to delete.
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
+        :raise OptimisticLockError: if the aggregate was modified since it was read.
         """
 
     @abstractmethod
-    def get_one(self, identifier: EntityID[TId], locked: bool = False) -> TAggregate:
+    def get_one(self, identifier: EntityID[TId]) -> TAggregate:
         """Get one aggregate by id.
 
         :param identifier: The identifier of the aggregate.
-        :param locked: whether to lock the retrieved aggregate as part of the current transaction.
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
         """
 
     @abstractmethod
-    def get_many(
-            self,
-            specification: ISpecification,
-            locked: bool = False,
-    ) -> list[TAggregate]:
-        """Get multiple aggregates.
+    def get_many(self, specification: ISpecification) -> list[TAggregate]:
+        """Get multiple aggregates matching *specification*.
 
-        Note: the query capabilities of this method is limited. extend this repository
+        Note: query capabilities are limited — extend the repository for complex queries.
 
-        :param specification: specification criteria dictating which aggregate to query.
-        :param locked: whether to lock the retrieved aggregates as part of the current transaction.
+        :param specification: criteria dictating which aggregates to return.
         """
 
     @abstractmethod
     def update(self, aggregate: TAggregate) -> None:
         """Update a given aggregate.
 
+        Uses optimistic concurrency control: compares ``aggregate.version`` against
+        the stored version and raises if they differ.  On success, increments
+        ``aggregate.version`` to match the newly stored value.
+
         :param aggregate: The aggregate to update.
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
+        :raise OptimisticLockError: if the aggregate was modified since it was read.
         """
 
     @abstractmethod
     def upsert(self, aggregate: TAggregate) -> None:
         """Update a given aggregate; create it if it does not exist.
+
+        No version check is performed — this is a last-write-wins operation.
+        The stored version is incremented unconditionally on update (or set to 0
+        on insert), but ``aggregate.version`` is intentionally *not* synced back.
+        Re-fetch with ``get_one`` before any subsequent version-sensitive writes.
 
         :param aggregate: The aggregate to update/create.
         """

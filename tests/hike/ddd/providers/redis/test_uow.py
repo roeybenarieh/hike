@@ -7,20 +7,19 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import cast
 from uuid import UUID
 
 import pytest
 from redis import Redis
 from redis.client import Pipeline
-from testcontainers.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
+from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingImports]
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.redis import RedisDBContext, RedisRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, Name, Price
+from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +27,7 @@ from tests.hike.ddd.conftest import Boat, Name, Price
 # ---------------------------------------------------------------------------
 
 KEY_PREFIX = "boats"
+JOURNEY_KEY_PREFIX = "journeys"
 
 
 @pytest.fixture(scope="session")
@@ -46,6 +46,13 @@ def flush_redis(redis_client: Redis) -> None:  # type: ignore[misc]
 def uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Boat]:
     ctx = RedisDBContext(redis_client)
     repo: RedisRepository[UUID, Boat] = RedisRepository(redis_client, Boat, KEY_PREFIX)
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def journey_uow(redis_client: Redis) -> UnitOfWork[Pipeline, UUID, Journey]:
+    ctx = RedisDBContext(redis_client)
+    repo: RedisRepository[UUID, Journey] = RedisRepository(redis_client, Journey, JOURNEY_KEY_PREFIX)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -179,21 +186,65 @@ def test_rollback_on_exception(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
             uow.repo.get_one(boat.id)
 
 
-def test_locked_get_one(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
-    """locked=True acquires a distributed lock; release_locks() clears it."""
-    boat = Boat(name=Name("Locked"), price=Price(10.0))
+def test_optimistic_lock_conflict(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None:
+    """Second writer loses when it holds a stale version."""
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
 
     with uow:
         uow.repo.save(boat)
         uow.commit()
 
-    repo = cast(RedisRepository[UUID, Boat], uow.repo)
     with uow:
-        fetched = uow.repo.get_one(boat.id, locked=True)
-        assert fetched.name == Name("Locked")
-        assert repo.release_locks  # lock was acquired (will be released on next entry)
+        copy_a = uow.repo.get_one(boat.id)
+    with uow:
+        copy_b = uow.repo.get_one(boat.id)
 
-    # Entering the next UoW block assigns a new session, which calls release_locks().
+    assert copy_a.version == 0
+    assert copy_b.version == 0
+
+    copy_a.price = Price(200.0)
     with uow:
-        fetched2 = uow.repo.get_one(boat.id)
-        assert fetched2.name == Name("Locked")
+        uow.repo.update(copy_a)
+        uow.commit()
+    assert copy_a.version == 1
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with uow:
+            uow.repo.update(copy_b)
+            uow.commit()
+
+
+def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[Pipeline, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints(journey_uow: UnitOfWork[Pipeline, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with journey_uow:
+        journey_uow.repo.update(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2

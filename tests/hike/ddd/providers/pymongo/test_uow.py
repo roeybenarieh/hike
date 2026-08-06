@@ -20,10 +20,10 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyrigh
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.pymongo import PyMongoDBContext, PyMongoRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
-from tests.hike.ddd.conftest import Boat, Name, Price
+from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
 
 
 # ---------------------------------------------------------------------------
@@ -85,15 +85,33 @@ def boats_collection(mongo_context: PyMongoDBContext) -> Collection[dict[str, An
     return col
 
 
+@pytest.fixture(scope="session")
+def journeys_collection(mongo_context: PyMongoDBContext) -> Collection[dict[str, Any]]:
+    db = mongo_context.client["test_db"]  # pyright: ignore[reportUnknownVariableType]
+    col: Collection[dict[str, Any]] = db["journeys"]  # pyright: ignore[reportUnknownVariableType]
+    col.create_index("id", unique=True)
+    return col
+
+
 @pytest.fixture(autouse=True)
-def clear_collection(boats_collection: Collection[dict[str, Any]]) -> None:  # type: ignore[misc]
+def clear_collection(
+    boats_collection: Collection[dict[str, Any]],
+    journeys_collection: Collection[dict[str, Any]],
+) -> None:  # type: ignore[misc]
     yield  # type: ignore[misc]
     boats_collection.delete_many({})
+    journeys_collection.delete_many({})
 
 
 @pytest.fixture
 def uow(mongo_context: PyMongoDBContext, boats_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Boat]:
     repo: PyMongoRepository[UUID, Boat] = PyMongoRepository(boats_collection, Boat)
+    return UnitOfWork(mongo_context, repo=repo)
+
+
+@pytest.fixture
+def journey_uow(mongo_context: PyMongoDBContext, journeys_collection: Collection[dict[str, Any]]) -> UnitOfWork[ClientSession, UUID, Journey]:
+    repo: PyMongoRepository[UUID, Journey] = PyMongoRepository(journeys_collection, Journey)
     return UnitOfWork(mongo_context, repo=repo)
 
 
@@ -224,3 +242,67 @@ def test_rollback_on_exception(uow: UnitOfWork[ClientSession, UUID, Boat]) -> No
     with uow:
         with pytest.raises(AggregateDoesNotExistError):
             uow.repo.get_one(boat.id)
+
+
+def test_optimistic_lock_conflict(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    """Second writer loses when it holds a stale version."""
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
+
+    with uow:
+        uow.repo.save(boat)
+        uow.commit()
+
+    with uow:
+        copy_a = uow.repo.get_one(boat.id)
+    with uow:
+        copy_b = uow.repo.get_one(boat.id)
+
+    assert copy_a.version == 0
+    assert copy_b.version == 0
+
+    copy_a.price = Price(200.0)
+    with uow:
+        uow.repo.update(copy_a)
+        uow.commit()
+    assert copy_a.version == 1
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with uow:
+            uow.repo.update(copy_b)
+            uow.commit()
+
+
+def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[ClientSession, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_journey_update_checkpoints(journey_uow: UnitOfWork[ClientSession, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with journey_uow:
+        journey_uow.repo.save(journey)
+        journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with journey_uow:
+        journey_uow.repo.update(journey)
+        journey_uow.commit()
+
+    with journey_uow:
+        fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2
