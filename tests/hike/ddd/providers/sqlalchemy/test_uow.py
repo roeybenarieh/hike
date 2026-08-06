@@ -7,7 +7,6 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 import pytest
@@ -24,7 +23,7 @@ from sqlalchemy.orm import (
 from testcontainers.community.postgres import PostgresContainer  # pyright: ignore[reportMissingImports]
 
 from hike.ddd.entity import EntityID
-from hike.ddd.providers.sqlalchemy import ISQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository
+from hike.ddd.providers.sqlalchemy import DictSQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
@@ -86,146 +85,6 @@ class CheckpointModel(Base):
     journey_id: Mapped[UUID] = mapped_column(ForeignKey("journeys.id"), nullable=False)
 
 
-# ---------------------------------------------------------------------------
-# Mappers
-# ---------------------------------------------------------------------------
-
-
-class BoatMapper(ISQLAlchemyMapper):
-    def get_model(self, entity_class: type) -> type:
-        return BoatModel
-
-    def get_column(self, model_class: type, field_name: str) -> Any:
-        return getattr(model_class, field_name)
-
-
-class MotorBoatMapper(ISQLAlchemyMapper):
-    _entity_to_model: dict[type, type] = {
-        MotorBoat: MotorBoatModel,
-        BoatEngine: EngineModel,
-    }
-
-    def get_model(self, entity_class: type) -> type:
-        return self._entity_to_model[entity_class]
-
-    def get_column(self, model_class: type, field_name: str) -> Any:
-        return getattr(model_class, field_name)
-
-
-# ---------------------------------------------------------------------------
-# Custom repository — maps MotorBoat ↔ MotorBoatModel + EngineModel
-# ---------------------------------------------------------------------------
-
-
-class MotorBoatRepository(SQLAlchemyRepository[UUID, MotorBoat]):
-    def __init__(self) -> None:
-        super().__init__(MotorBoat, MotorBoatMapper())
-
-    # ------------------------------------------------------------------
-    # Domain → ORM helpers
-    # ------------------------------------------------------------------
-
-    def _engine_to_model(self, engine: BoatEngine) -> EngineModel:
-        return EngineModel(
-            id=engine.id.value,
-            name=engine.name.value,
-            price=engine.price.value,
-        )
-
-    def _boat_to_model(self, boat: MotorBoat) -> MotorBoatModel:
-        return MotorBoatModel(
-            id=boat.id.value,
-            name=boat.name.value,
-            price=boat.price.value,
-            engine_id=boat.engine.id.value,
-        )
-
-    # ------------------------------------------------------------------
-    # ORM → domain
-    # ------------------------------------------------------------------
-
-    def _from_model(self, model: Any) -> MotorBoat:
-        engine = BoatEngine(
-            id=EntityID(model.engine.id),
-            name=Name(model.engine.name),
-            price=Price(model.engine.price),
-        )
-        boat = MotorBoat(
-            id=EntityID(model.id),
-            name=Name(model.name),
-            price=Price(model.price),
-            engine=engine,
-        )
-        if hasattr(model, "version"):
-            boat.version = model.version
-        return boat
-
-    # ------------------------------------------------------------------
-    # Upsert engine before saving/updating the boat
-    # ------------------------------------------------------------------
-
-    def _sync_engine(self, engine: BoatEngine) -> None:
-        existing = self.session.get(EngineModel, engine.id.value)
-        if existing is None:
-            self.session.add(self._engine_to_model(engine))
-        else:
-            existing.name = engine.name.value
-            existing.price = engine.price.value
-
-    # ------------------------------------------------------------------
-    # CRUD overrides
-    # ------------------------------------------------------------------
-
-    def save(self, aggregate: MotorBoat) -> UUID:
-        self._sync_engine(aggregate.engine)
-        try:
-            model = self._boat_to_model(aggregate)
-            self.session.add(model)
-            self.session.flush()
-        except Exception as exc:
-            raise AggregateAlreadyExistError(aggregate) from exc
-        if hasattr(model, "version"):
-            aggregate.version = model.version
-        return aggregate.id  # type: ignore[return-value]
-
-    def update(self, aggregate: MotorBoat) -> None:
-        self._sync_engine(aggregate.engine)
-        model = self.session.get(MotorBoatModel, aggregate.id.value)
-        if model is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if hasattr(model, "version") and model.version != aggregate.version:
-            raise OptimisticLockError(aggregate)
-        model.name = aggregate.name.value
-        model.price = aggregate.price.value
-        model.engine_id = aggregate.engine.id.value
-        if hasattr(model, "version"):
-            model.version += 1
-            aggregate.version += 1
-
-    def upsert(self, aggregate: MotorBoat) -> None:
-        self._sync_engine(aggregate.engine)
-        model = self.session.get(MotorBoatModel, aggregate.id.value)
-        if model is None:
-            self.session.add(self._boat_to_model(aggregate))
-        else:
-            model.name = aggregate.name.value
-            model.price = aggregate.price.value
-            model.engine_id = aggregate.engine.id.value
-            if hasattr(model, "version"):
-                model.version += 1
-
-
-class JourneyMapper(ISQLAlchemyMapper):
-    _entity_to_model: dict[type, type] = {
-        Journey: JourneyModel,
-        Checkpoint: CheckpointModel,
-    }
-
-    def get_model(self, entity_class: type) -> type:
-        return self._entity_to_model[entity_class]
-
-    def get_column(self, model_class: type, field_name: str) -> Any:
-        return getattr(model_class, field_name)
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +119,9 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
 def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, BoatMapper())
+    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(
+        Boat, DictSQLAlchemyMapper({Boat: BoatModel})
+    )
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -268,7 +129,9 @@ def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
 def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo = MotorBoatRepository()
+    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(
+        MotorBoat, DictSQLAlchemyMapper({MotorBoat: MotorBoatModel, BoatEngine: EngineModel})
+    )
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -276,7 +139,9 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
 def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, JourneyMapper())
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(
+        Journey, DictSQLAlchemyMapper({Journey: JourneyModel, Checkpoint: CheckpointModel})
+    )
     return UnitOfWork(ctx, repo=repo)
 
 

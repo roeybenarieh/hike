@@ -4,7 +4,7 @@ from typing import Any, cast, get_origin, get_type_hints
 
 from sqlalchemy.orm import Session
 
-from hike.ddd.entity import Entity, EntityID, from_dict, get_fields, to_dict
+from hike.ddd.entity import Entity, EntityID, Field, from_dict, get_fields, to_dict
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -21,23 +21,20 @@ from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
     """Generic SQLAlchemy ORM repository with optimistic concurrency control.
 
-    ``aggregate_class`` is the domain aggregate root class.  ``mapper`` provides
-    the bridge between domain entity classes and SQLAlchemy ORM models/columns —
-    implement :class:`~hike.ddd.providers.sqlalchemy.visitor.ISQLAlchemyMapper`
-    to tell the repository which model class corresponds to the aggregate and
-    how each ValueObject field maps to a column.
+    ``aggregate_class`` is the domain aggregate root class.  ``mapper`` bridges
+    domain entities and SQLAlchemy ORM models.  Two concrete mapper implementations
+    are provided: ``DictSQLAlchemyMapper`` (relational, one ORM model per entity)
+    and ``FlatSQLAlchemyMapper`` (embedded, all fields on the root model).
 
-    For aggregates with ``list[SomeEntity]`` fields, the mapper must also handle
-    ``get_model(SomeEntity)`` so the repository can convert between ORM model
-    objects and domain entities automatically.
-
-    ``get_many`` translates the specification tree into a SQL WHERE clause via
-    :class:`~hike.ddd.providers.sqlalchemy.visitor.SQLAlchemyEvaluationSpecificationVisitor`.
+    Supported aggregate shapes:
+    - Flat: all ``Field[ValueObject]`` fields map to columns on the root ORM model.
+    - ``list[Entity]``: child entities stored in a related table (cascade) or a JSON
+      column (embedded mapper).
+    - ``Field[Entity]``: single nested entity, handled recursively at any depth.
 
     **Optimistic locking** — the ORM model must expose a ``version`` integer
-    column (``default=0``).  ``update`` compares the model's stored version
-    against ``aggregate.version`` and raises ``OptimisticLockError`` on mismatch.
-    ``aggregate.version`` is incremented on every successful write.
+    column (``default=0``).  ``update`` compares the stored version against
+    ``aggregate.version`` and raises ``OptimisticLockError`` on mismatch.
 
     Install with: ``pip install hike[sqlalchemy]``
     """
@@ -59,7 +56,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             return {}
 
     def _list_entity_fields(self, hints: dict[str, Any]) -> dict[str, type]:
-        """Return {field_name: elem_cls} for list[Entity] fields in this aggregate."""
+        """Return {field_name: elem_cls} for list[Entity] fields."""
         result: dict[str, type] = {}
         for name, ann in hints.items():
             if get_origin(ann) is not list:
@@ -70,34 +67,127 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
                 result[name] = elem_cls
         return result
 
+    def _single_entity_fields(self, hints: dict[str, Any]) -> dict[str, type]:
+        """Return {field_name: entity_cls} for Field[Entity] (non-list) fields."""
+        result: dict[str, type] = {}
+        for name, ann in hints.items():
+            if get_origin(ann) is not Field:
+                continue
+            args: tuple[Any, ...] = getattr(ann, "__args__", ())
+            inner = args[0] if args else None
+            bare = inner if isinstance(inner, type) else get_origin(inner)
+            if isinstance(bare, type) and issubclass(bare, Entity):
+                result[name] = bare
+        return result
+
+    def _sync_entity(self, entity: Any, entity_cls: type) -> Any:
+        """Recursively upsert a nested entity's ORM row (depth-first) and return the tracked model."""
+        try:
+            hints: dict[str, Any] = get_type_hints(entity_cls)
+        except Exception:
+            hints = {}
+        sub_single = self._single_entity_fields(hints)
+        model_cls = self._mapper.get_model(entity_cls)
+        entity_dict = to_dict(entity)
+
+        for sub_name, sub_cls in sub_single.items():
+            sub_entity: Any = getattr(entity, sub_name, None)
+            if sub_entity is None:
+                continue
+            expanded = self._mapper.expand_nested(sub_entity, sub_cls, sub_name)
+            if expanded:
+                entity_dict.pop(sub_name, None)
+                entity_dict.update(expanded)
+            else:
+                entity_dict[sub_name] = self._sync_entity(sub_entity, sub_cls)
+
+        return self.session.merge(model_cls(**entity_dict))
+
+    def _reconstruct_entity_dict(self, orm_obj: Any, entity_cls: type) -> dict[str, Any]:
+        """Recursively read raw field values from *orm_obj* for reconstructing *entity_cls*."""
+        try:
+            hints: dict[str, Any] = get_type_hints(entity_cls)
+        except Exception:
+            hints = {}
+        sub_single = self._single_entity_fields(hints)
+        init_names = {f.name for f in get_fields(cast(type[Entity[Any]], entity_cls)) if f.init}
+        result: dict[str, Any] = {}
+        for k in init_names:
+            if not hasattr(orm_obj, k):
+                continue
+            v: Any = getattr(orm_obj, k)
+            if k in sub_single and v is not None:
+                sub_dict = self._mapper.collect_nested(orm_obj, sub_single[k], k)
+                result[k] = from_dict(
+                    sub_single[k],
+                    sub_dict if sub_dict is not None else self._reconstruct_entity_dict(v, sub_single[k]),
+                )
+            else:
+                result[k] = v
+        return result
+
     def _to_model_dict(self, aggregate: TAggregate) -> dict[str, Any]:
-        """Like to_dict but converts list[Entity] dicts to list[ORM model]."""
+        """Serialize *aggregate* to a dict suitable for constructing an ORM model.
+
+        - ``list[Entity]`` fields: mapper override (JSON) or relational ORM models.
+        - ``Field[Entity]`` fields: mapper override (embedded) or ``session.merge()`` (relational).
+        """
         hints = self._hints()
         list_fields = self._list_entity_fields(hints)
+        single_fields = self._single_entity_fields(hints)
         flat = to_dict(aggregate)
+
         for name, elem_cls in list_fields.items():
             if name not in flat:
                 continue
-            nested_model_cls = self._mapper.get_model(elem_cls)
-            flat[name] = [nested_model_cls(**item) for item in cast(list[Any], flat[name])]
+            entities: list[Any] = cast(list[Any], getattr(aggregate, name))
+            expanded = self._mapper.expand_list_nested(entities, elem_cls, name)
+            if expanded is not None:
+                flat.update(expanded)
+            else:
+                nested_model_cls = self._mapper.get_model(elem_cls)
+                flat[name] = [nested_model_cls(**item) for item in cast(list[Any], flat[name])]
+
+        for name, entity_cls in single_fields.items():
+            nested_entity: Any = getattr(aggregate, name, None)
+            if nested_entity is None:
+                continue
+            expanded = self._mapper.expand_nested(nested_entity, entity_cls, name)
+            if expanded:
+                flat.pop(name, None)
+                flat.update(expanded)
+            else:
+                flat[name] = self._sync_entity(nested_entity, entity_cls)
+
         return flat
 
     def _from_model(self, model: Any) -> TAggregate:
         hints = self._hints()
         list_fields = self._list_entity_fields(hints)
+        single_fields = self._single_entity_fields(hints)
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         data: dict[str, Any] = {}
         for name in init_names:
             if not hasattr(model, name):
                 continue
             val: Any = getattr(model, name)
-            if name in list_fields and isinstance(val, list):
+            if name in list_fields:
                 elem_cls = list_fields[name]
-                elem_init_names = {f.name for f in get_fields(cast(type[Entity[Any]], elem_cls)) if f.init}
-                data[name] = [
-                    from_dict(elem_cls, {k: getattr(item, k) for k in elem_init_names if hasattr(item, k)})
-                    for item in cast(list[Any], val)
-                ]
+                json_list = self._mapper.collect_list_nested(model, elem_cls, name)
+                if json_list is not None:
+                    data[name] = [from_dict(elem_cls, item) for item in json_list]
+                else:
+                    elem_init_names = {f.name for f in get_fields(cast(type[Entity[Any]], elem_cls)) if f.init}
+                    data[name] = [
+                        from_dict(elem_cls, {k: getattr(item, k) for k in elem_init_names if hasattr(item, k)})
+                        for item in cast(list[Any], val)
+                    ]
+            elif name in single_fields and val is not None:
+                entity_cls = single_fields[name]
+                raw = self._mapper.collect_nested(model, entity_cls, name)
+                if raw is None:
+                    raw = self._reconstruct_entity_dict(val, entity_cls)
+                data[name] = from_dict(entity_cls, raw)
             else:
                 data[name] = val
         aggregate = self._aggregate_class(**data)

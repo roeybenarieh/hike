@@ -201,7 +201,7 @@ def unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
     return None
 
 
-def _unwrap_annotation(ann_type: object) -> type | None:
+def unwrap_annotation(ann_type: object) -> type | None:
     """Return the inner ``T`` if *ann_type* is ``Field[T]``, else ``None``.
 
     Accepts any class as ``T`` (not just ValueObject subclasses), enabling
@@ -420,7 +420,7 @@ class Entity[TId: Hashable](DomainObject):
                         f"Wrap the raw type in a ValueObject."
                     )
                 continue
-            inner = _unwrap_annotation(ann_type)
+            inner = unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
                 desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
