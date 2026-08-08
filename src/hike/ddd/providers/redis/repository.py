@@ -16,6 +16,8 @@ from hike.ddd.repository import (
     OptimisticLockError,
     TAggregate,
     TId,
+    get_version,
+    set_version,
 )
 from hike.ddd.specifications import ISpecification
 
@@ -82,7 +84,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
         version: int = data.pop("_version", 0)
         aggregate: TAggregate = from_dict(self._aggregate_class, data)
-        aggregate.version = version
+        set_version(aggregate, version)
         return aggregate
 
     def save(self, aggregate: TAggregate) -> TId:
@@ -90,7 +92,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         if self._client.exists(key):
             raise AggregateAlreadyExistError(aggregate)
         self.session.set(key, self._serialize(aggregate, version=0))
-        aggregate.version = 0
+        set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: TAggregate) -> None:
@@ -99,7 +101,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         if raw is None:
             raise AggregateDoesNotExistError(aggregate)
         current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("_version", 0)
-        if current_version != aggregate.version:
+        if current_version != get_version(aggregate):
             raise OptimisticLockError(aggregate)
         self.session.delete(key)
 
@@ -127,10 +129,11 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         if raw is None:
             raise AggregateDoesNotExistError(aggregate)
         current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("_version", 0)
-        if current_version != aggregate.version:
+        v = get_version(aggregate)
+        if current_version != v:
             raise OptimisticLockError(aggregate)
-        self.session.set(key, self._serialize(aggregate, version=aggregate.version + 1))
-        aggregate.version += 1
+        self.session.set(key, self._serialize(aggregate, version=v + 1))
+        set_version(aggregate, v + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         key = self._key(aggregate.id.value)

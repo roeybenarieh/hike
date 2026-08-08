@@ -14,6 +14,8 @@ from hike.ddd.repository import (
     TAggregate,
     TId,
     UnknownError,
+    get_version,
+    set_version,
 )
 from hike.ddd.specifications import ISpecification
 
@@ -52,7 +54,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
     def _from_doc(self, document: dict[str, Any]) -> TAggregate:
         """Reconstruct an aggregate from a MongoDB document."""
         aggregate: TAggregate = from_dict(self._aggregate_class, document)
-        aggregate.version = document.get("_version", 0)
+        set_version(aggregate, document.get("_version", 0))
         return aggregate
 
     @staticmethod
@@ -67,12 +69,12 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             raise AggregateAlreadyExistError(aggregate) from exc
         if not result.acknowledged:
             raise UnknownError("insert_one not acknowledged")
-        aggregate.version = 0
+        set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: TAggregate) -> None:
         result = self._collection.delete_one(
-            {"id": aggregate.id.value, "_version": aggregate.version},
+            {"id": aggregate.id.value, "_version": get_version(aggregate)},
             session=self._session,
         )
         if result.deleted_count == 0:
@@ -93,9 +95,10 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
         return [self._from_doc(doc) for doc in cursor]
 
     def update(self, aggregate: TAggregate) -> None:
-        new_doc = {**to_dict(aggregate), "_version": aggregate.version + 1}
+        v = get_version(aggregate)
+        new_doc = {**to_dict(aggregate), "_version": v + 1}
         result = self._collection.replace_one(
-            {"id": aggregate.id.value, "_version": aggregate.version},
+            {"id": aggregate.id.value, "_version": v},
             new_doc,
             session=self._session,
         )
@@ -103,7 +106,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
                 raise AggregateDoesNotExistError(aggregate)
             raise OptimisticLockError(aggregate)
-        aggregate.version += 1
+        set_version(aggregate, v + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         existing = self._collection.find_one({"id": aggregate.id.value}, session=self._session)

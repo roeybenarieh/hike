@@ -10,6 +10,24 @@ TId = TypeVar("TId")
 TSession = TypeVar("TSession")
 TAggregate = TypeVar("TAggregate", bound=Aggregate[Any])
 
+_HIKE_VERSION = "__hike_version__"
+
+
+def get_version(aggregate: Aggregate[Any]) -> int:
+    """Return the optimistic-concurrency version tracked by the repository for *aggregate*.
+
+    Returns 0 if the aggregate has never been persisted.
+    """
+    return aggregate.__dict__.get(_HIKE_VERSION, 0)
+
+
+def set_version(aggregate: Aggregate[Any], version: int) -> None:
+    """Set the repository-managed optimistic-concurrency version on *aggregate*.
+
+    Called exclusively by repository implementations — not intended for domain code.
+    """
+    aggregate.__dict__[_HIKE_VERSION] = version
+
 
 class RepositoryError(DomainError): ...
 
@@ -92,9 +110,9 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
     def update(self, aggregate: TAggregate) -> None:
         """Update a given aggregate.
 
-        Uses optimistic concurrency control: compares ``aggregate.version`` against
-        the stored version and raises if they differ.  On success, increments
-        ``aggregate.version`` to match the newly stored value.
+        Uses optimistic concurrency control: compares the stored version against
+        ``get_version(aggregate)`` and raises if they differ.  On success,
+        increments the tracked version via ``set_version``.
 
         :param aggregate: The aggregate to update.
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
@@ -107,7 +125,7 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
 
         No version check is performed — this is a last-write-wins operation.
         The stored version is incremented unconditionally on update (or set to 0
-        on insert), but ``aggregate.version`` is intentionally *not* synced back.
+        on insert); the aggregate's tracked version is intentionally *not* synced back.
         Re-fetch with ``get_one`` before any subsequent version-sensitive writes.
 
         :param aggregate: The aggregate to update/create.

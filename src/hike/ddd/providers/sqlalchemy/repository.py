@@ -12,6 +12,8 @@ from hike.ddd.repository import (
     OptimisticLockError,
     TAggregate,
     TId,
+    get_version,
+    set_version,
 )
 from hike.ddd.specifications import ISpecification
 
@@ -193,7 +195,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
                 data[name] = getattr(model, name)
         aggregate = self._aggregate_class(**data)
         if hasattr(model, "version"):
-            aggregate.version = model.version
+            set_version(aggregate, model.version)
         return aggregate
 
     def save(self, aggregate: TAggregate) -> TId:
@@ -203,14 +205,14 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             self.session.flush()
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
-        aggregate.version = getattr(model, "version", 0)
+        set_version(aggregate, getattr(model, "version", 0))
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def delete(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
-        if hasattr(model, "version") and model.version != aggregate.version:
+        if hasattr(model, "version") and model.version != get_version(aggregate):
             raise OptimisticLockError(aggregate)
         self.session.delete(model)
 
@@ -231,13 +233,13 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
-        if hasattr(model, "version") and model.version != aggregate.version:
+        if hasattr(model, "version") and model.version != get_version(aggregate):
             raise OptimisticLockError(aggregate)
         for key, val in self._to_model_dict(aggregate).items():
             setattr(model, key, val)
         if hasattr(model, "version"):
             model.version += 1
-            aggregate.version += 1
+            set_version(aggregate, get_version(aggregate) + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)

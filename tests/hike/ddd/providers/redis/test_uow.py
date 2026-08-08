@@ -16,7 +16,7 @@ from testcontainers.community.redis import RedisContainer  # pyright: ignore[rep
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.redis import RedisDBContext, RedisRepository
-from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
+from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, get_version
 from hike.ddd.uow import UnitOfWork
 
 from tests.hike.ddd.conftest import Boat, Checkpoint, Journey, Name, Price
@@ -199,14 +199,14 @@ def test_optimistic_lock_conflict(uow: UnitOfWork[Pipeline, UUID, Boat]) -> None
     with uow:
         copy_b = uow.repo.get_one(boat.id)
 
-    assert copy_a.version == 0
-    assert copy_b.version == 0
+    assert get_version(copy_a) == 0
+    assert get_version(copy_b) == 0
 
     copy_a.price = Price(200.0)
     with uow:
         uow.repo.update(copy_a)
         uow.commit()
-    assert copy_a.version == 1
+    assert get_version(copy_a) == 1
 
     copy_b.price = Price(300.0)
     with pytest.raises(OptimisticLockError):
