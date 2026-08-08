@@ -168,28 +168,29 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
         data: dict[str, Any] = {}
         for name in init_names:
-            if not hasattr(model, name):
-                continue
-            val: Any = getattr(model, name)
             if name in list_fields:
                 elem_cls = list_fields[name]
                 json_list = self._mapper.collect_list_nested(model, elem_cls, name)
                 if json_list is not None:
                     data[name] = [from_dict(elem_cls, item) for item in json_list]
-                else:
+                elif hasattr(model, name):
+                    val: Any = getattr(model, name)
                     elem_init_names = {f.name for f in get_fields(cast(type[Entity[Any]], elem_cls)) if f.init}
                     data[name] = [
                         from_dict(elem_cls, {k: getattr(item, k) for k in elem_init_names if hasattr(item, k)})
                         for item in cast(list[Any], val)
                     ]
-            elif name in single_fields and val is not None:
+            elif name in single_fields:
                 entity_cls = single_fields[name]
                 raw = self._mapper.collect_nested(model, entity_cls, name)
-                if raw is None:
-                    raw = self._reconstruct_entity_dict(val, entity_cls)
-                data[name] = from_dict(entity_cls, raw)
-            else:
-                data[name] = val
+                if raw is not None:
+                    data[name] = from_dict(entity_cls, raw)
+                elif hasattr(model, name):
+                    val = getattr(model, name)
+                    if val is not None:
+                        data[name] = from_dict(entity_cls, self._reconstruct_entity_dict(val, entity_cls))
+            elif hasattr(model, name):
+                data[name] = getattr(model, name)
         aggregate = self._aggregate_class(**data)
         if hasattr(model, "version"):
             aggregate.version = model.version

@@ -45,6 +45,7 @@ class Aggregate[TId: Hashable](Entity[TId]):
     each successful ``update``.  Callers should not modify it directly.
     """
 
+    # TODO: remove version from aggregate, should only exists in the repository level
     version: int = field(default=0, init=False, repr=False)
     _events: list[DomainEvent] = field(  # pyright: ignore[reportUnknownVariableType]
         default_factory=list, init=False, repr=False
