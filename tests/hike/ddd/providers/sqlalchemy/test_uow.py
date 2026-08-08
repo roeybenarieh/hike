@@ -7,10 +7,12 @@ Run with::
 """
 from __future__ import annotations
 
+import json
+from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Float, ForeignKey, Integer, String, Uuid, create_engine, delete as sa_delete
+from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Uuid, create_engine, delete as sa_delete
 from sqlalchemy.engine import Engine as SAEngine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -23,11 +25,21 @@ from sqlalchemy.orm import (
 from testcontainers.community.postgres import PostgresContainer  # pyright: ignore[reportMissingImports]
 
 from hike.ddd.entity import EntityID
-from hike.ddd.providers.sqlalchemy import DictSQLAlchemyMapper, SQLAlchemyDBContext, SQLAlchemyRepository
+from hike.ddd.providers.sqlalchemy import (
+    AutoSQLAlchemyMapper,
+    DictSQLAlchemyMapper,
+    FlatSQLAlchemyMapper,
+    SQLAlchemyDBContext,
+    SQLAlchemyRepository,
+)
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError
 from hike.ddd.uow import UnitOfWork
 
 from tests.hike.ddd.conftest import Boat, BoatEngine, Checkpoint, Journey, MotorBoat, Name, Price
+
+
+def _json_dumps(obj: Any) -> str:
+    return json.dumps(obj, default=str)
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +69,7 @@ class EngineModel(Base):
 
 class MotorBoatModel(Base):
     __tablename__ = "motorboats"
-
+    # TODO: id+version = maybe I should handle this internally?
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -85,6 +97,41 @@ class CheckpointModel(Base):
     journey_id: Mapped[UUID] = mapped_column(ForeignKey("journeys.id"), nullable=False)
 
 
+class FlatMotorBoatModel(Base):
+    __tablename__ = "flat_motorboats"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    engine_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    engine_name: Mapped[str] = mapped_column(String, nullable=False)
+    engine_price: Mapped[float] = mapped_column(Float, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class FlatJourneyModel(Base):
+    __tablename__ = "flat_journeys"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    checkpoints: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# ---------------------------------------------------------------------------
+# AutoSQLAlchemyMapper — module-level instances (schema inferred from annotations)
+# ---------------------------------------------------------------------------
+
+
+class AutoBase(DeclarativeBase): ...
+
+
+# Each mapper registers its generated model classes in AutoBase.metadata.
+# Boat/Journey/Checkpoint share table names with Base (handled by checkfirst=True);
+# MotorBoat → "motor_boats" and BoatEngine → "boat_engines" are new tables.
+auto_boat_mapper = AutoSQLAlchemyMapper(Boat, base=AutoBase)
+auto_motorboat_mapper = AutoSQLAlchemyMapper(MotorBoat, base=AutoBase)
+auto_journey_mapper = AutoSQLAlchemyMapper(Journey, base=AutoBase)
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +142,17 @@ class CheckpointModel(Base):
 @pytest.fixture(scope="session")
 def pg_engine() -> SAEngine:  # type: ignore[misc]
     with PostgresContainer("postgres:16", driver="psycopg") as pg:
-        engine = create_engine(pg.get_connection_url())
+        engine = create_engine(
+            pg.get_connection_url(),
+            json_serializer=_json_dumps,
+        )
         Base.metadata.create_all(engine)
+        # checkfirst=True skips tables already created by Base (boats, journeys, checkpoints);
+        # creates only the new auto-mapper tables (motor_boats, boat_engines).
+        AutoBase.metadata.create_all(engine, checkfirst=True)
         yield engine  # type: ignore[misc]
         Base.metadata.drop_all(engine)
+        AutoBase.metadata.drop_all(engine, checkfirst=True)
 
 
 @pytest.fixture(autouse=True)
@@ -106,12 +160,18 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
     """Wipe all tables after each test for isolation."""
     yield  # type: ignore[misc]
     with pg_engine.connect() as conn:
-        # Delete child tables before parent (FK constraints)
+        # Delete child tables before parent (FK constraints).
+        # Auto motor_boats/boat_engines are separate tables; auto boats/journeys/checkpoints
+        # share tables with the dict mapper and are covered by the existing deletes.
+        conn.execute(sa_delete(auto_motorboat_mapper.get_model(MotorBoat)))  # motor_boats
+        conn.execute(sa_delete(auto_motorboat_mapper.get_model(BoatEngine)))  # boat_engines
         conn.execute(sa_delete(CheckpointModel))
         conn.execute(sa_delete(MotorBoatModel))
         conn.execute(sa_delete(JourneyModel))
         conn.execute(sa_delete(BoatModel))
         conn.execute(sa_delete(EngineModel))
+        conn.execute(sa_delete(FlatMotorBoatModel))
+        conn.execute(sa_delete(FlatJourneyModel))
         conn.commit()
 
 
@@ -142,6 +202,50 @@ def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
     repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(
         Journey, DictSQLAlchemyMapper({Journey: JourneyModel, Checkpoint: CheckpointModel})
     )
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def flat_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(
+        MotorBoat, FlatSQLAlchemyMapper(FlatMotorBoatModel)
+    )
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def flat_journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(
+        Journey, FlatSQLAlchemyMapper(FlatJourneyModel)
+    )
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def auto_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, auto_boat_mapper)
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def auto_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, auto_motorboat_mapper)
+    return UnitOfWork(ctx, repo=repo)
+
+
+@pytest.fixture
+def auto_journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
+    factory = sessionmaker(pg_engine)
+    ctx = SQLAlchemyDBContext(factory)
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, auto_journey_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -426,5 +530,266 @@ def test_journey_update_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journ
 
     with journey_uow:
         fetched = journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests — MotorBoat with FlatSQLAlchemyMapper (single-table, flattened columns)
+# ---------------------------------------------------------------------------
+
+
+def test_flat_motorboat_save_and_get_one(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
+
+    with flat_motorboat_uow:
+        flat_motorboat_uow.repo.save(boat)
+        flat_motorboat_uow.commit()
+
+    with flat_motorboat_uow:
+        fetched = flat_motorboat_uow.repo.get_one(boat.id)
+
+    assert fetched.name == Name("Sea Spirit")
+    assert fetched.price == Price(4_999.99)
+    assert fetched.engine.price == Price(1_200.0)
+
+
+def test_flat_motorboat_filter_by_engine_price(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
+    cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
+
+    with flat_motorboat_uow:
+        flat_motorboat_uow.repo.save(expensive)
+        flat_motorboat_uow.repo.save(cheap)
+        flat_motorboat_uow.commit()
+
+    with flat_motorboat_uow:
+        results = flat_motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
+
+    assert len(results) == 1
+    assert results[0].name == Name("Yacht")
+
+
+def test_flat_motorboat_update_engine_price(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
+
+    with flat_motorboat_uow:
+        flat_motorboat_uow.repo.save(boat)
+        flat_motorboat_uow.commit()
+
+    boat.engine.price = Price(3_000.0)
+    with flat_motorboat_uow:
+        flat_motorboat_uow.repo.update(boat)
+        flat_motorboat_uow.commit()
+
+    with flat_motorboat_uow:
+        fetched = flat_motorboat_uow.repo.get_one(boat.id)
+
+    assert fetched.engine.price == Price(3_000.0)
+
+
+# ---------------------------------------------------------------------------
+# Tests — Journey with FlatSQLAlchemyMapper (single-table, JSON list column)
+# ---------------------------------------------------------------------------
+
+
+def test_flat_journey_save_and_get_one(flat_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with flat_journey_uow:
+        flat_journey_uow.repo.save(journey)
+        flat_journey_uow.commit()
+
+    with flat_journey_uow:
+        fetched = flat_journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_flat_journey_update_checkpoints(flat_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with flat_journey_uow:
+        flat_journey_uow.repo.save(journey)
+        flat_journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with flat_journey_uow:
+        flat_journey_uow.repo.update(journey)
+        flat_journey_uow.commit()
+
+    with flat_journey_uow:
+        fetched = flat_journey_uow.repo.get_one(journey.id)
+
+    assert len(fetched.checkpoints) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests — AutoSQLAlchemyMapper (schema inferred from annotations)
+# ---------------------------------------------------------------------------
+
+
+def test_auto_save_and_get_one(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
+
+    with auto_uow:
+        auto_uow.repo.save(boat)
+        auto_uow.commit()
+
+    with auto_uow:
+        fetched = auto_uow.repo.get_one(boat.id)
+
+    assert fetched.name == Name("Sea Spirit")
+    assert fetched.price == Price(4_999.99)
+
+
+def test_auto_update(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Old Name"), price=Price(100.0))
+
+    with auto_uow:
+        auto_uow.repo.save(boat)
+        auto_uow.commit()
+
+    boat.price = Price(200.0)
+    with auto_uow:
+        auto_uow.repo.update(boat)
+        auto_uow.commit()
+
+    with auto_uow:
+        fetched = auto_uow.repo.get_one(boat.id)
+
+    assert fetched.price == Price(200.0)
+
+
+def test_auto_get_many_with_spec(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
+
+    with auto_uow:
+        auto_uow.repo.save(boat_a)
+        auto_uow.repo.save(boat_b)
+        auto_uow.commit()
+
+    with auto_uow:
+        results = auto_uow.repo.get_many(Boat.price > 20.0)
+
+    assert len(results) == 1
+    assert results[0].name == Name("Beta")
+
+
+def test_auto_optimistic_lock_conflict(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat = Boat(name=Name("Contested"), price=Price(100.0))
+
+    with auto_uow:
+        auto_uow.repo.save(boat)
+        auto_uow.commit()
+
+    with auto_uow:
+        copy_a = auto_uow.repo.get_one(boat.id)
+    with auto_uow:
+        copy_b = auto_uow.repo.get_one(boat.id)
+
+    copy_a.price = Price(200.0)
+    with auto_uow:
+        auto_uow.repo.update(copy_a)
+        auto_uow.commit()
+
+    copy_b.price = Price(300.0)
+    with pytest.raises(OptimisticLockError):
+        with auto_uow:
+            auto_uow.repo.update(copy_b)
+            auto_uow.commit()
+
+
+def test_auto_motorboat_save_and_get_one(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
+
+    with auto_motorboat_uow:
+        auto_motorboat_uow.repo.save(boat)
+        auto_motorboat_uow.commit()
+
+    with auto_motorboat_uow:
+        fetched = auto_motorboat_uow.repo.get_one(boat.id)
+
+    assert fetched.name == Name("Sea Spirit")
+    assert fetched.price == Price(4_999.99)
+    assert fetched.engine.price == Price(1_200.0)
+
+
+def test_auto_motorboat_filter_by_engine_price(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
+    cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
+
+    with auto_motorboat_uow:
+        auto_motorboat_uow.repo.save(expensive)
+        auto_motorboat_uow.repo.save(cheap)
+        auto_motorboat_uow.commit()
+
+    with auto_motorboat_uow:
+        results = auto_motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
+
+    assert len(results) == 1
+    assert results[0].name == Name("Yacht")
+
+
+def test_auto_motorboat_update_engine_price(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+    boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
+
+    with auto_motorboat_uow:
+        auto_motorboat_uow.repo.save(boat)
+        auto_motorboat_uow.commit()
+
+    # TODO: I dont want this, its very anemic.
+    # only the aggregate root should have methods changing state(and enforcing invariants)
+    # I should also check how to handle the PUT/PATCH http method
+    # should entities/VO do validations themself?
+    boat.engine.price = Price(3_000.0)
+    with auto_motorboat_uow:
+        auto_motorboat_uow.repo.update(boat)
+        auto_motorboat_uow.commit()
+
+    with auto_motorboat_uow:
+        fetched = auto_motorboat_uow.repo.get_one(boat.id)
+
+    assert fetched.engine.price == Price(3_000.0)
+
+
+def test_auto_journey_save_and_get_one_with_checkpoints(
+    auto_journey_uow: UnitOfWork[Session, UUID, Journey],
+) -> None:
+    cp1 = Checkpoint(name=Name("Paris"))
+    cp2 = Checkpoint(name=Name("Lyon"))
+    journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
+
+    with auto_journey_uow:
+        auto_journey_uow.repo.save(journey)
+        auto_journey_uow.commit()
+
+    with auto_journey_uow:
+        fetched = auto_journey_uow.repo.get_one(journey.id)
+
+    assert fetched.name == Name("France Trip")
+    assert len(fetched.checkpoints) == 2
+    assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
+
+
+def test_auto_journey_update_checkpoints(auto_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+    journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
+
+    with auto_journey_uow:
+        auto_journey_uow.repo.save(journey)
+        auto_journey_uow.commit()
+
+    journey.checkpoints.append(Checkpoint(name=Name("B")))
+    with auto_journey_uow:
+        auto_journey_uow.repo.update(journey)
+        auto_journey_uow.commit()
+
+    with auto_journey_uow:
+        fetched = auto_journey_uow.repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
