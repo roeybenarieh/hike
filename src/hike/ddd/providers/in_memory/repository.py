@@ -35,13 +35,10 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
         set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
-        key = aggregate.id.value
-        existing = cast(TAggregate | None, self.session.get(key))
-        if existing is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if get_version(existing) != get_version(aggregate):
-            raise OptimisticLockError(aggregate)
+    def _delete(self, identifier: EntityID[TId]) -> None:
+        key = identifier.value
+        if key not in self.session:
+            raise AggregateDoesNotExistError(identifier)
         del self.session[key]
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:

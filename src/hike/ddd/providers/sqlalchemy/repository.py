@@ -208,12 +208,10 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         set_version(aggregate, getattr(model, "version", 0))
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
-        model = self.session.get(self._model_class, aggregate.id.value)
+    def _delete(self, identifier: EntityID[TId]) -> None:
+        model = self.session.get(self._model_class, identifier.value)
         if model is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if hasattr(model, "version") and model.version != get_version(aggregate):
-            raise OptimisticLockError(aggregate)
+            raise AggregateDoesNotExistError(identifier)
         self.session.delete(model)
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:

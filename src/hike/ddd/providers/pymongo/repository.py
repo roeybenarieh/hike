@@ -72,15 +72,13 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
         set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
+    def _delete(self, identifier: EntityID[TId]) -> None:
         result = self._collection.delete_one(
-            {"id": aggregate.id.value, "_version": get_version(aggregate)},
+            {"id": identifier.value},
             session=self._session,
         )
         if result.deleted_count == 0:
-            if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
-                raise AggregateDoesNotExistError(aggregate)
-            raise OptimisticLockError(aggregate)
+            raise AggregateDoesNotExistError(identifier)
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:
         document = self._collection.find_one({"id": identifier.value}, session=self._session)

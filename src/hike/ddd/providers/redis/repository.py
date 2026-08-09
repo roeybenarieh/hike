@@ -95,14 +95,10 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
-        key = self._key(aggregate.id.value)
-        raw = cast(bytes | None, self._client.get(key))
-        if raw is None:
-            raise AggregateDoesNotExistError(aggregate)
-        current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("_version", 0)
-        if current_version != get_version(aggregate):
-            raise OptimisticLockError(aggregate)
+    def _delete(self, identifier: EntityID[TId]) -> None:
+        key = self._key(identifier.value)
+        if not self._client.exists(key):
+            raise AggregateDoesNotExistError(identifier)
         self.session.delete(key)
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, overload, final
 
 from hike.ddd.aggregate import Aggregate
 from hike.ddd.common import DomainError
@@ -80,11 +80,30 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
         :raise AggregateAlreadyExistError: if the aggregate already exists.
         """
 
-    @abstractmethod
-    def delete(self, aggregate: TAggregate) -> None:
+    @overload
+    def delete(self, identifier: EntityID[TId], /) -> None: ...
+
+    @overload
+    def delete(self, aggregate: TAggregate, /) -> None: ...
+
+    @final
+    def delete(self, id_or_aggregate: EntityID[TId] | TAggregate, /) -> None:
         """Delete an aggregate.
 
-        :param aggregate: The aggregate to delete.
+        :param id_or_aggregate: The aggregate or its identifier.
+        :raise AggregateDoesNotExistError: if the aggregate does not exist.
+        :raise OptimisticLockError: if the aggregate was modified since it was read.
+        """
+        if isinstance(id_or_aggregate, Aggregate):
+            self._delete(id_or_aggregate.id)
+        else:
+            self._delete(id_or_aggregate)
+
+    @abstractmethod
+    def _delete(self, identifier: EntityID[TId]) -> None:
+        """Delete an aggregate by its identifier.
+
+        :param identifier: The identifier of the aggregate to delete.
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
         :raise OptimisticLockError: if the aggregate was modified since it was read.
         """
