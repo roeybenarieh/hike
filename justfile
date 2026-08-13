@@ -40,6 +40,10 @@ check: typecheck
 # Run all checks and tests
 ci: check test
 
+# run mkdocs
+docs:
+  uv run mkdocs serve
+
 # Remove build artifacts
 clean:
     rm -rf dist/ .pytest_cache/ __pycache__

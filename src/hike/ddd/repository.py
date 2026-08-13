@@ -116,6 +116,7 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
         """
 
+    # TODO: implement pagination and ordering
     @abstractmethod
     def get_many(self, specification: ISpecification) -> list[TAggregate]:
         """Get multiple aggregates matching *specification*.

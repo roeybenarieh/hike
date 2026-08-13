@@ -30,3 +30,7 @@ dev = [
     "pytest>=9.0.3",
     "testcontainers[mongodb,postgres,redis]>=4.15.0",
 ]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.7",
+]
