@@ -16,19 +16,18 @@ class ValueObject[V](DomainObject):
     """Immutable value object base class.
 
     Subclass with the raw value type as a type parameter, annotate ``value``,
-    and optionally add ``__validators__`` for reusable validation functions:
-
-        def must_be_positive(value: float) -> None:
-            if value <= 0:
-                raise ValueError("Must be positive")
+    and optionally add ``__validators__`` for reusable validation functions.
+    Several built-in validators are provided (``positive``, ``non_negative``,
+    ``non_empty``, ``min_value``, ``max_value``, ``between``, ``min_length``,
+    ``max_length``, ``matches``):
 
         class Price(ValueObject[float]):
             value: float
-            __validators__ = [must_be_positive]
+            __validators__ = [positive]
 
         class Quantity(ValueObject[int]):
             value: int
-            __validators__ = [must_be_positive]  # same validator, no duplication
+            __validators__ = [positive]  # same validator, no duplication
 
     Validators run in MRO order (most-general first) from the base ``__post_init__``.
     Subclasses that need additional logic must call ``super().__post_init__()``

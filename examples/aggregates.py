@@ -19,6 +19,8 @@ from hike import (
     UuidEntity,
     ValueObject,
     command,
+    non_empty,
+    non_negative,
     rule,
     vo_field,
 )
@@ -29,15 +31,11 @@ from hike import (
 # ---------------------------------------------------------------------------
 
 class Money(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Money cannot be negative")
+    __validators__ = [non_negative]
 
 
 class ItemName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value.strip():
-            raise ValueError("Item name cannot be empty")
+    __validators__ = [non_empty]
 
 
 # ---------------------------------------------------------------------------

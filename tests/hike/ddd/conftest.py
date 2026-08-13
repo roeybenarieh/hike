@@ -19,7 +19,7 @@ import pytest
 
 from hike.ddd.aggregate import UuidAggregate
 from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.value_object import ValueObject
+from hike.ddd.value_object import ValueObject, between, non_empty, non_negative
 
 
 # ---------------------------------------------------------------------------
@@ -28,21 +28,15 @@ from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Name(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 class Horsepower(ValueObject[int]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Horsepower cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Category(ValueObject[str]):
@@ -50,15 +44,11 @@ class Category(ValueObject[str]):
 
 
 class Rating(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.value <= 5.0):
-            raise ValueError("Rating must be between 0 and 5")
+    __validators__ = [between(0.0, 5.0)]
 
 
 class ListingName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 # ---------------------------------------------------------------------------

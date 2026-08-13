@@ -33,15 +33,11 @@ currency = "USDD" # Typo!
 With Hike's **Value Objects**, you bundle the value and its validation rules together so they are *impossible* to make invalid:
 
 ```python
-from hike.ddd.value_object import ValueObject
-
-def must_be_positive(value: float) -> None:
-    if value <= 0:
-        raise ValueError("Price must be greater than zero!")
+from hike import ValueObject, positive
 
 class Price(ValueObject[float]):
     value: float
-    __validators__ = [must_be_positive]
+    __validators__ = [positive]
 
 # ✅ Safe! This will immediately raise a ValueError if invalid.
 my_price = Price(49.99)

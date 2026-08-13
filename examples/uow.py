@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject
+from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, non_empty, non_negative
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
 
@@ -22,21 +22,15 @@ from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class EngineName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Engine name cannot be empty")
+    __validators__ = [non_empty]
 
 
 class BoatName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Boat name cannot be empty")
+    __validators__ = [non_empty]
 
 
 class Engine(UuidEntity):
