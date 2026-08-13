@@ -310,6 +310,24 @@ def test_get_many_with_spec(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     assert results[0].name == Name("Beta")
 
 
+def test_count_with_spec(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
+    boat_c = Boat(name=Name("Gamma"), price=Price(80.0))
+
+    with uow:
+        uow.repo.save(boat_a)
+        uow.repo.save(boat_b)
+        uow.repo.save(boat_c)
+        uow.commit()
+
+    with uow:
+        assert uow.repo.count(Boat.price > 20.0) == 2
+
+    with uow:
+        assert uow.repo.count(Boat.price > 100.0) == 0
+
+
 def test_upsert_creates_then_updates(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     boat = Boat(name=Name("Ghost"), price=Price(1.0))
 
@@ -677,6 +695,24 @@ def test_auto_get_many_with_spec(auto_uow: UnitOfWork[Session, UUID, Boat]) -> N
 
     assert len(results) == 1
     assert results[0].name == Name("Beta")
+
+
+def test_auto_count_with_spec(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+    boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
+    boat_b = Boat(name=Name("Beta"), price=Price(50.0))
+    boat_c = Boat(name=Name("Gamma"), price=Price(80.0))
+
+    with auto_uow:
+        auto_uow.repo.save(boat_a)
+        auto_uow.repo.save(boat_b)
+        auto_uow.repo.save(boat_c)
+        auto_uow.commit()
+
+    with auto_uow:
+        assert auto_uow.repo.count(Boat.price > 20.0) == 2
+
+    with auto_uow:
+        assert auto_uow.repo.count(Boat.price > 100.0) == 0
 
 
 def test_auto_optimistic_lock_conflict(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
