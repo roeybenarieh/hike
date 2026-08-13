@@ -17,7 +17,7 @@ from hike.ddd.repository import (
 )
 from hike.ddd.specifications import ISpecification
 
-from .mappers import VERSION_ATTR
+from .mappers import DictAutoSQLAlchemyMapper, VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 
 
@@ -25,9 +25,15 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
     """Generic SQLAlchemy ORM repository with optimistic concurrency control.
 
     ``aggregate_class`` is the domain aggregate root class.  ``mapper`` bridges
-    domain entities and SQLAlchemy ORM models.  Two concrete mapper implementations
-    are provided: ``DictSQLAlchemyMapper`` (relational, one ORM model per entity)
-    and ``FlatSQLAlchemyMapper`` (embedded, all fields on the root model).
+    domain entities and SQLAlchemy ORM models.  When omitted, a
+    ``DictAutoSQLAlchemyMapper`` is created automatically — Hike infers the full
+    ORM schema from the aggregate's field annotations.
+
+    Four concrete mapper implementations are available:
+    - ``DictAutoSQLAlchemyMapper`` (default): relational schema inferred from annotations.
+    - ``FlatAutoSQLAlchemyMapper``: flat single-table schema inferred from annotations.
+    - ``DictSQLAlchemyMapper``: relational, one ORM model per entity class.
+    - ``FlatSQLAlchemyMapper``: embedded, all fields on a single root model.
 
     Supported aggregate shapes:
     - Flat: all ``Field[ValueObject]`` fields map to columns on the root ORM model.
@@ -35,20 +41,18 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
       column (embedded mapper).
     - ``Field[Entity]``: single nested entity, handled recursively at any depth.
 
-    **Optimistic locking** — the ORM model must expose a ``version`` integer
-    column (``default=0``).  ``update`` compares the stored version against
-    ``aggregate.version`` and raises ``OptimisticLockError`` on mismatch.
-
     Install with: ``pip install hike[sqlalchemy]``
     """
 
     def __init__(
         self,
         aggregate_class: type[TAggregate],
-        mapper: ISQLAlchemyMapper,
+        mapper: ISQLAlchemyMapper | None = None,
     ) -> None:
         super().__init__()
         self._aggregate_class = aggregate_class
+        if mapper is None:
+            mapper = DictAutoSQLAlchemyMapper(aggregate_class)
         self._mapper = mapper
         self._model_class = mapper.get_model(aggregate_class)
 

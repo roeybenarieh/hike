@@ -25,8 +25,10 @@ Hike provides ready‑made, highly type‑safe building blocks so you don’t ha
 | :--- | :--- | :--- |
 | **[Value Objects](guide/value-objects.md)** | Objects defined **only by their value** (e.g., `Money`, `Email`, `PhoneNumber`). | Eliminates “primitive obsession”, guarantees immutability, and auto‑validates data. |
 | **[Entities & Aggregates](guide/entities-aggregates.md)** | Objects that have a unique identity (`Entity`) and clusters of objects that are managed together (`Aggregate`). | Safeguards business rules (invariants) and tracks important business happenings (Domain Events). |
-| **[Specifications](guide/specifications.md)** | Reusable business rules and query filters you can combine like `(age > 18) & (status == "active")`. | Encapsulates complex querying logic so you can build expressive, composable rules. |
+| **[Rules, Commands & Invariants](guide/rules-commands.md)** | `@rule` predicates, `__invariants__` auto-checked on construction, `@command` for controlled mutations. | Enforces business rules at the boundary; prevents accidental mutations from bypassing aggregate logic. |
+| **[Specifications](guide/specifications.md)** | Reusable business rules and query filters you can combine like `(age > 18) & (status == “active”)`. | Encapsulates complex querying logic so you can build expressive, composable rules. |
 | **[Repositories & Unit of Work](guide/repositories-uow.md)** | Gateways for persisting data (`Repository`) and a transactional boundary for grouped saves (`Unit of Work`). | Keeps your business logic independent of the database and guarantees safe, atomic database operations. |
+| **[SQLAlchemy Mappers](guide/sqlalchemy-mappers.md)** | Four mapper strategies: auto-inferred relational, auto-inferred flat, explicit ORM models, or explicit single-table. | Zero boilerplate for common cases; full control when you need it. |
 
 ---
 

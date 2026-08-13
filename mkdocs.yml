@@ -39,5 +39,7 @@ nav:
       - Getting Started: guide/getting-started.md
       - Value Objects: guide/value-objects.md
       - Entities & Aggregates: guide/entities-aggregates.md
+      - Rules, Commands & Invariants: guide/rules-commands.md
       - Specifications & Querying: guide/specifications.md
       - Repositories & UoW: guide/repositories-uow.md
+      - SQLAlchemy Mappers: guide/sqlalchemy-mappers.md

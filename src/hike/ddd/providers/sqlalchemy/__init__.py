@@ -15,15 +15,20 @@ except ImportError as _exc:
         "Install it with: pip install hike[sqlalchemy]"
     ) from _exc
 
-from hike.ddd.providers.sqlalchemy.auto_mapper import AutoSQLAlchemyMapper
 from hike.ddd.providers.sqlalchemy.db_context import SQLAlchemyDBContext
-from hike.ddd.providers.sqlalchemy.mappers import DictSQLAlchemyMapper, FlatSQLAlchemyMapper
+from hike.ddd.providers.sqlalchemy.mappers import (
+    DictAutoSQLAlchemyMapper,
+    DictSQLAlchemyMapper,
+    FlatAutoSQLAlchemyMapper,
+    FlatSQLAlchemyMapper,
+)
 from hike.ddd.providers.sqlalchemy.repository import SQLAlchemyRepository
 from hike.ddd.providers.sqlalchemy.visitor import ISQLAlchemyMapper
 
 __all__ = [
-    "AutoSQLAlchemyMapper",
+    "DictAutoSQLAlchemyMapper",
     "DictSQLAlchemyMapper",
+    "FlatAutoSQLAlchemyMapper",
     "FlatSQLAlchemyMapper",
     "ISQLAlchemyMapper",
     "SQLAlchemyDBContext",

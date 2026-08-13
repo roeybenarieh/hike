@@ -47,6 +47,52 @@ If anything crashes inside the `with` block before `.commit()` is called, Hike a
 
 ---
 
+---
+
+## 3. `upsert()` — Insert or Update Without a Version Check
+
+`update()` enforces optimistic locking and raises `OptimisticLockError` if the stored version has advanced. Sometimes you simply want to **write the latest state** regardless of version — for example, syncing a read model or applying an idempotent import.
+
+Use `upsert()` for that:
+
+```python
+with uow:
+    uow.repo.upsert(boat)   # inserts if not exists, overwrites if it does
+    uow.commit()
+```
+
+`upsert()` does not raise `OptimisticLockError` and does not sync the version back onto the aggregate. If you need to keep writing to the aggregate after an upsert, re-fetch it with `get_one()` first.
+
+---
+
+## 4. `InMemoryRepository` — Testing Without a Database
+
+Every Hike repository backend (SQLAlchemy, PyMongo, Redis) implements the same `IRepository` interface. For tests you can swap them all out with the built-in in-memory implementation:
+
+```python
+from hike.ddd.providers.in_memory.repository import InMemoryRepository
+from hike.ddd.providers.in_memory.db_context import InMemoryDBContext
+from hike.ddd.uow import UnitOfWork
+
+ctx = InMemoryDBContext()
+repo = InMemoryRepository()
+uow = UnitOfWork(ctx, repo=repo)
+
+with uow:
+    uow.repo.save(Order(price=Price(99)))
+    uow.commit()
+
+with uow:
+    order = uow.repo.get_one(order_id)
+    order.complete_checkout()
+    uow.repo.update(order)
+    uow.commit()
+```
+
+The in-memory repository stores deep copies so each transaction sees an isolated snapshot. Optimistic locking works the same way as with real database backends — `OptimisticLockError` is raised on a version mismatch.
+
+---
+
 ## Recommended External Reading
 
 - [Martin Fowler on the Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)
@@ -54,4 +100,4 @@ If anything crashes inside the `with` block before `.commit()` is called, Hike a
 
 ---
 
-Congratulations! You now understand the core building blocks of **Hike** and Domain-Driven Design. You're ready to build robust, maintainable Python applications! 🚀
+**Next Step**: Learn how to wire up the SQLAlchemy backend using **[SQLAlchemy Mappers](sqlalchemy-mappers.md)**.
