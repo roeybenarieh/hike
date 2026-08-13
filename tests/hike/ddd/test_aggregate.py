@@ -5,11 +5,11 @@ from uuid import UUID
 
 import pytest
 
-from hike.ddd.aggregate import Rule, RuleBrokenError, UuidAggregate
+from hike.ddd.aggregate import UuidAggregate
 from hike.ddd.domain_event import DomainEvent
 from hike.ddd.entity import EntityID, Field
+from hike.ddd.rules import Rule, RuleBrokenError
 from hike.ddd.value_object import ValueObject
-
 from tests.hike.ddd.conftest import Boat, Name, Price
 
 
@@ -120,38 +120,6 @@ class TestRule:
         with pytest.raises(RuleBrokenError) as exc_info:
             rule.raise_on_broken_rule(yacht)
         assert exc_info.value.broken_rule is rule
-
-
-class TestCheckInvariants:
-    def test_empty_rule_list_passes(self, boat: Boat) -> None:
-        boat.check_invariants([])
-
-    def test_all_rules_satisfied_passes(self) -> None:
-        boat = Boat(name=Name("Mid-range"), price=Price(100.0))
-        # Neither rule is broken: 100 is not below 50, and not above 200.
-        boat.check_invariants([PriceBelowRule(50.0), PriceAboveRule(200.0)])
-
-    def test_broken_rule_raises(self) -> None:
-        cheap = Boat(name=Name("Budget"), price=Price(10.0))
-        with pytest.raises(RuleBrokenError):
-            cheap.check_invariants([PriceAboveRule(5.0), PriceBelowRule(20.0)])
-
-    def test_stops_at_first_broken_rule(self) -> None:
-        boat = Boat(name=Name("Any"), price=Price(10.0))
-        evaluated: list[int] = []
-
-        class TrackedRule(Rule[Boat]):
-            def __init__(self, idx: int, broken: bool) -> None:
-                self._idx = idx
-                self._broken = broken
-
-            def is_broken(self, obj: Boat) -> bool:  # noqa: ARG002
-                evaluated.append(self._idx)
-                return self._broken
-
-        with pytest.raises(RuleBrokenError):
-            boat.check_invariants([TrackedRule(0, True), TrackedRule(1, False)])
-        assert evaluated == [0]
 
 
 class TestUuidAggregate:
