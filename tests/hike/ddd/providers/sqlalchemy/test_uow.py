@@ -483,7 +483,7 @@ def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, 
         motorboat_uow.commit()
 
     # Swap to a pricier engine
-    boat.engine.price = Price(3_000.0)
+    boat.update_engine_price(Price(3_000.0))
     with motorboat_uow:
         motorboat_uow.repo.update(boat)
         motorboat_uow.commit()
@@ -577,7 +577,7 @@ def test_flat_motorboat_update_engine_price(flat_motorboat_uow: UnitOfWork[Sessi
         flat_motorboat_uow.repo.save(boat)
         flat_motorboat_uow.commit()
 
-    boat.engine.price = Price(3_000.0)
+    boat.update_engine_price(Price(3_000.0))
     with flat_motorboat_uow:
         flat_motorboat_uow.repo.update(boat)
         flat_motorboat_uow.commit()
@@ -743,11 +743,7 @@ def test_auto_motorboat_update_engine_price(auto_motorboat_uow: UnitOfWork[Sessi
         auto_motorboat_uow.repo.save(boat)
         auto_motorboat_uow.commit()
 
-    # TODO: I dont want this, its very anemic.
-    # only the aggregate root should have methods changing state(and enforcing invariants)
-    # I should also check how to handle the PUT/PATCH http method
-    # should entities/VO do validations themself?
-    boat.engine.price = Price(3_000.0)
+    boat.update_engine_price(Price(3_000.0))
     with auto_motorboat_uow:
         auto_motorboat_uow.repo.update(boat)
         auto_motorboat_uow.commit()

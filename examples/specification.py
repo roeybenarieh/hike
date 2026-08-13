@@ -18,7 +18,7 @@ aggregate, which applies them via the visitor pattern.
 
 from __future__ import annotations
 
-from hike import Field, ISpecification, UuidEntity, ValueObject, between, non_empty, non_negative
+from hike import Field, ISpecification, UuidEntity, ValueObject, between, non_empty, non_negative, rule
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +74,16 @@ class ProductListing(UuidEntity):
 # ---------------------------------------------------------------------------
 
 
+@rule(message="Listing names must be unique within a catalog")
+def listing_names_unique(c: "ProductCatalog") -> bool:
+    names = [listing.name for listing in c.listings]
+    return len(names) != len(set(names))
+
+
 class ProductCatalog(UuidEntity):
     """Aggregate root that owns a collection of ProductListing entities."""
+
+    __invariants__ = [listing_names_unique]
 
     listings: list[ProductListing]
 

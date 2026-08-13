@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, non_empty, non_negative
+from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, command, non_empty, non_negative, rule
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
 
@@ -38,10 +38,20 @@ class Engine(UuidEntity):
     price: Field[Price]
 
 
+@rule(message="Engine price must not exceed the boat price")
+def engine_price_within_boat_price(boat: "Boat") -> bool:
+    return boat.engine.price.value > boat.price.value
+
+
 class Boat(UuidAggregate):
     name: Field[BoatName]
     engine: Field[Engine]
     price: Field[Price]
+    __invariants__ = [engine_price_within_boat_price]
+
+    @command(invariants=[engine_price_within_boat_price])
+    def update_engine_price(self, price: float) -> None:
+        self.engine.price = Price(price)
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +65,6 @@ uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, rep
 # ---------------------------------------------------------------------------
 # Save
 # ---------------------------------------------------------------------------
-# TODO: enforce the engine price is lower than the total boat cost
 default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
 boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
 

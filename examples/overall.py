@@ -1,4 +1,4 @@
-from hike import Field, UuidEntity, ValueObject, non_empty, non_negative
+from hike import Field, UuidEntity, ValueObject, non_empty, non_negative, rule
 
 
 class Price(ValueObject[float]):
@@ -9,7 +9,14 @@ class BoatName(ValueObject[str]):
     __validators__ = [non_empty]
 
 
+@rule(message="Boat price must be positive")
+def boat_price_positive(b: "Boat") -> bool:
+    return b.price.value <= 0
+
+
 class Boat(UuidEntity):
+    __invariants__ = [boat_price_positive]
+
     name: Field[BoatName]
     price: Field[Price]
 
