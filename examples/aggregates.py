@@ -10,11 +10,18 @@ Covers:
 
 from dataclasses import dataclass, field
 
-from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.rules import Rule, RuleBrokenError, rule
-from hike.ddd.domain_event import DomainEvent
-from hike.ddd.entity import Field, UuidEntity, command, vo_field
-from hike.ddd.value_object import ValueObject
+from hike import (
+    DomainEvent,
+    Field,
+    Rule,
+    RuleBrokenError,
+    UuidAggregate,
+    UuidEntity,
+    ValueObject,
+    command,
+    rule,
+    vo_field,
+)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass
-from typing import Self, Any, cast
+from typing import Any, Callable, ClassVar, Self, cast
 
 from .common import DomainObject
 
@@ -15,14 +16,23 @@ class ValueObject[V](DomainObject):
     """Immutable value object base class.
 
     Subclass with the raw value type as a type parameter, annotate ``value``,
-    and optionally override ``__post_init__`` for validation:
+    and optionally add ``__validators__`` for reusable validation functions:
+
+        def must_be_positive(value: float) -> None:
+            if value <= 0:
+                raise ValueError("Must be positive")
 
         class Price(ValueObject[float]):
             value: float
+            __validators__ = [must_be_positive]
 
-            def __post_init__(self) -> None:
-                if self.value < 0:
-                    raise ValueError("Price cannot be negative")
+        class Quantity(ValueObject[int]):
+            value: int
+            __validators__ = [must_be_positive]  # same validator, no duplication
+
+    Validators run in MRO order (most-general first) from the base ``__post_init__``.
+    Subclasses that need additional logic must call ``super().__post_init__()``
+    to ensure ``__validators__`` are executed.
 
     The type parameter ``V`` lets Pyright enforce that comparison operands are
     the same type (or the same VO type), so ``Price(5) < ""`` is a type error:
@@ -32,6 +42,13 @@ class ValueObject[V](DomainObject):
         Price(5) < ""          →  Pyright error: str is not Price | float
     """
     value: V
+
+    __validators__: ClassVar[list[Callable[[Any], None]]] = []
+
+    def __post_init__(self) -> None:
+        for klass in reversed(type(self).__mro__):
+            for validator in klass.__dict__.get('__validators__', []):
+                validator(self.value)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -50,3 +67,74 @@ class ValueObject[V](DomainObject):
 
     def __ge__(self, other: Self | V) -> bool:
         return self.value >= _cmp_value(other)
+
+
+# ---------------------------------------------------------------------------
+# Built-in validators
+# ---------------------------------------------------------------------------
+
+def positive(value: float) -> None:
+    """Value must be strictly greater than zero."""
+    if value <= 0:
+        raise ValueError(f"Value must be positive, got {value!r}")
+
+
+def non_negative(value: float) -> None:
+    """Value must be zero or greater."""
+    if value < 0:
+        raise ValueError(f"Value must be non-negative, got {value!r}")
+
+
+def non_empty(value: str) -> None:
+    """String value must not be empty or whitespace-only."""
+    if not value or not value.strip():
+        raise ValueError("Value must not be empty")
+
+
+def min_value(minimum: float) -> Callable[[float], None]:
+    """Factory: value must be >= *minimum*."""
+    def _validate(value: float) -> None:
+        if value < minimum:
+            raise ValueError(f"Value must be >= {minimum}, got {value!r}")
+    return _validate
+
+
+def max_value(maximum: float) -> Callable[[float], None]:
+    """Factory: value must be <= *maximum*."""
+    def _validate(value: float) -> None:
+        if value > maximum:
+            raise ValueError(f"Value must be <= {maximum}, got {value!r}")
+    return _validate
+
+
+def between(minimum: float, maximum: float) -> Callable[[float], None]:
+    """Factory: value must satisfy *minimum* <= value <= *maximum*."""
+    def _validate(value: float) -> None:
+        if not (minimum <= value <= maximum):
+            raise ValueError(f"Value must be between {minimum} and {maximum}, got {value!r}")
+    return _validate
+
+
+def min_length(minimum: int) -> Callable[[str], None]:
+    """Factory: string length must be >= *minimum*."""
+    def _validate(value: str) -> None:
+        if len(value) < minimum:
+            raise ValueError(f"Length must be >= {minimum}, got {len(value)}")
+    return _validate
+
+
+def max_length(maximum: int) -> Callable[[str], None]:
+    """Factory: string length must be <= *maximum*."""
+    def _validate(value: str) -> None:
+        if len(value) > maximum:
+            raise ValueError(f"Length must be <= {maximum}, got {len(value)}")
+    return _validate
+
+
+def matches(pattern: str) -> Callable[[str], None]:
+    """Factory: string must fully match the given regex *pattern*."""
+    compiled = re.compile(pattern)
+    def _validate(value: str) -> None:
+        if not compiled.fullmatch(value):
+            raise ValueError(f"Value {value!r} does not match pattern {pattern!r}")
+    return _validate

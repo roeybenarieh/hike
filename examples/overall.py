@@ -1,5 +1,4 @@
-from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.value_object import ValueObject
+from hike import Field, UuidEntity, ValueObject
 
 
 class Price(ValueObject[float]):

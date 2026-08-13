@@ -1,8 +1,6 @@
 from datetime import datetime
 
-from hike.ddd.entity import Field, UuidEntity, vo_field
-from hike.ddd.specifications import EqualSpecification
-from hike.ddd.value_object import ValueObject
+from hike import EqualSpecification, Field, UuidEntity, vo_field, ValueObject
 from examples.value_objects import Name
 
 

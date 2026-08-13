@@ -18,9 +18,7 @@ aggregate, which applies them via the visitor pattern.
 
 from __future__ import annotations
 
-from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.specifications import ISpecification
-from hike.ddd.value_object import ValueObject
+from hike import Field, ISpecification, UuidEntity, ValueObject
 
 
 # ---------------------------------------------------------------------------

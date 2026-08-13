@@ -12,12 +12,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from hike.ddd.aggregate import Aggregate, UuidAggregate
-from hike.ddd.entity import UuidEntity, Field
+from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
-from hike.ddd.repository import AggregateDoesNotExistError
-from hike.ddd.uow import UnitOfWork
-from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------
@@ -37,13 +33,19 @@ class EngineName(ValueObject[str]):
             raise ValueError("Engine name cannot be empty")
 
 
+class BoatName(ValueObject[str]):
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("Boat name cannot be empty")
+
+
 class Engine(UuidEntity):
     name: Field[EngineName]
     price: Field[Price]
 
 
 class Boat(UuidAggregate):
-    name: str
+    name: Field[BoatName]
     engine: Field[Engine]
     price: Field[Price]
 
@@ -61,19 +63,19 @@ uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, rep
 # ---------------------------------------------------------------------------
 # TODO: enforce the engine price is lower than the total boat cost
 default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
-boat = Boat(name="Sea Spirit", price=Price(4_999.99), engine=default_engine)
+boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
 
 with uow:
     uow.repo.save(boat)
     uow.commit()
 
-print(f"Saved: {boat.name} (id={boat.id.value})")
+print(f"Saved: {boat.name.value} (id={boat.id.value})")
 
 # ---------------------------------------------------------------------------
 # Query with a specification
 # ---------------------------------------------------------------------------
 
-cheap = Boat(name="Dinghy", price=Price(299.0), engine=default_engine)
+cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=default_engine)
 with uow:
     uow.repo.save(cheap)
     uow.commit()
@@ -81,7 +83,7 @@ with uow:
 with uow:
     results = uow.repo.get_many(Boat.engine.price > 1_000.0)
 
-print(f"Boats priced above 1000: {[b.name for b in results]}")
+print(f"Boats priced above 1000: {[b.name.value for b in results]}")
 
 # ---------------------------------------------------------------------------
 # Update
@@ -100,7 +102,7 @@ print(f"Updated price: {fetched.price.value}")
 # Rollback on error
 # ---------------------------------------------------------------------------
 
-ghost = Boat(name="Ghost", price=Price(1.0), engine=default_engine)
+ghost = Boat(name=BoatName("Ghost"), price=Price(1.0), engine=default_engine)
 try:
     with uow:
         uow.repo.save(ghost)
