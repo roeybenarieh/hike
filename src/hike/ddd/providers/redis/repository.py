@@ -77,12 +77,12 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
 
     def _serialize(self, aggregate: TAggregate, *, version: int) -> str:
         data = to_dict(aggregate)
-        data["_version"] = version
+        data["__hike_version"] = version
         return json.dumps(data, cls=_AggregateEncoder)
 
     def _deserialize(self, raw: bytes | str) -> TAggregate:
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
-        version: int = data.pop("_version", 0)
+        version: int = data.pop("__hike_version", 0)
         aggregate: TAggregate = from_dict(self._aggregate_class, data)
         set_version(aggregate, version)
         return aggregate
@@ -124,7 +124,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         raw = cast(bytes | None, self._client.get(key))
         if raw is None:
             raise AggregateDoesNotExistError(aggregate)
-        current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("_version", 0)
+        current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("__hike_version", 0)
         v = get_version(aggregate)
         if current_version != v:
             raise OptimisticLockError(aggregate)
@@ -135,7 +135,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         key = self._key(aggregate.id.value)
         raw = cast(bytes | None, self._client.get(key))
         if raw is not None:
-            current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("_version", 0)
+            current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("__hike_version", 0)
             new_version = current_version + 1
         else:
             new_version = 0

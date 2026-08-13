@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Uuid, create_engine, delete as sa_delete
+from sqlalchemy import Float, ForeignKey, JSON, String, Uuid, create_engine, delete as sa_delete
 from sqlalchemy.engine import Engine as SAEngine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -56,7 +56,6 @@ class BoatModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class EngineModel(Base):
@@ -69,13 +68,12 @@ class EngineModel(Base):
 
 class MotorBoatModel(Base):
     __tablename__ = "motorboats"
-    # TODO: id+version = maybe I should handle this internally?
+
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     engine_id: Mapped[UUID] = mapped_column(ForeignKey("engines.id"), nullable=False)
     engine: Mapped[EngineModel] = relationship(EngineModel)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class JourneyModel(Base):
@@ -83,7 +81,6 @@ class JourneyModel(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     checkpoints: Mapped[list[CheckpointModel]] = relationship(
         "CheckpointModel", cascade="all, delete-orphan", lazy="joined"
     )
@@ -106,7 +103,6 @@ class FlatMotorBoatModel(Base):
     engine_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     engine_name: Mapped[str] = mapped_column(String, nullable=False)
     engine_price: Mapped[float] = mapped_column(Float, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class FlatJourneyModel(Base):
@@ -115,7 +111,6 @@ class FlatJourneyModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     checkpoints: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +127,19 @@ class AutoBase(DeclarativeBase): ...
 auto_boat_mapper = AutoSQLAlchemyMapper(Boat, base=AutoBase)
 auto_motorboat_mapper = AutoSQLAlchemyMapper(MotorBoat, base=AutoBase)
 auto_journey_mapper = AutoSQLAlchemyMapper(Journey, base=AutoBase)
+
+# ---------------------------------------------------------------------------
+# DictSQLAlchemyMapper / FlatSQLAlchemyMapper — module-level instances
+#
+# Must be created before Base.metadata.create_all() so that the version column
+# injected by the mapper constructors is included in the CREATE TABLE statements.
+# ---------------------------------------------------------------------------
+
+dict_boat_mapper = DictSQLAlchemyMapper({Boat: BoatModel})
+dict_motorboat_mapper = DictSQLAlchemyMapper({MotorBoat: MotorBoatModel, BoatEngine: EngineModel})
+dict_journey_mapper = DictSQLAlchemyMapper({Journey: JourneyModel, Checkpoint: CheckpointModel})
+flat_motorboat_mapper = FlatSQLAlchemyMapper(FlatMotorBoatModel)
+flat_journey_mapper = FlatSQLAlchemyMapper(FlatJourneyModel)
 
 
 # ---------------------------------------------------------------------------
@@ -179,9 +187,7 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
 def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(
-        Boat, DictSQLAlchemyMapper({Boat: BoatModel})
-    )
+    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, dict_boat_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -189,9 +195,7 @@ def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
 def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(
-        MotorBoat, DictSQLAlchemyMapper({MotorBoat: MotorBoatModel, BoatEngine: EngineModel})
-    )
+    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, dict_motorboat_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -199,9 +203,7 @@ def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
 def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(
-        Journey, DictSQLAlchemyMapper({Journey: JourneyModel, Checkpoint: CheckpointModel})
-    )
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, dict_journey_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -209,9 +211,7 @@ def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
 def flat_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(
-        MotorBoat, FlatSQLAlchemyMapper(FlatMotorBoatModel)
-    )
+    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, flat_motorboat_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 
@@ -219,9 +219,7 @@ def flat_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBo
 def flat_journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(
-        Journey, FlatSQLAlchemyMapper(FlatJourneyModel)
-    )
+    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, flat_journey_mapper)
     return UnitOfWork(ctx, repo=repo)
 
 

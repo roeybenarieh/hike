@@ -2,12 +2,49 @@ from __future__ import annotations
 
 from typing import Any, cast, get_type_hints
 
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy import Column, Integer
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import InstrumentedAttribute, column_property
 
+from hike.ddd.aggregate import Aggregate
 from hike.ddd.entity import Entity, get_fields, to_dict, unwrap_annotation
 from hike.ddd.value_object import ValueObject
 
 from .visitor import ISQLAlchemyMapper
+
+# SQL column name — double-underscore prefix makes accidental collisions with
+# user-declared columns extremely unlikely.
+VERSION_COL = '__hike_version'
+# Python ORM attribute name on the model — single-underscore because SQLAlchemy's
+# declarative metaclass skips dunder (``__name``) attribute names.
+VERSION_ATTR = '_hike_version'
+
+
+def _inject_version(model_cls: type) -> None:
+    """Inject a ``__hike_version`` integer column into *model_cls*.
+
+    Called automatically by :class:`DictSQLAlchemyMapper` (for aggregate root
+    models) and :class:`FlatSQLAlchemyMapper` (for the root model).
+
+    Raises ``ValueError`` if *model_cls* already declares a ``__hike_version``
+    column — it is reserved for hike's internal optimistic locking.
+
+    **Ordering requirement:** the mapper must be instantiated *before*
+    ``metadata.create_all()`` so the injected column is included in the
+    ``CREATE TABLE`` statement.  Declare mappers at module level, the same way
+    ``AutoSQLAlchemyMapper`` instances are declared.
+    """
+    table = getattr(model_cls, '__table__', None)
+    if table is None:
+        return
+    if VERSION_COL in table.c:
+        raise ValueError(
+            f"ORM model {model_cls.__name__!r} must not declare {VERSION_COL!r}: "
+            f"this column is reserved for hike's internal optimistic locking."
+        )
+    col = Column(VERSION_COL, Integer, nullable=False, default=0)
+    table.append_column(col)
+    sa_inspect(model_cls).add_property(VERSION_ATTR, column_property(table.c[VERSION_COL]))
 
 
 class DictSQLAlchemyMapper(ISQLAlchemyMapper):
@@ -35,6 +72,9 @@ class DictSQLAlchemyMapper(ISQLAlchemyMapper):
 
     def __init__(self, mapping: dict[type, type]) -> None:
         self._mapping = mapping
+        for entity_cls, model_cls in mapping.items():
+            if issubclass(entity_cls, Aggregate):
+                _inject_version(model_cls)
 
     def get_model(self, entity_class: type) -> type:
         return self._mapping[entity_class]
@@ -74,6 +114,7 @@ class FlatSQLAlchemyMapper(ISQLAlchemyMapper):
     def __init__(self, root_model: type, sep: str = "_") -> None:
         self._root_model = root_model
         self._sep = sep
+        _inject_version(root_model)
 
     def get_model(self, entity_class: type) -> type:
         return self._root_model

@@ -17,6 +17,7 @@ from hike.ddd.repository import (
 )
 from hike.ddd.specifications import ISpecification
 
+from .mappers import VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 
 
@@ -194,8 +195,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             elif hasattr(model, name):
                 data[name] = getattr(model, name)
         aggregate = self._aggregate_class(**data)
-        if hasattr(model, "version"):
-            set_version(aggregate, model.version)
+        set_version(aggregate, getattr(model, VERSION_ATTR))
         return aggregate
 
     def save(self, aggregate: TAggregate) -> TId:
@@ -205,7 +205,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             self.session.flush()
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
-        set_version(aggregate, getattr(model, "version", 0))
+        set_version(aggregate, getattr(model, VERSION_ATTR))
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: EntityID[TId]) -> None:
@@ -231,13 +231,12 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         model = self.session.get(self._model_class, aggregate.id.value)
         if model is None:
             raise AggregateDoesNotExistError(aggregate)
-        if hasattr(model, "version") and model.version != get_version(aggregate):
+        if getattr(model, VERSION_ATTR) != get_version(aggregate):
             raise OptimisticLockError(aggregate)
         for key, val in self._to_model_dict(aggregate).items():
             setattr(model, key, val)
-        if hasattr(model, "version"):
-            model.version += 1
-            set_version(aggregate, get_version(aggregate) + 1)
+        setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
+        set_version(aggregate, get_version(aggregate) + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
@@ -246,5 +245,4 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         else:
             for key, val in self._to_model_dict(aggregate).items():
                 setattr(model, key, val)
-            if hasattr(model, "version"):
-                model.version += 1
+            setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)

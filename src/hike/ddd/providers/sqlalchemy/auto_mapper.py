@@ -33,6 +33,7 @@ from hike.ddd.aggregate import Aggregate
 from hike.ddd.entity import Entity, get_fields, unwrap_annotation, unwrap_field
 from hike.ddd.value_object import ValueObject
 
+from .mappers import VERSION_ATTR, VERSION_COL
 from .visitor import ISQLAlchemyMapper
 
 
@@ -321,7 +322,7 @@ class AutoSQLAlchemyMapper(ISQLAlchemyMapper):
 
             # version column — Aggregate roots only
             if issubclass(cls, Aggregate):
-                attrs["version"] = Column(Integer, nullable=False, default=0)
+                attrs[VERSION_ATTR] = Column(VERSION_COL, Integer, nullable=False, default=0)
 
             self._mapping[cls] = type(f"{cls.__name__}AutoModel", (self._base,), attrs)  # type: ignore[misc]
 
