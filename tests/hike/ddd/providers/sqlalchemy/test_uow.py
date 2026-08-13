@@ -26,7 +26,7 @@ from testcontainers.community.postgres import PostgresContainer  # pyright: igno
 
 from hike.ddd.entity import EntityID
 from hike.ddd.providers.sqlalchemy import (
-    AutoSQLAlchemyMapper,
+    DictAutoSQLAlchemyMapper,
     DictSQLAlchemyMapper,
     FlatSQLAlchemyMapper,
     SQLAlchemyDBContext,
@@ -114,7 +114,7 @@ class FlatJourneyModel(Base):
 
 
 # ---------------------------------------------------------------------------
-# AutoSQLAlchemyMapper — module-level instances (schema inferred from annotations)
+# DictAutoSQLAlchemyMapper — module-level instances (schema inferred from annotations)
 # ---------------------------------------------------------------------------
 
 
@@ -124,9 +124,9 @@ class AutoBase(DeclarativeBase): ...
 # Each mapper registers its generated model classes in AutoBase.metadata.
 # Boat/Journey/Checkpoint share table names with Base (handled by checkfirst=True);
 # MotorBoat → "motor_boats" and BoatEngine → "boat_engines" are new tables.
-auto_boat_mapper = AutoSQLAlchemyMapper(Boat, base=AutoBase)
-auto_motorboat_mapper = AutoSQLAlchemyMapper(MotorBoat, base=AutoBase)
-auto_journey_mapper = AutoSQLAlchemyMapper(Journey, base=AutoBase)
+auto_boat_mapper = DictAutoSQLAlchemyMapper(Boat, base=AutoBase)
+auto_motorboat_mapper = DictAutoSQLAlchemyMapper(MotorBoat, base=AutoBase)
+auto_journey_mapper = DictAutoSQLAlchemyMapper(Journey, base=AutoBase)
 
 # ---------------------------------------------------------------------------
 # DictSQLAlchemyMapper / FlatSQLAlchemyMapper — module-level instances
@@ -627,7 +627,7 @@ def test_flat_journey_update_checkpoints(flat_journey_uow: UnitOfWork[Session, U
 
 
 # ---------------------------------------------------------------------------
-# Tests — AutoSQLAlchemyMapper (schema inferred from annotations)
+# Tests — DictAutoSQLAlchemyMapper (schema inferred from annotations)
 # ---------------------------------------------------------------------------
 
 
