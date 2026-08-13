@@ -14,6 +14,8 @@ from hike.ddd.repository import (
     TAggregate,
     TId,
     UnknownError,
+    get_version,
+    set_version,
 )
 from hike.ddd.specifications import ISpecification
 
@@ -26,7 +28,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
     Serialization (``to_dict``) flattens ValueObject fields to their raw
     ``.value``, so the stored document looks like::
 
-        {"id": UUID("…"), "name": "Sea Spirit", "price": 4999.99, "_version": 0}
+        {"id": UUID("…"), "name": "Sea Spirit", "price": 4999.99, "__hike_version": 0}
 
     Deserialization filters the MongoDB document to the aggregate's
     ``__init__``-eligible fields and unpacks them.  ``_FieldDescriptor.__set__``
@@ -52,7 +54,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
     def _from_doc(self, document: dict[str, Any]) -> TAggregate:
         """Reconstruct an aggregate from a MongoDB document."""
         aggregate: TAggregate = from_dict(self._aggregate_class, document)
-        aggregate.version = document.get("_version", 0)
+        set_version(aggregate, document.get("__hike_version", 0))
         return aggregate
 
     @staticmethod
@@ -60,25 +62,23 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
         return {"id": aggregate.id.value}
 
     def save(self, aggregate: TAggregate) -> TId:
-        doc = {**to_dict(aggregate), "_version": 0}
+        doc = {**to_dict(aggregate), "__hike_version": 0}
         try:
             result = self._collection.insert_one(doc, session=self._session)
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
         if not result.acknowledged:
             raise UnknownError("insert_one not acknowledged")
-        aggregate.version = 0
+        set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
+    def _delete(self, identifier: EntityID[TId]) -> None:
         result = self._collection.delete_one(
-            {"id": aggregate.id.value, "_version": aggregate.version},
+            {"id": identifier.value},
             session=self._session,
         )
         if result.deleted_count == 0:
-            if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
-                raise AggregateDoesNotExistError(aggregate)
-            raise OptimisticLockError(aggregate)
+            raise AggregateDoesNotExistError(identifier)
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:
         document = self._collection.find_one({"id": identifier.value}, session=self._session)
@@ -93,9 +93,10 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
         return [self._from_doc(doc) for doc in cursor]
 
     def update(self, aggregate: TAggregate) -> None:
-        new_doc = {**to_dict(aggregate), "_version": aggregate.version + 1}
+        v = get_version(aggregate)
+        new_doc = {**to_dict(aggregate), "__hike_version": v + 1}
         result = self._collection.replace_one(
-            {"id": aggregate.id.value, "_version": aggregate.version},
+            {"id": aggregate.id.value, "__hike_version": v},
             new_doc,
             session=self._session,
         )
@@ -103,12 +104,12 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
                 raise AggregateDoesNotExistError(aggregate)
             raise OptimisticLockError(aggregate)
-        aggregate.version += 1
+        set_version(aggregate, v + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         existing = self._collection.find_one({"id": aggregate.id.value}, session=self._session)
-        new_version = (existing["_version"] + 1) if existing is not None else 0
-        new_doc = {**to_dict(aggregate), "_version": new_version}
+        new_version = (existing["__hike_version"] + 1) if existing is not None else 0
+        new_doc = {**to_dict(aggregate), "__hike_version": new_version}
         self._collection.replace_one(
             {"id": aggregate.id.value},
             new_doc,

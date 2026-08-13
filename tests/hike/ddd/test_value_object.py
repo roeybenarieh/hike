@@ -7,11 +7,11 @@ from tests.hike.ddd.conftest import Name, Price
 
 class TestValueObjectValidation:
     def test_negative_price_raises(self) -> None:
-        with pytest.raises(ValueError, match="Price cannot be negative"):
+        with pytest.raises(ValueError, match="non-negative"):
             Price(-1)
 
     def test_empty_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="Name cannot be empty"):
+        with pytest.raises(ValueError, match="empty"):
             Name("")
 
     def test_valid_price_created(self) -> None:

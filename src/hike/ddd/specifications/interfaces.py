@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, Iterable, Iterator
 
 if TYPE_CHECKING:
     from .specs import (
@@ -35,6 +35,10 @@ class ISpecification(ABC):
 
     @abstractmethod
     def accept(self, visitor: ISpecificationVisitor) -> None: ...
+
+    @final
+    def filter[TObj](self, objects: Iterable[TObj]) -> Iterator[TObj]:
+        return filter(self.is_satisfied, objects)
 
     @final
     def is_satisfied(self, obj: object) -> bool:

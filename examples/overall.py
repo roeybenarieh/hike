@@ -1,20 +1,22 @@
-from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.value_object import ValueObject
+from hike import Field, UuidEntity, ValueObject, non_empty, non_negative, rule
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class BoatName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Boat name cannot be empty")
+    __validators__ = [non_empty]
+
+
+@rule(message="Boat price must be positive")
+def boat_price_positive(b: "Boat") -> bool:
+    return b.price.value <= 0
 
 
 class Boat(UuidEntity):
+    __invariants__ = [boat_price_positive]
+
     name: Field[BoatName]
     price: Field[Price]
 

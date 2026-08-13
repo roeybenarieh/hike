@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field, fields
-from typing import Any, ClassVar, Generic, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
+from functools import wraps
+from typing import Any, ClassVar, Generic, Literal, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
 from uuid import UUID, uuid4
 
 from .common import DomainObject
+from .rules import Rule
 from .specifications.specs import (
     EqualSpecification,
     NotEqualSpecification,
@@ -201,7 +203,7 @@ def unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
     return None
 
 
-def _unwrap_annotation(ann_type: object) -> type | None:
+def unwrap_annotation(ann_type: object) -> type | None:
     """Return the inner ``T`` if *ann_type* is ``Field[T]``, else ``None``.
 
     Accepts any class as ``T`` (not just ValueObject subclasses), enabling
@@ -222,6 +224,39 @@ def _unwrap_annotation(ann_type: object) -> type | None:
 
 # Sentinel used to detect "field not yet set" without conflicting with None.
 _MISSING = object()
+
+_COMMAND_FLAG = '_hike_in_command'
+
+
+class ReadOnlyView(Generic[_T]):
+    """Read-only proxy returned for ``Field[Entity]`` fields accessed outside a ``@command``.
+
+    Attribute reads are forwarded to the wrapped entity. Any write attempt raises
+    ``AttributeError`` with a message directing the caller to use the aggregate
+    root's ``@command``-decorated methods instead.
+
+    Not a subclass of the wrapped entity type, so ``isinstance(val, Entity)``
+    checks in infrastructure code (e.g. ``to_dict``) correctly see through it.
+    """
+
+    __slots__ = ('_entity',)
+
+    def __init__(self, entity: _T) -> None:
+        object.__setattr__(self, '_entity', entity)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(object.__getattribute__(self, '_entity'), name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        entity = object.__getattribute__(self, '_entity')
+        raise AttributeError(
+            f"Cannot set '{name}' on a read-only view of "
+            f"{type(entity).__name__}. "
+            f"Mutations must go through the aggregate root's @command methods."
+        )
+
+    def __repr__(self) -> str:
+        return f"ReadOnly({object.__getattribute__(self, '_entity')!r})"
 
 
 class _FieldDescriptor(Generic[_T]):
@@ -270,6 +305,8 @@ class _FieldDescriptor(Generic[_T]):
         val = instance.__dict__.get(self._private, _MISSING)
         if val is _MISSING:
             raise AttributeError(f"Field '{self.field_name}' not set")
+        if isinstance(val, Entity) and not instance.__dict__.get(_COMMAND_FLAG, False):
+            return cast(_T, ReadOnlyView(cast(_T, val)))  # pyright: ignore[reportReturnType]
         return cast(_T, val)
 
     def __set__(self, instance: object, value: object) -> None:
@@ -374,6 +411,7 @@ class Entity[TId: Hashable](DomainObject):
     """
 
     id: Field[EntityID[TId]]
+    __invariants__: ClassVar[list[Rule[Any]]] = []
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -420,11 +458,29 @@ class Entity[TId: Hashable](DomainObject):
                         f"Wrap the raw type in a ValueObject."
                     )
                 continue
-            inner = _unwrap_annotation(ann_type)
+            inner = unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
                 desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
                 desc.__set_name__(cls, name)
+
+        # ── Step 4: own __invariants__ + wrap __init__ for auto-checking ─────
+        # Each class gets its own empty list so parent invariants aren't shared.
+        # The wrapper collects from the full MRO so subclass invariants include
+        # every ancestor's constraints without double-checking.
+        if '__invariants__' not in cls.__dict__:
+            cls.__invariants__ = []
+
+        _original_init = cls.__init__
+
+        @wraps(_original_init)
+        def _init_with_invariants(self: Any, *args: Any, **kwargs: Any) -> None:
+            _original_init(self, *args, **kwargs)
+            for klass in type(self).__mro__:
+                for inv in klass.__dict__.get('__invariants__', []):
+                    inv.raise_on_broken_rule(self)
+
+        cls.__init__ = _init_with_invariants
 
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
@@ -433,6 +489,81 @@ class Entity[TId: Hashable](DomainObject):
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+
+##### Command decorator ####
+
+def _make_command_wrapper(
+    fn: Callable[..., Any],
+    invariants: list[Rule[Any]] | Literal['all'],
+) -> Callable[..., Any]:
+    @wraps(fn)
+    def wrapper(self_: Entity[Any], *args: Any, **kwargs: Any) -> Any:
+        self_.__dict__[_COMMAND_FLAG] = True
+        try:
+            result = fn(self_, *args, **kwargs)
+            if invariants == 'all':
+                for klass in type(self_).__mro__:
+                    for inv in klass.__dict__.get('__invariants__', []):
+                        inv.raise_on_broken_rule(self_)
+            else:
+                for r in invariants:
+                    r.raise_on_broken_rule(self_)
+            return result
+        finally:
+            self_.__dict__[_COMMAND_FLAG] = False
+    return wrapper  # pyright: ignore[reportReturnType]
+
+
+@overload
+def command(fn: Callable[..., Any]) -> Callable[..., Any]: ...
+
+
+@overload
+def command(
+    *, invariants: list[Rule[Any]] | Literal['all']
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]: ...
+
+
+# TODO: implement history for aggregates commands(via Memento design pattern)
+# TODO: implements domain/integration events that check for invariants between the same/other domain(domain bus, inbox/outbox, saga...)
+def command(
+    fn: Callable[..., Any] | None = None,
+    *,
+    invariants: list[Rule[Any]] | Literal['all'] | None = None,
+) -> Any:
+    """Mark a method as a mutation command on any ``Entity`` or ``Aggregate``.
+
+    While the decorated method runs, ``Field[Entity]`` fields accessed via the
+    descriptor return the actual mutable entity instead of a ``ReadOnlyView``.
+    After the body completes, invariants are checked:
+
+    - ``invariants=[rule_a, rule_b]`` — run these specific rules.
+    - ``invariants='all'``            — run every rule in ``__invariants__``
+                                        collected from the full MRO.
+    - no ``invariants``               — no post-command check (still grants
+                                        mutable field access during the call).
+
+    Usage::
+
+        @command
+        def add_item(self, ...) -> None: ...
+
+        @command(invariants=[price_in_range])
+        def reprice(self, ...) -> None: ...
+
+        @command(invariants='all')
+        def settle(self, ...) -> None: ...
+
+    Note: ``list[Entity]`` fields are plain dataclass fields and are not yet
+    protected by ``ReadOnlyView``.
+    """
+    _invariants: list[Rule[Any]] | Literal['all'] = invariants if invariants is not None else []
+    if fn is not None:
+        return _make_command_wrapper(fn, _invariants)
+    def decorator(method: Callable[..., Any]) -> Callable[..., Any]:
+        return _make_command_wrapper(method, _invariants)
+    return decorator
 
 
 ##### Entity utility functions ####

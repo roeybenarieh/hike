@@ -12,12 +12,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from hike.ddd.aggregate import Aggregate, UuidAggregate
-from hike.ddd.entity import UuidEntity, Field
+from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, command, non_empty, non_negative, rule
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
-from hike.ddd.repository import AggregateDoesNotExistError
-from hike.ddd.uow import UnitOfWork
-from hike.ddd.value_object import ValueObject
 
 
 # ---------------------------------------------------------------------------
@@ -26,15 +22,15 @@ from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class EngineName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Engine name cannot be empty")
+    __validators__ = [non_empty]
+
+
+class BoatName(ValueObject[str]):
+    __validators__ = [non_empty]
 
 
 class Engine(UuidEntity):
@@ -42,10 +38,20 @@ class Engine(UuidEntity):
     price: Field[Price]
 
 
+@rule(message="Engine price must not exceed the boat price")
+def engine_price_within_boat_price(boat: "Boat") -> bool:
+    return boat.engine.price.value > boat.price.value
+
+
 class Boat(UuidAggregate):
-    name: str
+    name: Field[BoatName]
     engine: Field[Engine]
     price: Field[Price]
+    __invariants__ = [engine_price_within_boat_price]
+
+    @command(invariants=[engine_price_within_boat_price])
+    def update_engine_price(self, price: float) -> None:
+        self.engine.price = Price(price)
 
 
 # ---------------------------------------------------------------------------
@@ -59,21 +65,20 @@ uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, rep
 # ---------------------------------------------------------------------------
 # Save
 # ---------------------------------------------------------------------------
-# TODO: enforce the engine price is lower than the total boat cost
 default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
-boat = Boat(name="Sea Spirit", price=Price(4_999.99), engine=default_engine)
+boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
 
 with uow:
     uow.repo.save(boat)
     uow.commit()
 
-print(f"Saved: {boat.name} (id={boat.id.value})")
+print(f"Saved: {boat.name.value} (id={boat.id.value})")
 
 # ---------------------------------------------------------------------------
 # Query with a specification
 # ---------------------------------------------------------------------------
 
-cheap = Boat(name="Dinghy", price=Price(299.0), engine=default_engine)
+cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=default_engine)
 with uow:
     uow.repo.save(cheap)
     uow.commit()
@@ -81,7 +86,7 @@ with uow:
 with uow:
     results = uow.repo.get_many(Boat.engine.price > 1_000.0)
 
-print(f"Boats priced above 1000: {[b.name for b in results]}")
+print(f"Boats priced above 1000: {[b.name.value for b in results]}")
 
 # ---------------------------------------------------------------------------
 # Update
@@ -100,7 +105,7 @@ print(f"Updated price: {fetched.price.value}")
 # Rollback on error
 # ---------------------------------------------------------------------------
 
-ghost = Boat(name="Ghost", price=Price(1.0), engine=default_engine)
+ghost = Boat(name=BoatName("Ghost"), price=Price(1.0), engine=default_engine)
 try:
     with uow:
         uow.repo.save(ghost)

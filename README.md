@@ -1,5 +1,24 @@
 # Hike
 
+## Running the examples
+
+Clone the repo and install dependencies (requires Python 3.14+ and [`uv`](https://docs.astral.sh/uv/)):
+
+```bash
+uv sync
+```
+
+This installs `hike` from the local source in editable mode — no PyPI needed. Run any example with:
+
+```bash
+uv run python examples/value_objects.py   # ValueObject basics
+uv run python examples/overall.py         # Entity + Field
+uv run python examples/entities.py        # Entity identity and specifications
+uv run python examples/specification.py   # Specification pattern
+uv run python examples/aggregates.py      # Aggregates, rules, @command, invariants
+uv run python examples/uow.py             # Unit of Work with in-memory repository
+```
+
 <img src="docs/hike-icon.png" alt="hike-icon" width="100%"/>
 
 ## DDD

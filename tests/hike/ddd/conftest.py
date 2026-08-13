@@ -18,8 +18,9 @@ from dataclasses import field
 import pytest
 
 from hike.ddd.aggregate import UuidAggregate
-from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.value_object import ValueObject
+from hike.ddd.entity import Field, UuidEntity, command
+from hike.ddd.rules import rule
+from hike.ddd.value_object import ValueObject, between, non_empty, non_negative
 
 
 # ---------------------------------------------------------------------------
@@ -28,21 +29,15 @@ from hike.ddd.value_object import ValueObject
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Name(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 class Horsepower(ValueObject[int]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Horsepower cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Category(ValueObject[str]):
@@ -50,15 +45,11 @@ class Category(ValueObject[str]):
 
 
 class Rating(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.value <= 5.0):
-            raise ValueError("Rating must be between 0 and 5")
+    __validators__ = [between(0.0, 5.0)]
 
 
 class ListingName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +57,14 @@ class ListingName(ValueObject[str]):
 # ---------------------------------------------------------------------------
 
 
+@rule(message="Engine must have positive horsepower")
+def engine_horsepower_positive(e: "Engine") -> bool:
+    return e.horsepower.value <= 0
+
+
 class Engine(UuidEntity):
+    __invariants__ = [engine_horsepower_positive]
+
     name: Field[Name]
     horsepower: Field[Horsepower]
 
@@ -92,7 +90,14 @@ class ProductListing(UuidEntity):
 # ---------------------------------------------------------------------------
 
 
+@rule(message="Boat price must be positive")
+def boat_price_positive(b: "Boat") -> bool:
+    return b.price.value <= 0
+
+
 class Boat(UuidAggregate):
+    __invariants__ = [boat_price_positive]
+
     name: Field[Name]
     price: Field[Price]
 
@@ -105,10 +110,20 @@ class Journey(UuidAggregate):
     checkpoints: list[Checkpoint] = field(default_factory=list)
 
 
+@rule(message="Engine price must not exceed the motorboat price")
+def engine_price_within_boat_price(boat: MotorBoat) -> bool:
+    return boat.engine.price.value > boat.price.value
+
+
 class MotorBoat(UuidAggregate):
     name: Field[Name]
     price: Field[Price]
     engine: Field[BoatEngine]
+    __invariants__ = [engine_price_within_boat_price]
+
+    @command(invariants=[engine_price_within_boat_price])
+    def update_engine_price(self, price: Price) -> None:
+        self.engine.price = price
 
 
 # ---------------------------------------------------------------------------

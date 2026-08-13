@@ -10,6 +10,8 @@ from hike.ddd.repository import (
     OptimisticLockError,
     TAggregate,
     TId,
+    get_version,
+    set_version,
 )
 from hike.ddd.specifications import ISpecification
 
@@ -28,18 +30,15 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
         if key in self.session:
             raise AggregateAlreadyExistError(aggregate)
         copy = deepcopy(aggregate)
-        copy.version = 0
+        set_version(copy, 0)
         self.session[key] = copy
-        aggregate.version = 0
+        set_version(aggregate, 0)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
-    def delete(self, aggregate: TAggregate) -> None:
-        key = aggregate.id.value
-        existing = cast(TAggregate | None, self.session.get(key))
-        if existing is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if existing.version != aggregate.version:
-            raise OptimisticLockError(aggregate)
+    def _delete(self, identifier: EntityID[TId]) -> None:
+        key = identifier.value
+        if key not in self.session:
+            raise AggregateDoesNotExistError(identifier)
         del self.session[key]
 
     def get_one(self, identifier: EntityID[TId]) -> TAggregate:
@@ -60,16 +59,16 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
         existing = cast(TAggregate | None, self.session.get(key))
         if existing is None:
             raise AggregateDoesNotExistError(aggregate)
-        if existing.version != aggregate.version:
+        if get_version(existing) != get_version(aggregate):
             raise OptimisticLockError(aggregate)
         copy = deepcopy(aggregate)
-        copy.version = aggregate.version + 1
+        set_version(copy, get_version(aggregate) + 1)
         self.session[key] = copy
-        aggregate.version += 1
+        set_version(aggregate, get_version(aggregate) + 1)
 
     def upsert(self, aggregate: TAggregate) -> None:
         key = aggregate.id.value
         existing = cast(TAggregate | None, self.session.get(key))
         copy = deepcopy(aggregate)
-        copy.version = (existing.version + 1) if existing is not None else 0
+        set_version(copy, (get_version(existing) + 1) if existing is not None else 0)
         self.session[key] = copy

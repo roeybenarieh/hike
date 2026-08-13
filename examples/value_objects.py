@@ -1,16 +1,12 @@
-from hike.ddd.value_object import ValueObject
+from hike import ValueObject, non_empty, non_negative
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Name(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 if __name__ == "__main__":

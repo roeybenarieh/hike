@@ -27,20 +27,20 @@ _EMPTY_FILTER: ColumnElement[Any] = true()
 class ISQLAlchemyMapper(ABC):
     """Bridge between domain entity classes and SQLAlchemy ORM constructs.
 
-    Implement this interface and pass it to ``SQLAlchemyEvaluationSpecificationVisitor``
-    (and ``SQLAlchemyRepository``) so the visitor knows how to map:
+    Subclass this and pass an instance to ``SQLAlchemyRepository``.  Two concrete
+    implementations are provided: ``DictSQLAlchemyMapper`` (relational, one ORM model
+    per entity) and ``FlatSQLAlchemyMapper`` (embedded, all fields on the root model).
 
-    - A domain entity class → its SQLAlchemy mapped model class (for SELECT and JOINs).
-    - A (model class, field name) pair → the SQLAlchemy column to filter on.
+    Required methods:
+    - ``get_model`` — entity class → ORM model class
+    - ``get_column`` — (ORM model class, field name) → SQLAlchemy column
 
-    Example::
-
-        class MyMapper(ISQLAlchemyMapper):
-            def get_model(self, entity_class):
-                return {Boat: BoatModel, Engine: EngineModel}[entity_class]
-
-            def get_column(self, model_class, field_name):
-                return getattr(model_class, field_name)
+    Optional methods (override for the embedded strategy):
+    - ``resolve_path`` — full field path → column (bypasses JOIN traversal)
+    - ``expand_nested`` — serialize a single nested entity for the parent model dict
+    - ``collect_nested`` — read a single nested entity from the parent ORM object
+    - ``expand_list_nested`` — serialize a list[Entity] field (e.g. to JSON column)
+    - ``collect_list_nested`` — read a list[Entity] field from the parent ORM object
     """
 
     @abstractmethod
@@ -52,6 +52,50 @@ class ISQLAlchemyMapper(ABC):
     def get_column(self, model_class: type, field_name: str) -> InstrumentedAttribute[Any]:
         """Return the SQLAlchemy column attribute for *field_name* on *model_class*."""
         ...
+
+    def resolve_path(self, path: list[str]) -> InstrumentedAttribute[Any] | None:
+        """Return the column for a full field path, bypassing JOIN traversal.
+
+        ``None`` (default) → use standard model traversal.
+        Override for embedded mapping: ``['engine', 'price']`` → ``root_model.engine_price``.
+        """
+        return None
+
+    def expand_nested(self, entity: Any, entity_cls: type, field_name: str) -> dict[str, Any]:
+        """Serialize a single nested ``Field[Entity]`` to column key-value pairs.
+
+        ``{}`` (default) → repository uses ``session.merge()`` relational path.
+        Override for embedded: return ``{'engine_id': ..., 'engine_name': ..., ...}``.
+        """
+        return {}
+
+    def collect_nested(self, orm_obj: Any, entity_cls: type, field_name: str) -> dict[str, Any] | None:
+        """Read raw field values for a nested entity from the parent ORM object.
+
+        ``None`` (default) → repository reads the ORM relationship attribute.
+        Override for embedded: read prefixed columns from *orm_obj* directly.
+        """
+        return None
+
+    def expand_list_nested(
+        self, entities: list[Any], entity_cls: type, field_name: str
+    ) -> dict[str, Any] | None:
+        """Serialize a ``list[Entity]`` field to column key-value pairs.
+
+        ``None`` (default) → repository creates ORM model instances (relational cascade).
+        Override for embedded: ``{field_name: [to_dict(e) for e in entities]}`` for a JSON column.
+        """
+        return None
+
+    def collect_list_nested(
+        self, orm_obj: Any, entity_cls: type, field_name: str
+    ) -> list[dict[str, Any]] | None:
+        """Read a ``list[Entity]`` field from the parent ORM object.
+
+        ``None`` (default) → repository reads the ORM relationship list.
+        Override for embedded: read and return the JSON column value.
+        """
+        return None
 
 
 def _proxy_chain(proxy: TerminalFieldProxy) -> list[TerminalFieldProxy]:
@@ -121,10 +165,15 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
     def _resolve_column(self, proxy: TerminalFieldProxy) -> InstrumentedAttribute[Any]:
         """Walk the FieldProxy chain and return the SQLAlchemy column for the leaf field.
 
-        Intermediate Entity-typed steps add JOINs; the leaf ValueObject step is
-        resolved via :meth:`ISQLAlchemyMapper.get_column`.
+        First checks ``mapper.resolve_path`` (used by embedded mappers that keep all fields
+        on the root model).  Falls back to the standard JOIN-traversal when it returns ``None``.
         """
         chain = _proxy_chain(proxy)
+        path = [step.field_name for step in chain]
+        col = self._mapper.resolve_path(path)
+        if col is not None:
+            return col
+
         current_model = self._root_model
 
         for i, step in enumerate(chain):

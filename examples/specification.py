@@ -18,9 +18,7 @@ aggregate, which applies them via the visitor pattern.
 
 from __future__ import annotations
 
-from hike.ddd.entity import Field, UuidEntity
-from hike.ddd.specifications import ISpecification
-from hike.ddd.value_object import ValueObject
+from hike import Field, ISpecification, UuidEntity, ValueObject, between, non_empty, non_negative, rule
 
 
 # ---------------------------------------------------------------------------
@@ -30,10 +28,7 @@ from hike.ddd.value_object import ValueObject
 
 class Price(ValueObject[float]):
     value: float
-
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class Category(ValueObject[str]):
@@ -44,18 +39,12 @@ class Rating(ValueObject[float]):
     """Star rating in the range [0.0, 5.0]."""
 
     value: float
-
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.value <= 5.0):
-            raise ValueError("Rating must be between 0 and 5")
+    __validators__ = [between(0.0, 5.0)]
 
 
 class ListingName(ValueObject[str]):
     value: str
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Name cannot be empty")
+    __validators__ = [non_empty]
 
 
 # ---------------------------------------------------------------------------
@@ -85,8 +74,16 @@ class ProductListing(UuidEntity):
 # ---------------------------------------------------------------------------
 
 
+@rule(message="Listing names must be unique within a catalog")
+def listing_names_unique(c: "ProductCatalog") -> bool:
+    names = [listing.name for listing in c.listings]
+    return len(names) != len(set(names))
+
+
 class ProductCatalog(UuidEntity):
     """Aggregate root that owns a collection of ProductListing entities."""
+
+    __invariants__ = [listing_names_unique]
 
     listings: list[ProductListing]
 
