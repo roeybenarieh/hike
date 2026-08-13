@@ -1,0 +1,43 @@
+site_name: Hike Docs
+theme:
+  name: material
+  palette:
+    # Palette toggle for dark mode (Default on first load)
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  logo: hike-icon.png
+  favicon: hike-icon.png
+  icon:
+    repo: fontawesome/brands/github
+
+repo_url: https://github.com/roeybenarieh/hike
+repo_name: roeybenarieh/hike
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Getting Started: guide/getting-started.md
+      - Value Objects: guide/value-objects.md
+      - Entities & Aggregates: guide/entities-aggregates.md
+      - Specifications & Querying: guide/specifications.md
+      - Repositories & UoW: guide/repositories-uow.md

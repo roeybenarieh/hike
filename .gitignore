@@ -36,3 +36,10 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Docs build output
+site/
+
+# Tools
+.serena/
+graphify-out/

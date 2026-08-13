@@ -1,4 +1,4 @@
-from hike.ddd.value_object import (
+from .ddd.value_object import (
     ValueObject,
     positive,
     non_negative,
