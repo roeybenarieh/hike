@@ -1,16 +1,12 @@
-from hike import Field, UuidEntity, ValueObject
+from hike import Field, UuidEntity, ValueObject, non_empty, non_negative
 
 
 class Price(ValueObject[float]):
-    def __post_init__(self) -> None:
-        if self.value < 0:
-            raise ValueError("Price cannot be negative")
+    __validators__ = [non_negative]
 
 
 class BoatName(ValueObject[str]):
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Boat name cannot be empty")
+    __validators__ = [non_empty]
 
 
 class Boat(UuidEntity):
