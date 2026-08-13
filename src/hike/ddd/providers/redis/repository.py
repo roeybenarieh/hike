@@ -131,6 +131,14 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         self.session.set(key, self._serialize(aggregate, version=v + 1))
         set_version(aggregate, v + 1)
 
+    def count(self, specification: ISpecification) -> int:
+        total = 0
+        for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
+            raw = cast(bytes | None, self._client.get(key))
+            if raw is not None and specification.is_satisfied(self._deserialize(raw)):
+                total += 1
+        return total
+
     def upsert(self, aggregate: TAggregate) -> None:
         key = self._key(aggregate.id.value)
         raw = cast(bytes | None, self._client.get(key))

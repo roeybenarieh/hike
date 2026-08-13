@@ -66,6 +66,9 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
         self.session[key] = copy
         set_version(aggregate, get_version(aggregate) + 1)
 
+    def count(self, specification: ISpecification) -> int:
+        return sum(1 for agg in self.session.values() if specification.is_satisfied(agg))
+
     def upsert(self, aggregate: TAggregate) -> None:
         key = aggregate.id.value
         existing = cast(TAggregate | None, self.session.get(key))
