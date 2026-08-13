@@ -106,6 +106,11 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             raise OptimisticLockError(aggregate)
         set_version(aggregate, v + 1)
 
+    def count(self, specification: ISpecification) -> int:
+        visitor = MongoDBEvaluationSpecificationVisitor()
+        specification.accept(visitor)
+        return self._collection.count_documents(visitor.filters, session=self._session)
+
     def upsert(self, aggregate: TAggregate) -> None:
         existing = self._collection.find_one({"id": aggregate.id.value}, session=self._session)
         new_version = (existing["__hike_version"] + 1) if existing is not None else 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast, get_origin, get_type_hints
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hike.ddd.entity import Entity, EntityID, Field, from_dict, get_fields, to_dict
@@ -230,6 +231,13 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         stmt = visitor.result()
         rows = self.session.scalars(stmt).all()
         return [self._from_model(row) for row in rows]
+
+    def count(self, specification: ISpecification) -> int:
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
+        specification.accept(visitor)
+        stmt = visitor.result()
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        return self.session.scalar(count_stmt) or 0
 
     def update(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)

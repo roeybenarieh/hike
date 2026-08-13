@@ -140,6 +140,13 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
         """
 
     @abstractmethod
+    def count(self, specification: ISpecification) -> int:
+        """Count aggregates matching *specification*.
+
+        :param specification: criteria dictating which aggregates to count.
+        """
+
+    @abstractmethod
     def upsert(self, aggregate: TAggregate) -> None:
         """Update a given aggregate; create it if it does not exist.
 
