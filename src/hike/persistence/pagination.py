@@ -22,6 +22,16 @@ class OrderBy:
     direction: Literal["asc", "desc"] = "asc"
 
 
+def asc(field: TerminalFieldProxy) -> OrderBy:
+    """Return an ``OrderBy`` for *field* ascending."""
+    return OrderBy(field=field, direction="asc")
+
+
+def desc(field: TerminalFieldProxy) -> OrderBy:
+    """Return an ``OrderBy`` for *field* descending."""
+    return OrderBy(field=field, direction="desc")
+
+
 @dataclass(frozen=True)
 class OffsetPagination:
     """Skip *offset* records and return at most *limit*."""

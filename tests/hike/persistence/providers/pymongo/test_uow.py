@@ -19,7 +19,7 @@ from testcontainers.core.container import DockerContainer  # pyright: ignore[rep
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.entity import EntityID
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
 from hike.persistence.providers.pymongo import PyMongoDBContext, PyMongoRepository
 from hike.persistence.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, get_version
 from hike.persistence.uow import UnitOfWork
@@ -348,7 +348,7 @@ def fleet(uow: UnitOfWork[ClientSession, UUID, Boat]) -> list[Boat]:
 @pytest.mark.usefixtures("fleet")
 def test_mongo_ordering_price_asc(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
 
@@ -356,7 +356,7 @@ def test_mongo_ordering_price_asc(uow: UnitOfWork[ClientSession, UUID, Boat]) ->
 @pytest.mark.usefixtures("fleet")
 def test_mongo_ordering_price_desc(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.desc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices, reverse=True)
 
@@ -366,7 +366,7 @@ def test_mongo_offset_pagination(uow: UnitOfWork[ClientSession, UUID, Boat]) -> 
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -380,7 +380,7 @@ def test_mongo_page_pagination(uow: UnitOfWork[ClientSession, UUID, Boat]) -> No
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=PagePagination(page=2, page_size=2),
         )
     assert isinstance(page, Page)
@@ -396,7 +396,7 @@ def test_mongo_cursor_pagination_traverses_all(uow: UnitOfWork[ClientSession, UU
         with uow:
             page = uow.repo.get_many(
                 Boat.price >= 0.0,
-                ordering=[Boat.price.asc()],
+                ordering=[asc(Boat.price)],
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
@@ -413,7 +413,7 @@ def test_mongo_cursor_pagination_traverses_all(uow: UnitOfWork[ClientSession, UU
 @pytest.mark.usefixtures("fleet")
 def test_mongo_ordering_single_orderby_shorthand(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)

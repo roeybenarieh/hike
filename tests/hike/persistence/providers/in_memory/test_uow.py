@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.persistence.repository import (
     AggregateAlreadyExistError,
@@ -264,7 +264,7 @@ def _make_fleet() -> tuple[UnitOfWork[dict[Any, Any], UUID, Boat], list[Boat]]:
 def test_ordering_price_asc() -> None:
     uow, _ = _make_fleet()
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
@@ -273,7 +273,7 @@ def test_ordering_price_asc() -> None:
 def test_ordering_price_desc() -> None:
     uow, _ = _make_fleet()
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.desc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices, reverse=True)
@@ -282,7 +282,7 @@ def test_ordering_price_desc() -> None:
 def test_ordering_name_asc() -> None:
     uow, _ = _make_fleet()
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.name.asc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.name)])
     assert isinstance(results, list)
     names = [b.name.value for b in results]
     assert names == sorted(names)
@@ -291,7 +291,7 @@ def test_ordering_name_asc() -> None:
 def test_ordering_single_orderby_shorthand() -> None:
     uow, _ = _make_fleet()
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
@@ -308,7 +308,7 @@ def test_get_many_no_pagination_returns_list() -> None:
 def test_get_many_ordering_only_returns_list() -> None:
     uow, _ = _make_fleet()
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     assert isinstance(results, list)
 
 
@@ -321,7 +321,7 @@ def test_offset_pagination_first_page() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -335,7 +335,7 @@ def test_offset_pagination_middle_page() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=2, limit=2),
         )
     assert isinstance(page, Page)
@@ -349,7 +349,7 @@ def test_offset_pagination_last_page() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=4, limit=2),
         )
     assert isinstance(page, Page)
@@ -363,7 +363,7 @@ def test_offset_pagination_exact_fit() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=5),
         )
     assert isinstance(page, Page)
@@ -392,7 +392,7 @@ def test_page_pagination_page1() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=PagePagination(page=1, page_size=2),
         )
     assert isinstance(page, Page)
@@ -406,7 +406,7 @@ def test_page_pagination_last_page() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=PagePagination(page=3, page_size=2),
         )
     assert isinstance(page, Page)
@@ -428,7 +428,7 @@ def test_cursor_pagination_traverses_all_pages() -> None:
         with uow:
             page = uow.repo.get_many(
                 Boat.price >= 0.0,
-                ordering=[Boat.price.asc()],
+                ordering=[asc(Boat.price)],
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
@@ -447,7 +447,7 @@ def test_cursor_pagination_first_page_has_next() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=CursorPagination(limit=2),
         )
     assert isinstance(page, Page)
@@ -462,14 +462,14 @@ def test_cursor_pagination_last_page_no_next_cursor() -> None:
     with uow:
         first = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=CursorPagination(limit=4),
         )
     assert isinstance(first, Page)
     with uow:
         last = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=CursorPagination(limit=4, cursor=first.next_cursor),
         )
     assert isinstance(last, Page)
@@ -486,7 +486,7 @@ def test_ordering_with_offset_pagination() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.desc()],
+            ordering=[desc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -498,7 +498,7 @@ def test_spec_with_offset_pagination() -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price > 20.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -515,7 +515,7 @@ def test_ordering_with_cursor_pagination() -> None:
         with uow:
             page = uow.repo.get_many(
                 Boat.price >= 0.0,
-                ordering=[Boat.price.desc()],
+                ordering=[desc(Boat.price)],
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)

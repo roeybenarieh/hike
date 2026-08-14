@@ -25,7 +25,7 @@ from sqlalchemy.orm import (
 from testcontainers.community.postgres import PostgresContainer  # pyright: ignore[reportMissingImports]
 
 from hike.entity import EntityID
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
 from hike.persistence.providers.sqlalchemy import (
     DictAutoSQLAlchemyMapper,
     DictSQLAlchemyMapper,
@@ -848,7 +848,7 @@ def fleet(uow: UnitOfWork[Session, UUID, Boat]) -> list[Boat]:
 @pytest.mark.usefixtures("fleet")
 def test_sa_ordering_price_asc(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
 
@@ -856,7 +856,7 @@ def test_sa_ordering_price_asc(uow: UnitOfWork[Session, UUID, Boat]) -> None:
 @pytest.mark.usefixtures("fleet")
 def test_sa_ordering_price_desc(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.desc()])
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices, reverse=True)
 
@@ -866,7 +866,7 @@ def test_sa_offset_pagination_first_page(uow: UnitOfWork[Session, UUID, Boat]) -
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -880,7 +880,7 @@ def test_sa_offset_pagination_last_page(uow: UnitOfWork[Session, UUID, Boat]) ->
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=4, limit=2),
         )
     assert isinstance(page, Page)
@@ -893,7 +893,7 @@ def test_sa_page_pagination(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=PagePagination(page=2, page_size=2),
         )
     assert isinstance(page, Page)
@@ -910,7 +910,7 @@ def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session, UUID, Boat]
         with uow:
             page = uow.repo.get_many(
                 Boat.price >= 0.0,
-                ordering=[Boat.price.asc()],
+                ordering=[asc(Boat.price)],
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
@@ -929,7 +929,7 @@ def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session, UUID, Boat]) ->
     with uow:
         page = uow.repo.get_many(
             Boat.price > 20.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
@@ -940,7 +940,7 @@ def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session, UUID, Boat]) ->
 @pytest.mark.usefixtures("fleet")
 def test_sa_ordering_single_orderby_shorthand(uow: UnitOfWork[Session, UUID, Boat]) -> None:
     with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)

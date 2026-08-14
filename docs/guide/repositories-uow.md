@@ -102,17 +102,17 @@ You can pass **a single `OrderBy`** directly, or **a list** when sorting by mult
 ```python
 # Single field — pass directly (no list needed)
 with uow:
-    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
 
 # Single field descending
 with uow:
-    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.desc())
+    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=desc(Boat.price))
 
 # Multi-field — pass a list; priority is left-to-right
 with uow:
     boats = uow.repo.get_many(
         Boat.price >= 0.0,
-        ordering=[Boat.category.asc(), Boat.price.desc()],
+        ordering=[asc(Boat.category), desc(Boat.price)],
     )
 ```
 
@@ -147,7 +147,7 @@ from hike.ddd import OffsetPagination
 with uow:
     page = uow.repo.get_many(
         Boat.price >= 0.0,
-        ordering=[Boat.price.asc()],
+        ordering=[asc(Boat.price)],
         pagination=OffsetPagination(offset=0, limit=10),
     )
 
@@ -174,7 +174,7 @@ from hike.ddd import PagePagination
 with uow:
     page = uow.repo.get_many(
         Boat.price >= 0.0,
-        ordering=[Boat.price.asc()],
+        ordering=[asc(Boat.price)],
         pagination=PagePagination(page=2, page_size=10),  # page is 1-indexed
     )
 
@@ -200,7 +200,7 @@ while True:
     with uow:
         page = uow.repo.get_many(
             Boat.price >= 0.0,
-            ordering=[Boat.price.asc()],
+            ordering=[asc(Boat.price)],
             pagination=CursorPagination(limit=10, cursor=cursor),
         )
 
@@ -228,7 +228,7 @@ All three arguments can be combined freely:
 with uow:
     page = uow.repo.get_many(
         Boat.price > 20.0,                        # filter
-        ordering=[Boat.price.asc()],              # sort
+        ordering=[asc(Boat.price)],              # sort
         pagination=OffsetPagination(offset=0, limit=5),  # page
     )
 ```

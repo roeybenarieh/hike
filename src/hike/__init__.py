@@ -34,6 +34,8 @@ from hike.persistence.pagination import (
     Page,
     PagePagination,
     Pagination,
+    asc,
+    desc,
 )
 from hike.specifications import (
     ISpecification,
@@ -92,6 +94,8 @@ __all__ = [
     "Page",
     "PagePagination",
     "Pagination",
+    "asc",
+    "desc",
     "ISpecification",
     "ISpecificationVisitor",
     "AndSpecification",
