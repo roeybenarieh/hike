@@ -276,7 +276,7 @@ class _FieldDescriptor(Generic[_T]):
     """Descriptor managing a single field on an Entity subclass.
 
     Installed automatically by ``Entity.__init_subclass__`` for every
-    ``Field[T]``-annotated attribute, or explicitly via ``vo()``.
+    ``Field[T]``-annotated attribute.
 
     **Three access modes:**
 
@@ -332,21 +332,6 @@ class _FieldDescriptor(Generic[_T]):
             raise TypeError(f"Expected {ft.__name__}, got {type(value).__name__}")
 
 
-def vo(field_type: type[_TVO]) -> Field[_TVO]:
-    """Declare a ValueObject field on an Entity explicitly.
-
-    An alternative to the ``Field[T]`` annotation style when you want the
-    descriptor to be clearly visible in the class body::
-
-        class Boat(Entity):
-            price: Field[Price] = vo(Price)   # explicit
-            name: Field[Name]                 # implicit — same runtime behaviour
-
-    Both forms install a ``_FieldDescriptor`` and are fully equivalent at
-    runtime and to Pyright.
-    """
-    return _FieldDescriptor("", field_type)  # pyright: ignore[reportReturnType]
-
 
 def field(
     *,
@@ -354,37 +339,29 @@ def field(
     default_factory: Any = _DC_MISSING,
     init: bool = True,
     repr: bool = True,
-    hash: bool | None = None,
-    compare: bool = True,
     metadata: Mapping[str, Any] | None = None,
-    kw_only: Any = _DC_MISSING,
     **kwargs: Any,
 ) -> Field[Any]:
     """Drop-in for ``dataclasses.field`` that returns ``Field[T]``.
 
-    Pass-through to ``dataclasses.field``; the return type is declared as
-    ``Field[T]`` so Pyright accepts it where ``Field[T]``-annotated entity
-    fields are expected.  Future ``dataclasses.field`` parameters are
-    forwarded via ``**kwargs`` for runtime compatibility.
+    Omitted ``dataclasses.field`` parameters and why:
+    - ``hash`` / ``compare``: ``Entity.__eq__`` and ``Entity.__hash__`` are
+      always driven by ``id``, so per-field flags have no effect.
+    - ``kw_only``: ``Entity`` enforces ``kw_only_default=True``; overriding
+      per field would clash with parent keyword-only fields at class
+      definition time.
+
+    Future ``dataclasses.field`` parameters are forwarded via ``**kwargs``.
     """
-    kw: dict[str, Any] = {
-        "init": init,
-        "repr": repr,
-        "hash": hash,
-        "compare": compare,
-        "metadata": metadata,
-        **kwargs,
-    }
+    kw: dict[str, Any] = {"init": init, "repr": repr, "metadata": metadata, **kwargs}
     if default is not _DC_MISSING:
         kw["default"] = default
     if default_factory is not _DC_MISSING:
         kw["default_factory"] = default_factory
-    if kw_only is not _DC_MISSING:
-        kw["kw_only"] = kw_only
     return _dc_field(**kw)  # pyright: ignore[reportReturnType]
 
 
-@dataclass_transform(kw_only_default=True, field_specifiers=(vo, field))
+@dataclass_transform(kw_only_default=True, field_specifiers=(field,))
 class Entity[TId: Hashable](DomainObject):
     """Base class for DDD entities, generic over the raw ID type ``TId``.
 
