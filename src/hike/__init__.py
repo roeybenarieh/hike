@@ -40,8 +40,6 @@ from hike.ddd.specifications import (
     GreaterThanEqualSpecification,
     LessThanSpecification,
     LessThanEqualSpecification,
-    ComparableObject,
-    ComparableObjectMeta,
 )
 
 __all__ = [
@@ -92,6 +90,4 @@ __all__ = [
     "GreaterThanEqualSpecification",
     "LessThanSpecification",
     "LessThanEqualSpecification",
-    "ComparableObject",
-    "ComparableObjectMeta",
 ]

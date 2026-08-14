@@ -11,11 +11,6 @@ from .specs import (
     NotSpecification,
     OrSpecification,
 )
-from .comperable import (
-    ComparableObject,
-    ComparableObjectMeta,
-)
-
 __all__ = [
     "ISpecification",
     "ISpecificationVisitor",
@@ -29,6 +24,4 @@ __all__ = [
     "GreaterThanEqualSpecification",
     "LessThanSpecification",
     "LessThanEqualSpecification",
-    "ComparableObjectMeta",
-    "ComparableObject",
 ]
