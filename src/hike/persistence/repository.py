@@ -5,7 +5,8 @@ from typing import Any, Generic, TypeVar, overload, final
 from hike.aggregate import Aggregate
 from hike.common import DomainError
 from hike.entity import EntityID
-from hike.persistence.pagination import OrderBy, Page, Pagination
+from hike.persistence.ordering import OrderBy
+from hike.persistence.pagination import Page, Pagination
 from hike.specifications import ISpecification
 
 TId = TypeVar("TId")

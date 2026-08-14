@@ -25,7 +25,8 @@ from sqlalchemy.orm import (
 from testcontainers.community.postgres import PostgresContainer  # pyright: ignore[reportMissingImports]
 
 from hike.entity import EntityID
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
+from hike.persistence.ordering import asc, desc
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.persistence.providers.sqlalchemy import (
     DictAutoSQLAlchemyMapper,
     DictSQLAlchemyMapper,

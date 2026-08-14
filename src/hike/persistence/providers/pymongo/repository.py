@@ -8,9 +8,9 @@ from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 
 from hike.entity import EntityID, from_dict, to_dict
+from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import (
     OffsetPagination,
-    OrderBy,
     Page,
     PagePagination,
     Pagination,

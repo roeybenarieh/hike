@@ -7,9 +7,9 @@ from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from hike.entity import Entity, EntityID, Field, from_dict, get_fields, to_dict
+from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import (
     OffsetPagination,
-    OrderBy,
     Page,
     PagePagination,
     Pagination,

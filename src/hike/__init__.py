@@ -27,15 +27,13 @@ from hike.persistence.repository import (
     set_version,
 )
 from hike.persistence.uow import DBContext, UnitOfWork
+from hike.persistence.ordering import OrderBy, asc, desc
 from hike.persistence.pagination import (
     CursorPagination,
     OffsetPagination,
-    OrderBy,
     Page,
     PagePagination,
     Pagination,
-    asc,
-    desc,
 )
 from hike.specifications import (
     ISpecification,

@@ -15,7 +15,8 @@ from redis.client import Pipeline
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingImports]
 
 from hike.entity import EntityID
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
+from hike.persistence.ordering import asc, desc
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.persistence.providers.redis import RedisDBContext, RedisRepository
 from hike.persistence.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, get_version
 from hike.persistence.uow import UnitOfWork

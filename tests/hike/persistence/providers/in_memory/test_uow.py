@@ -6,7 +6,8 @@ from uuid import UUID
 
 import pytest
 
-from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination, asc, desc
+from hike.persistence.ordering import asc, desc
+from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.persistence.repository import (
     AggregateAlreadyExistError,
