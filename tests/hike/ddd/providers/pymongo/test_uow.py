@@ -19,6 +19,7 @@ from testcontainers.core.container import DockerContainer  # pyright: ignore[rep
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.ddd.entity import EntityID
+from hike.ddd.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.ddd.providers.pymongo import PyMongoDBContext, PyMongoRepository
 from hike.ddd.repository import AggregateAlreadyExistError, AggregateDoesNotExistError, OptimisticLockError, get_version
 from hike.ddd.uow import UnitOfWork
@@ -324,3 +325,103 @@ def test_journey_update_checkpoints(journey_uow: UnitOfWork[ClientSession, UUID,
         fetched = journey_uow.repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
+
+
+# ---------------------------------------------------------------------------
+# Pagination and ordering tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fleet(uow: UnitOfWork[ClientSession, UUID, Boat]) -> list[Boat]:
+    boats = [
+        Boat(name=Name(n), price=Price(p))
+        for n, p in zip("ABCDE", [10.0, 20.0, 30.0, 40.0, 50.0])
+    ]
+    with uow:
+        for b in boats:
+            uow.repo.save(b)
+        uow.commit()
+    return boats
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_ordering_price_asc(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices)
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_ordering_price_desc(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.desc()])
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices, reverse=True)
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_offset_pagination(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=0, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is True
+    assert [b.price.value for b in page.items] == [10.0, 20.0]
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_page_pagination(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=PagePagination(page=2, page_size=2),
+        )
+    assert isinstance(page, Page)
+    assert [b.price.value for b in page.items] == [30.0, 40.0]
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_cursor_pagination_traverses_all(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    collected: list[float] = []
+    cursor: str | None = None
+
+    for _ in range(10):
+        with uow:
+            page = uow.repo.get_many(
+                Boat.price >= 0.0,
+                ordering=[Boat.price.asc()],
+                pagination=CursorPagination(limit=2, cursor=cursor),
+            )
+        assert isinstance(page, Page)
+        collected.extend(b.price.value for b in page.items)
+        if not page.has_next:
+            break
+        cursor = page.next_cursor
+    else:
+        pytest.fail("Cursor pagination did not terminate")
+
+    assert collected == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_ordering_single_orderby_shorthand(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+    assert isinstance(results, list)
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices)
+
+
+@pytest.mark.usefixtures("fleet")
+def test_mongo_get_many_no_pagination_returns_list(uow: UnitOfWork[ClientSession, UUID, Boat]) -> None:
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0)
+    assert isinstance(results, list)
+    assert len(results) == 5

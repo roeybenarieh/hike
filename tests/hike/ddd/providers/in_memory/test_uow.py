@@ -6,6 +6,7 @@ from uuid import UUID
 
 import pytest
 
+from hike.ddd.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
@@ -240,3 +241,287 @@ def test_journey_update_checkpoints() -> None:
         fetched = uow.repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
+
+
+# ---------------------------------------------------------------------------
+# Ordering tests
+# ---------------------------------------------------------------------------
+
+def _make_fleet() -> tuple[UnitOfWork[dict[Any, Any], UUID, Boat], list[Boat]]:
+    """Return (uow, boats) with prices [10, 20, 30, 40, 50] and names A–E."""
+    boats = [
+        Boat(name=Name(n), price=Price(p))
+        for n, p in zip("ABCDE", [10.0, 20.0, 30.0, 40.0, 50.0])
+    ]
+    uow = make_uow()
+    with uow:
+        for b in boats:
+            uow.repo.save(b)
+        uow.commit()
+    return uow, boats
+
+
+def test_ordering_price_asc() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+    assert isinstance(results, list)
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices)
+
+
+def test_ordering_price_desc() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.desc()])
+    assert isinstance(results, list)
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices, reverse=True)
+
+
+def test_ordering_name_asc() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.name.asc()])
+    assert isinstance(results, list)
+    names = [b.name.value for b in results]
+    assert names == sorted(names)
+
+
+def test_ordering_single_orderby_shorthand() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+    assert isinstance(results, list)
+    prices = [b.price.value for b in results]
+    assert prices == sorted(prices)
+
+
+def test_get_many_no_pagination_returns_list() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0)
+    assert isinstance(results, list)
+    assert len(results) == 5
+
+
+def test_get_many_ordering_only_returns_list() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[Boat.price.asc()])
+    assert isinstance(results, list)
+
+
+# ---------------------------------------------------------------------------
+# Offset pagination tests
+# ---------------------------------------------------------------------------
+
+def test_offset_pagination_first_page() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=0, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is True
+    assert [b.price.value for b in page.items] == [10.0, 20.0]
+
+
+def test_offset_pagination_middle_page() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=2, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is True
+    assert [b.price.value for b in page.items] == [30.0, 40.0]
+
+
+def test_offset_pagination_last_page() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=4, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is False
+    assert [b.price.value for b in page.items] == [50.0]
+
+
+def test_offset_pagination_exact_fit() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=0, limit=5),
+        )
+    assert isinstance(page, Page)
+    assert page.has_next is False
+    assert len(page.items) == 5
+
+
+def test_offset_pagination_beyond_end() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            pagination=OffsetPagination(offset=10, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.items == []
+    assert page.has_next is False
+
+
+# ---------------------------------------------------------------------------
+# Page pagination tests
+# ---------------------------------------------------------------------------
+
+def test_page_pagination_page1() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=PagePagination(page=1, page_size=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is True
+    assert [b.price.value for b in page.items] == [10.0, 20.0]
+
+
+def test_page_pagination_last_page() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=PagePagination(page=3, page_size=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 5
+    assert page.has_next is False
+    assert [b.price.value for b in page.items] == [50.0]
+
+
+# ---------------------------------------------------------------------------
+# Cursor pagination tests
+# ---------------------------------------------------------------------------
+
+def test_cursor_pagination_traverses_all_pages() -> None:
+    uow, _ = _make_fleet()
+    collected: list[float] = []
+    cursor: str | None = None
+
+    for _ in range(10):  # guard against infinite loops
+        with uow:
+            page = uow.repo.get_many(
+                Boat.price >= 0.0,
+                ordering=[Boat.price.asc()],
+                pagination=CursorPagination(limit=2, cursor=cursor),
+            )
+        assert isinstance(page, Page)
+        collected.extend(b.price.value for b in page.items)
+        if not page.has_next:
+            break
+        cursor = page.next_cursor
+    else:
+        pytest.fail("Cursor pagination did not terminate")
+
+    assert collected == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+
+def test_cursor_pagination_first_page_has_next() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=CursorPagination(limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.has_next is True
+    assert page.next_cursor is not None
+    assert page.total is None
+
+
+def test_cursor_pagination_last_page_no_next_cursor() -> None:
+    uow, _ = _make_fleet()
+    # Skip to last page
+    with uow:
+        first = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=CursorPagination(limit=4),
+        )
+    assert isinstance(first, Page)
+    with uow:
+        last = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=CursorPagination(limit=4, cursor=first.next_cursor),
+        )
+    assert isinstance(last, Page)
+    assert last.has_next is False
+    assert last.next_cursor is None
+
+
+# ---------------------------------------------------------------------------
+# Combined ordering + pagination tests
+# ---------------------------------------------------------------------------
+
+def test_ordering_with_offset_pagination() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.desc()],
+            pagination=OffsetPagination(offset=0, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert [b.price.value for b in page.items] == [50.0, 40.0]
+
+
+def test_spec_with_offset_pagination() -> None:
+    uow, _ = _make_fleet()
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price > 20.0,
+            ordering=[Boat.price.asc()],
+            pagination=OffsetPagination(offset=0, limit=2),
+        )
+    assert isinstance(page, Page)
+    assert page.total == 3  # 30, 40, 50
+    assert [b.price.value for b in page.items] == [30.0, 40.0]
+
+
+def test_ordering_with_cursor_pagination() -> None:
+    uow, _ = _make_fleet()
+    collected: list[float] = []
+    cursor: str | None = None
+
+    for _ in range(10):
+        with uow:
+            page = uow.repo.get_many(
+                Boat.price >= 0.0,
+                ordering=[Boat.price.desc()],
+                pagination=CursorPagination(limit=2, cursor=cursor),
+            )
+        assert isinstance(page, Page)
+        collected.extend(b.price.value for b in page.items)
+        if not page.has_next:
+            break
+        cursor = page.next_cursor
+
+    assert collected == [50.0, 40.0, 30.0, 20.0, 10.0]

@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field, fields
 from functools import wraps
-from typing import Any, ClassVar, Generic, Literal, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
+
+if TYPE_CHECKING:
+    from hike.ddd.pagination import OrderBy
 from uuid import UUID, uuid4
 
 from .common import DomainObject
@@ -101,6 +104,16 @@ class TerminalFieldProxy:
 
     def __hash__(self) -> int:
         return hash((self.field_name, self.entity_class))
+
+    def asc(self) -> "OrderBy":
+        """Return an ``OrderBy`` for this field ascending."""
+        from hike.ddd.pagination import OrderBy
+        return OrderBy(field=self, direction="asc")
+
+    def desc(self) -> "OrderBy":
+        """Return an ``OrderBy`` for this field descending."""
+        from hike.ddd.pagination import OrderBy
+        return OrderBy(field=self, direction="desc")
 
     def __repr__(self) -> str:
         return f"{self.root.entity_class.__name__}.{'.'.join(self.path)}"

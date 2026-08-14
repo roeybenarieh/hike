@@ -1,8 +1,21 @@
+from collections.abc import Sequence
 from copy import deepcopy
 from typing import Any, cast
 
 from hike.ddd.aggregate import Aggregate
 from hike.ddd.entity import EntityID
+from hike.ddd.pagination import (
+    OffsetPagination,
+    OrderBy,
+    Page,
+    PagePagination,
+    Pagination,
+    apply_ordering_in_memory,
+    cursor_position,
+    decode_cursor,
+    encode_cursor,
+    get_field_value,
+)
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -47,12 +60,59 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
             raise AggregateDoesNotExistError(identifier)
         return deepcopy(cast(TAggregate, aggregate))
 
-    def get_many(self, specification: ISpecification) -> list[TAggregate]:
-        return [
+    def _get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
+        matched: list[TAggregate] = [
             deepcopy(cast(TAggregate, agg))
             for agg in self.session.values()
             if specification.is_satisfied(agg)
         ]
+
+        ordering_list = list(ordering) if ordering else []
+        if ordering_list:
+            matched = apply_ordering_in_memory(matched, ordering_list)
+
+        if pagination is None:
+            return matched
+
+        if isinstance(pagination, OffsetPagination):
+            offset = pagination.offset
+            limit = pagination.limit
+            total = len(matched)
+            page_items = matched[offset : offset + limit]
+            return Page(items=page_items, total=total, has_next=(offset + limit) < total)
+
+        if isinstance(pagination, PagePagination):
+            offset = pagination.offset
+            limit = pagination.page_size
+            total = len(matched)
+            page_items = matched[offset : offset + limit]
+            return Page(items=page_items, total=total, has_next=(offset + limit) < total)
+
+        # CursorPagination
+        matched = apply_ordering_in_memory(matched, ordering_list, id_tiebreaker=True)
+        start = 0
+        if pagination.cursor is not None:
+            cursor_values, cursor_id = decode_cursor(pagination.cursor)
+            start = cursor_position(matched, cursor_values, cursor_id, ordering_list)
+
+        page_items = matched[start : start + pagination.limit]
+        has_next = (start + pagination.limit) < len(matched)
+        next_cursor: str | None = None
+        if page_items and has_next:
+            last = page_items[-1]
+            field_values = {
+                ".".join(ob.field.path): get_field_value(last, ob.field.path)
+                for ob in ordering_list
+            }
+            next_cursor = encode_cursor(field_values, last.id.value)
+
+        return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
     def update(self, aggregate: TAggregate) -> None:
         key = aggregate.id.value

@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, Generic, TypeVar, overload, final
 
 from hike.ddd.aggregate import Aggregate
 from hike.ddd.common import DomainError
 from hike.ddd.entity import EntityID
+from hike.ddd.pagination import OrderBy, Page, Pagination
 from hike.ddd.specifications import ISpecification
 
 TId = TypeVar("TId")
@@ -116,15 +118,66 @@ class IRepository(Generic[TId, TSession, TAggregate], ABC):
         :raise AggregateDoesNotExistError: if the aggregate does not exist.
         """
 
-    # TODO: implement pagination and ordering
-    @abstractmethod
-    def get_many(self, specification: ISpecification) -> list[TAggregate]:
+    @overload
+    def get_many(
+        self,
+        specification: ISpecification,
+    ) -> list[TAggregate]: ...
+
+    @overload
+    def get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: OrderBy | Sequence[OrderBy],
+    ) -> list[TAggregate]: ...
+
+    @overload
+    def get_many(
+        self,
+        specification: ISpecification,
+        *,
+        pagination: Pagination,
+        ordering: OrderBy | Sequence[OrderBy] | None = ...,
+    ) -> Page[TAggregate]: ...
+
+    @final
+    def get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: OrderBy | Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
         """Get multiple aggregates matching *specification*.
 
-        Note: query capabilities are limited — extend the repository for complex queries.
+        Without *pagination* returns a ``list[TAggregate]``, optionally sorted
+        by *ordering*.  With *pagination* returns a ``Page[TAggregate]``
+        containing the items, a total count (``None`` for cursor pagination),
+        and next-cursor metadata.
 
-        :param specification: criteria dictating which aggregates to return.
+        :param specification: Criteria dictating which aggregates to return.
+        :param ordering: Optional ordering — a single ``OrderBy`` or a sequence
+            of them.
+        :param pagination: Optional pagination — ``OffsetPagination``,
+            ``PagePagination``, or ``CursorPagination``.
         """
+        normalized: Sequence[OrderBy] | None
+        if isinstance(ordering, OrderBy):
+            normalized = [ordering]
+        else:
+            normalized = ordering
+        return self._get_many(specification, ordering=normalized, pagination=pagination)
+
+    @abstractmethod
+    def _get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
+        """Implement ``get_many``.  Override this in concrete repository subclasses."""
 
     @abstractmethod
     def update(self, aggregate: TAggregate) -> None:

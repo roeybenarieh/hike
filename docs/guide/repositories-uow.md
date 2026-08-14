@@ -93,6 +93,160 @@ The in-memory repository stores deep copies so each transaction sees an isolated
 
 ---
 
+## 5. Ordering Results
+
+Pass an `ordering` argument to `get_many` to sort the results. Each `OrderBy` is built from a field proxy using `.asc()` or `.desc()`.
+
+You can pass **a single `OrderBy`** directly, or **a list** when sorting by multiple fields:
+
+```python
+# Single field — pass directly (no list needed)
+with uow:
+    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.asc())
+
+# Single field descending
+with uow:
+    boats = uow.repo.get_many(Boat.price >= 0.0, ordering=Boat.price.desc())
+
+# Multi-field — pass a list; priority is left-to-right
+with uow:
+    boats = uow.repo.get_many(
+        Boat.price >= 0.0,
+        ordering=[Boat.category.asc(), Boat.price.desc()],
+    )
+```
+
+When `ordering` is provided **without** `pagination`, `get_many` still returns a plain `list` — fully backward-compatible.
+
+---
+
+## 6. Pagination
+
+Hike supports three styles of pagination, each suited to a different use case. When you pass a `pagination` argument, `get_many` returns a `Page[T]` object instead of a plain list.
+
+### `Page` — the result wrapper
+
+```python
+from hike.ddd import Page
+
+page.items      # list[TAggregate] — the current page of results
+page.total      # int | None — total matching records (None for cursor pagination)
+page.has_next   # bool — True if there are more results after this page
+page.next_cursor  # str | None — opaque token for the next cursor page
+```
+
+---
+
+### Offset pagination
+
+Best for: classic "page 1, page 2 …" UIs where you know the exact position to skip to.
+
+```python
+from hike.ddd import OffsetPagination
+
+with uow:
+    page = uow.repo.get_many(
+        Boat.price >= 0.0,
+        ordering=[Boat.price.asc()],
+        pagination=OffsetPagination(offset=0, limit=10),
+    )
+
+print(page.items)    # first 10 boats sorted by price
+print(page.total)    # total number of matching boats
+print(page.has_next) # True if there are more boats beyond offset+limit
+```
+
+Move to the next page by incrementing `offset` by `limit`:
+
+```python
+next_page = OffsetPagination(offset=10, limit=10)
+```
+
+---
+
+### Page-number pagination
+
+Best for: situations where you think in terms of page numbers (e.g., "give me page 3").
+
+```python
+from hike.ddd import PagePagination
+
+with uow:
+    page = uow.repo.get_many(
+        Boat.price >= 0.0,
+        ordering=[Boat.price.asc()],
+        pagination=PagePagination(page=2, page_size=10),  # page is 1-indexed
+    )
+
+print(page.items)    # boats 11–20 sorted by price
+print(page.total)    # total matching boats
+print(page.has_next) # True if page 3 exists
+```
+
+`PagePagination` is a convenience wrapper — `page=2, page_size=10` is equivalent to `OffsetPagination(offset=10, limit=10)`.
+
+---
+
+### Cursor pagination (keyset pagination)
+
+Best for: infinite-scroll UIs, large datasets, or any case where offset pagination gets slow. Cursor pagination stays fast at any depth because it uses a **keyset** (the values of the last item) instead of a row count to find the next page.
+
+```python
+from hike.ddd import CursorPagination
+
+cursor: str | None = None  # start from the beginning
+
+while True:
+    with uow:
+        page = uow.repo.get_many(
+            Boat.price >= 0.0,
+            ordering=[Boat.price.asc()],
+            pagination=CursorPagination(limit=10, cursor=cursor),
+        )
+
+    process(page.items)
+
+    if not page.has_next:
+        break
+    cursor = page.next_cursor  # pass the token to the next request
+```
+
+Key properties of cursor pagination:
+
+- `page.total` is always `None` — counting all rows defeats the performance benefit.
+- `page.next_cursor` is `None` when `has_next` is `False` (last page).
+- The cursor is an opaque, base64-encoded token. Do not construct or modify it manually.
+- Results are **stable** even when ordering fields have duplicate values — Hike automatically uses the aggregate `id` as an implicit tiebreaker.
+
+---
+
+### Combining specs, ordering, and pagination
+
+All three arguments can be combined freely:
+
+```python
+with uow:
+    page = uow.repo.get_many(
+        Boat.price > 20.0,                        # filter
+        ordering=[Boat.price.asc()],              # sort
+        pagination=OffsetPagination(offset=0, limit=5),  # page
+    )
+```
+
+---
+
+### Backward compatibility
+
+Calling `get_many` without a `pagination` argument always returns a plain `list`, so existing code needs no changes:
+
+```python
+# Old code — still works, still returns list[Boat]
+with uow:
+    boats = uow.repo.get_many(Boat.price > 0.0)
+```
+
+---
+
 ## Recommended External Reading
 
 - [Martin Fowler on the Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)

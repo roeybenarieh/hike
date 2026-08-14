@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast, get_origin, get_type_hints
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from hike.ddd.entity import Entity, EntityID, Field, from_dict, get_fields, to_dict
+from hike.ddd.pagination import (
+    OffsetPagination,
+    OrderBy,
+    Page,
+    PagePagination,
+    Pagination,
+    decode_cursor,
+    encode_cursor,
+)
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -20,6 +30,39 @@ from hike.ddd.specifications import ISpecification
 
 from .mappers import DictAutoSQLAlchemyMapper, VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
+
+
+def _build_sa_keyset_filter(
+    col_pairs: list[tuple[InstrumentedAttribute[Any], OrderBy]],
+    cursor_values: dict[str, Any],
+    cursor_id: Any,
+    id_col: InstrumentedAttribute[Any],
+) -> ColumnElement[Any]:
+    """Build a multi-column keyset WHERE clause for cursor pagination.
+
+    For ordering ``(c1 ASC, c2 DESC)`` with cursor values ``(v1, v2, vid)``:
+
+        (c1 > v1)
+        OR (c1 = v1 AND c2 < v2)
+        OR (c1 = v1 AND c2 = v2 AND id > vid)
+
+    The final clause uses ``id`` as a tiebreaker so pages are stable when
+    all explicit ordering fields are equal.
+    """
+    clauses: list[ColumnElement[Any]] = []
+    for i, (col_i, ob_i) in enumerate(col_pairs):
+        val_i = cursor_values[".".join(ob_i.field.path)]
+        prefix = [
+            col_pairs[j][0] == cursor_values[".".join(col_pairs[j][1].field.path)]
+            for j in range(i)
+        ]
+        gt_lt: ColumnElement[Any] = col_i > val_i if ob_i.direction == "asc" else col_i < val_i
+        clauses.append(and_(*prefix, gt_lt))
+
+    # Final clause: all ordering fields equal AND id > cursor_id
+    all_eq = [col == cursor_values[".".join(ob.field.path)] for col, ob in col_pairs]
+    clauses.append(and_(*all_eq, id_col > cursor_id))
+    return or_(*clauses)
 
 
 class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
@@ -225,12 +268,72 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             raise AggregateDoesNotExistError(identifier)
         return self._from_model(model)
 
-    def get_many(self, specification: ISpecification) -> list[TAggregate]:
+    def _get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
         visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
         specification.accept(visitor)
+
+        ordering_list = list(ordering) if ordering else []
+        col_pairs: list[tuple[InstrumentedAttribute[Any], OrderBy]] = [
+            (visitor.resolve_column(ob.field), ob) for ob in ordering_list
+        ]
         stmt = visitor.result()
-        rows = self.session.scalars(stmt).all()
-        return [self._from_model(row) for row in rows]
+        for col, ob in col_pairs:
+            stmt = stmt.order_by(sa_asc(col) if ob.direction == "asc" else sa_desc(col))
+
+        if pagination is None:
+            rows = self.session.scalars(stmt).all()
+            return [self._from_model(row) for row in rows]
+
+        id_col = self._mapper.get_column(self._model_class, "id")
+
+        if isinstance(pagination, OffsetPagination):
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total: int = self.session.scalar(count_stmt) or 0
+            rows = self.session.scalars(stmt.offset(pagination.offset).limit(pagination.limit)).all()
+            return Page(
+                items=[self._from_model(r) for r in rows],
+                total=total,
+                has_next=(pagination.offset + pagination.limit) < total,
+            )
+
+        if isinstance(pagination, PagePagination):
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total = self.session.scalar(count_stmt) or 0
+            offset = pagination.offset
+            rows = self.session.scalars(stmt.offset(offset).limit(pagination.page_size)).all()
+            return Page(
+                items=[self._from_model(r) for r in rows],
+                total=total,
+                has_next=(offset + pagination.page_size) < total,
+            )
+
+        # CursorPagination — keyset WHERE + implicit id ORDER BY + fetch limit+1
+        stmt = stmt.order_by(sa_asc(id_col))
+        if pagination.cursor is not None:
+            cursor_values, cursor_id = decode_cursor(pagination.cursor)
+            stmt = stmt.where(_build_sa_keyset_filter(col_pairs, cursor_values, cursor_id, id_col))
+
+        rows_list = list(self.session.scalars(stmt.limit(pagination.limit + 1)).all())
+        has_next = len(rows_list) > pagination.limit
+        page_rows = rows_list[: pagination.limit]
+        page_items = [self._from_model(r) for r in page_rows]
+
+        next_cursor: str | None = None
+        if has_next and page_rows:
+            last_model = page_rows[-1]
+            field_values: dict[str, Any] = {
+                ".".join(ob.field.path): getattr(last_model, ob.field.path[-1])
+                for _, ob in col_pairs
+            }
+            next_cursor = encode_cursor(field_values, getattr(last_model, "id"))
+
+        return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
     def count(self, specification: ISpecification) -> int:
         visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)

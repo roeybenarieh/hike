@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import json
 import uuid as _uuid_mod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any, cast
 
 from redis import Redis
 from redis.client import Pipeline
 
 from hike.ddd.entity import EntityID, from_dict, to_dict
+from hike.ddd.pagination import (
+    OffsetPagination,
+    OrderBy,
+    Page,
+    PagePagination,
+    Pagination,
+    apply_ordering_in_memory,
+    cursor_position,
+    decode_cursor,
+    encode_cursor,
+    get_field_value,
+)
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -108,7 +120,8 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
             raise AggregateDoesNotExistError(identifier)
         return self._deserialize(raw)
 
-    def get_many(self, specification: ISpecification) -> list[TAggregate]:
+    def _fetch_matching(self, specification: ISpecification) -> list[TAggregate]:
+        """Scan all keys and return aggregates matching *specification*."""
         result: list[TAggregate] = []
         for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
             raw = cast(bytes | None, self._client.get(key))
@@ -118,6 +131,61 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
             if specification.is_satisfied(aggregate):
                 result.append(aggregate)
         return result
+
+    def _get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
+        matched = self._fetch_matching(specification)
+
+        ordering_list = list(ordering) if ordering else []
+        if ordering_list:
+            matched = apply_ordering_in_memory(matched, ordering_list)
+
+        if pagination is None:
+            return matched
+
+        if isinstance(pagination, OffsetPagination):
+            total = len(matched)
+            page_items = matched[pagination.offset : pagination.offset + pagination.limit]
+            return Page(
+                items=page_items,
+                total=total,
+                has_next=(pagination.offset + pagination.limit) < total,
+            )
+
+        if isinstance(pagination, PagePagination):
+            total = len(matched)
+            offset = pagination.offset
+            page_items = matched[offset : offset + pagination.page_size]
+            return Page(
+                items=page_items,
+                total=total,
+                has_next=(offset + pagination.page_size) < total,
+            )
+
+        # CursorPagination — same keyset logic as InMemory (all in-memory anyway)
+        matched = apply_ordering_in_memory(matched, ordering_list, id_tiebreaker=True)
+        start = 0
+        if pagination.cursor is not None:
+            cursor_values, cursor_id = decode_cursor(pagination.cursor)
+            start = cursor_position(matched, cursor_values, cursor_id, ordering_list)
+
+        page_items = matched[start : start + pagination.limit]
+        has_next = (start + pagination.limit) < len(matched)
+        next_cursor: str | None = None
+        if page_items and has_next:
+            last = page_items[-1]
+            field_values = {
+                ".".join(ob.field.path): get_field_value(last, ob.field.path)
+                for ob in ordering_list
+            }
+            next_cursor = encode_cursor(field_values, last.id.value)
+
+        return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
     def update(self, aggregate: TAggregate) -> None:
         key = self._key(aggregate.id.value)

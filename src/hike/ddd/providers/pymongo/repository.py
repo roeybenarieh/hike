@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
+from pymongo import ASCENDING, DESCENDING
 from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 
 from hike.ddd.entity import EntityID, from_dict, to_dict
+from hike.ddd.pagination import (
+    OffsetPagination,
+    OrderBy,
+    Page,
+    PagePagination,
+    Pagination,
+    decode_cursor,
+    encode_cursor,
+)
 from hike.ddd.repository import (
     AggregateAlreadyExistError,
     AggregateDoesNotExistError,
@@ -20,6 +31,49 @@ from hike.ddd.repository import (
 from hike.ddd.specifications import ISpecification
 
 from .visitor import MongoDBEvaluationSpecificationVisitor
+
+
+def _build_mongo_keyset_filter(
+    ordering: list[OrderBy],
+    cursor_values: dict[str, Any],
+    cursor_id: Any,
+) -> dict[str, Any]:
+    """Build a MongoDB ``$or`` keyset filter for cursor pagination.
+
+    For ordering ``[price ASC, name DESC]`` with cursor values ``(v1, v2, vid)``:
+
+        {"$or": [
+            {"price": {"$gt": v1}},
+            {"price": {"$eq": v1}, "name": {"$lt": v2}},
+            {"price": {"$eq": v1}, "name": {"$eq": v2}, "id": {"$gt": vid}},
+        ]}
+    """
+    clauses: list[dict[str, Any]] = []
+    for i, ob_i in enumerate(ordering):
+        path_i = ".".join(ob_i.field.path)
+        val_i = cursor_values[path_i]
+        prefix: dict[str, Any] = {
+            ".".join(ordering[j].field.path): {"$eq": cursor_values[".".join(ordering[j].field.path)]}
+            for j in range(i)
+        }
+        op = "$gt" if ob_i.direction == "asc" else "$lt"
+        clauses.append({**prefix, path_i: {op: val_i}})
+
+    # Final clause: all ordering fields equal AND id > cursor_id
+    all_eq: dict[str, Any] = {
+        ".".join(ob.field.path): {"$eq": cursor_values[".".join(ob.field.path)]}
+        for ob in ordering
+    }
+    clauses.append({**all_eq, "id": {"$gt": cursor_id}})
+    return {"$or": clauses}
+
+
+def _get_doc_value(doc: dict[str, Any], path: list[str]) -> Any:
+    """Walk *path* on a MongoDB document dict, traversing nested dicts."""
+    val: Any = doc
+    for name in path:
+        val = val[name]
+    return val
 
 
 class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
@@ -86,11 +140,81 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             raise AggregateDoesNotExistError(identifier)
         return self._from_doc(document)
 
-    def get_many(self, specification: ISpecification) -> list[TAggregate]:
+    def _get_many(
+        self,
+        specification: ISpecification,
+        *,
+        ordering: Sequence[OrderBy] | None = None,
+        pagination: Pagination | None = None,
+    ) -> list[TAggregate] | Page[TAggregate]:
         visitor = MongoDBEvaluationSpecificationVisitor()
         specification.accept(visitor)
-        cursor = self._collection.find(visitor.filters, session=self._session)
-        return [self._from_doc(doc) for doc in cursor]
+        base_filter = visitor.filters
+
+        ordering_list = list(ordering) if ordering else []
+        sort_spec = [
+            (".".join(ob.field.path), ASCENDING if ob.direction == "asc" else DESCENDING)
+            for ob in ordering_list
+        ]
+
+        if pagination is None:
+            cur = self._collection.find(base_filter, session=self._session)
+            if sort_spec:
+                cur = cur.sort(sort_spec)
+            return [self._from_doc(doc) for doc in cur]
+
+        if isinstance(pagination, OffsetPagination):
+            total = self._collection.count_documents(base_filter, session=self._session)
+            cur = self._collection.find(base_filter, session=self._session)
+            if sort_spec:
+                cur = cur.sort(sort_spec)
+            cur = cur.skip(pagination.offset).limit(pagination.limit)
+            return Page(
+                items=[self._from_doc(doc) for doc in cur],
+                total=total,
+                has_next=(pagination.offset + pagination.limit) < total,
+            )
+
+        if isinstance(pagination, PagePagination):
+            total = self._collection.count_documents(base_filter, session=self._session)
+            offset = pagination.offset
+            cur = self._collection.find(base_filter, session=self._session)
+            if sort_spec:
+                cur = cur.sort(sort_spec)
+            cur = cur.skip(offset).limit(pagination.page_size)
+            return Page(
+                items=[self._from_doc(doc) for doc in cur],
+                total=total,
+                has_next=(offset + pagination.page_size) < total,
+            )
+
+        # CursorPagination — keyset $or filter + implicit id sort + fetch limit+1
+        sort_spec_with_id = sort_spec + [("id", ASCENDING)]
+        query_filter: dict[str, Any] = dict(base_filter)
+        if pagination.cursor is not None:
+            cursor_values, cursor_id = decode_cursor(pagination.cursor)
+            keyset = _build_mongo_keyset_filter(ordering_list, cursor_values, cursor_id)
+            query_filter = {"$and": [base_filter, keyset]} if base_filter else keyset
+
+        cur = self._collection.find(query_filter, session=self._session)
+        if sort_spec_with_id:
+            cur = cur.sort(sort_spec_with_id)
+        docs = list(cur.limit(pagination.limit + 1))
+
+        has_next = len(docs) > pagination.limit
+        page_docs = docs[: pagination.limit]
+        page_items = [self._from_doc(doc) for doc in page_docs]
+
+        next_cursor: str | None = None
+        if has_next and page_docs:
+            last_doc = page_docs[-1]
+            field_values = {
+                ".".join(ob.field.path): _get_doc_value(last_doc, ob.field.path)
+                for ob in ordering_list
+            }
+            next_cursor = encode_cursor(field_values, last_doc["id"])
+
+        return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
     def update(self, aggregate: TAggregate) -> None:
         v = get_version(aggregate)

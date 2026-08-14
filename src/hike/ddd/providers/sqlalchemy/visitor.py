@@ -162,7 +162,7 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         spec.right.accept(self)
         return left, self._pop_filters()
 
-    def _resolve_column(self, proxy: TerminalFieldProxy) -> InstrumentedAttribute[Any]:
+    def resolve_column(self, proxy: TerminalFieldProxy) -> InstrumentedAttribute[Any]:
         """Walk the FieldProxy chain and return the SQLAlchemy column for the leaf field.
 
         First checks ``mapper.resolve_path`` (used by embedded mappers that keep all fields
@@ -193,7 +193,7 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         self,
         spec: BaseFilterSpecification,
     ) -> tuple[InstrumentedAttribute[Any], Any]:
-        return self._resolve_column(spec.field), spec.operand
+        return self.resolve_column(spec.field), spec.operand
 
     def visit_and(self, spec: AndSpecification) -> None:
         left, right = self._visit_left_right_spec(spec)
