@@ -10,7 +10,7 @@ from hike.value_object import (
     max_length,
     matches,
 )
-from hike.entity import Entity, EntityID, Field, UuidEntity, command, vo_field
+from hike.entity import Entity, EntityID, Field, UuidEntity, command, field, vo
 from hike.aggregate import Aggregate, UuidAggregate
 from hike.rules import Rule, RuleBrokenError, FunctionalRule, rule
 from hike.domain_event import DomainEvent
@@ -66,7 +66,8 @@ __all__ = [
     "Field",
     "UuidEntity",
     "command",
-    "vo_field",
+    "field",
+    "vo",
     "Aggregate",
     "UuidAggregate",
     "Rule",

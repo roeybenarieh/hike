@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, command, non_empty, non_negative, rule
-from hike.ddd.providers.in_memory import InMemoryDBContext, InMemoryRepository
+from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,8 @@ print(f"Saved: {boat.name.value} (id={boat.id.value})")
 # Query with a specification
 # ---------------------------------------------------------------------------
 
-cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=default_engine)
+cheap_engine = Engine(name=EngineName("tiny engine"), price=Price(49.99))
+cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=cheap_engine)
 with uow:
     uow.repo.save(cheap)
     uow.commit()
@@ -105,7 +106,7 @@ print(f"Updated price: {fetched.price.value}")
 # Rollback on error
 # ---------------------------------------------------------------------------
 
-ghost = Boat(name=BoatName("Ghost"), price=Price(1.0), engine=default_engine)
+ghost = Boat(name=BoatName("Ghost"), price=Price(10.0), engine=Engine(name=EngineName("tiny"), price=Price(1.0)))
 try:
     with uow:
         uow.repo.save(ghost)

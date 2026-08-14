@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from hike import EqualSpecification, Field, UuidEntity, vo_field, ValueObject
+from hike import EqualSpecification, Field, UuidEntity, field, ValueObject
 from examples.value_objects import Name
 
 
@@ -10,7 +10,7 @@ class DateTime(ValueObject[datetime]):
 
 class Ship(UuidEntity):
     name: Field[Name]
-    created_at: Field[DateTime] = vo_field(default_factory=lambda: DateTime(datetime.now()))
+    created_at: Field[DateTime] = field(default_factory=lambda: DateTime(datetime.now()))
     # something: str # TODO: should be banned
 
 

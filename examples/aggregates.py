@@ -8,7 +8,7 @@ Covers:
 - RuleBrokenError raised when an invariant is violated
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dc_field
 
 from hike import (
     DomainEvent,
@@ -19,10 +19,10 @@ from hike import (
     UuidEntity,
     ValueObject,
     command,
+    field,
     non_empty,
     non_negative,
     rule,
-    vo_field,
 )
 
 
@@ -90,11 +90,11 @@ class Order(UuidAggregate):
     # including subclass construction. Rules are collected from the full MRO.
     __invariants__ = [order_total_matches_items]
 
-    total: Field[Money] = vo_field(default_factory=lambda: Money(0))
+    total: Field[Money] = field(default_factory=lambda: Money(0))
     # init=False keeps these out of the constructor signature; dataclass
     # initialises them from their factories before __post_init__.
-    items: list[OrderItem] = field(default_factory=list[OrderItem], init=False)
-    _shipped: bool = field(default=False, init=False)
+    items: list[OrderItem] = dc_field(default_factory=lambda: [], init=False)
+    _shipped: bool = dc_field(default=False, init=False)
 
     @property
     def shipped(self) -> bool:
