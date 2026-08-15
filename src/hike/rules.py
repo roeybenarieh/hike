@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, overload
+from typing import overload
 
 from .common import DomainError, DomainObject
 
 
-class Rule[T: DomainObject](ABC):
+class _AnyRule(ABC):
+    """Internal base shared by Rule and CrossAggregateRule."""
+
+
+class Rule[T: DomainObject](_AnyRule, ABC):
     """Abstract business rule.
 
     ``is_broken`` returns ``True`` when the rule is violated.
@@ -20,9 +24,26 @@ class Rule[T: DomainObject](ABC):
             raise RuleBrokenError(self)
 
 
+class CrossAggregateRule[T](_AnyRule, ABC):
+    """A rule whose invariant spans more than one aggregate.
+
+    ``T`` is a context object (typically a ``dataclass``) holding all
+    aggregates involved.  Must be checked explicitly — ``@command`` never
+    auto-checks cross-aggregate rules.
+    """
+
+    @abstractmethod
+    def is_broken(self, context: T) -> bool: ...
+
+    def check(self, context: T) -> None:
+        """Raise ``RuleBrokenError`` if the rule is violated."""
+        if self.is_broken(context):
+            raise RuleBrokenError(self)
+
+
 class RuleBrokenError(DomainError):
-    def __init__(self, broken_rule: Rule[Any]):
-        self.broken_rule: Rule[Any] = broken_rule
+    def __init__(self, broken_rule: _AnyRule):
+        self.broken_rule: _AnyRule = broken_rule
 
 
 class FunctionalRule[T: DomainObject](Rule[T]):

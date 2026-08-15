@@ -29,6 +29,7 @@ Hike provides ready‑made, highly type‑safe building blocks so you don’t ha
 | **[Specifications](guide/specifications.md)** | Reusable business rules and query filters you can combine like `(age > 18) & (status == “active”)`. | Encapsulates complex querying logic so you can build expressive, composable rules. |
 | **[Repositories & Unit of Work](guide/repositories-uow.md)** | Gateways for persisting data (`Repository`), a transactional boundary for grouped saves (`Unit of Work`), and built-in ordering and pagination (`OffsetPagination`, `PagePagination`, `CursorPagination`). | Keeps your business logic independent of the database and guarantees safe, atomic database operations with efficient, composable querying. |
 | **[SQLAlchemy Mappers](guide/sqlalchemy-mappers.md)** | Four mapper strategies: auto-inferred relational, auto-inferred flat, explicit ORM models, or explicit single-table. | Zero boilerplate for common cases; full control when you need it. |
+| **[Cross-Aggregate Invariants](guide/cross-aggregate-invariants.md)** | `CrossAggregateRule`, `DomainService`, `@authority`, `EventBus`, and `ProcessManager` — patterns for rules that span more than one aggregate. | Enforces business rules that cross aggregate boundaries with strong or eventual consistency, whichever fits the use case. |
 
 ---
 

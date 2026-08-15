@@ -12,8 +12,9 @@ class SQLAlchemyDBContext(DBContext[Session]):
 
         factory = sessionmaker(bind=engine)
         ctx = SQLAlchemyDBContext(factory)
-        with UnitOfWork(repos, ctx):
-            repo.add(aggregate)
+        uow = UnitOfWork(ctx)
+        with uow(repo):
+            repo.save(aggregate)
             uow.commit()
     """
 

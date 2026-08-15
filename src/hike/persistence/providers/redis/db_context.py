@@ -16,8 +16,9 @@ class RedisDBContext(DBContext[Pipeline]):
 
         client = Redis(host="localhost", port=6379)
         ctx = RedisDBContext(client)
-        with UnitOfWork(repos, ctx):
-            repo.add(aggregate)
+        uow = UnitOfWork(ctx)
+        with uow(repo):
+            repo.save(aggregate)
             uow.commit()
     """
 

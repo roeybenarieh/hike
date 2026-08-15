@@ -18,8 +18,9 @@ class PyMongoDBContext(DBContext[ClientSession]):
 
         client = MongoClient("mongodb://localhost:27017")
         ctx = PyMongoDBContext(client)
-        with UnitOfWork(repos, ctx):
-            repo.add(aggregate)
+        uow = UnitOfWork(ctx)
+        with uow(repo):
+            repo.save(aggregate)
             uow.commit()
     """
 

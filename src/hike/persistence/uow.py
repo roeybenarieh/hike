@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Any, Self
 
-from hike.aggregate import Aggregate
 from hike.persistence.repository import IRepository
 
 
@@ -36,20 +35,28 @@ class DBContext[TSession](ABC):
         """Close a transaction after finishing successfully. Destroys ``session`` and releases any held resources."""
 
 
-class UnitOfWork[TSessions, TId, TAggregate: Aggregate[Any]]:
+class UnitOfWork[TSessions]:
 
-    def __init__(
-            self,
-            context: DBContext[TSessions],
-            repo: IRepository[TId, TSessions, TAggregate]
-    ):
+    def __init__(self, context: DBContext[TSessions]) -> None:
         self._context = context
-        self.repo = repo
+        self._repos: tuple[IRepository[Any, TSessions, Any], ...] = ()
+        self._auto_commit: bool = False
 
-    def __enter__(self, auto_commit = False) -> Self:
+    def __call__(
+            self,
+            *repos: IRepository[Any, TSessions, Any],
+            auto_commit: bool = False,
+    ) -> Self:
+        self._repos = repos
         self._auto_commit = auto_commit
+        return self
+
+    def __enter__(self) -> Self:
+        if not self._repos:
+            raise ValueError("UnitOfWork requires at least one repository")
         self._context.begin()
-        self.repo.session = self._context.session
+        for repo in self._repos:
+            repo.session = self._context.session
         return self
 
     def __exit__(
@@ -58,6 +65,8 @@ class UnitOfWork[TSessions, TId, TAggregate: Aggregate[Any]]:
             _exc_val: BaseException | None,
             _exc_tb: TracebackType | None,
     ) -> None:
+        self._repos = ()
+        self._auto_commit = False
         if exc_type:
             self._context.rollback()
             return

@@ -11,9 +11,11 @@ from hike.value_object import (
     matches,
 )
 from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
-from hike.aggregate import Aggregate, UuidAggregate
-from hike.rules import Rule, RuleBrokenError, FunctionalRule, rule
-from hike.domain_event import DomainEvent
+from hike.aggregate import Aggregate, UuidAggregate, authority
+from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule
+from hike.domain_event import DomainEvent, EventBus, InMemoryEventBus
+from hike.domain_service import DomainService
+from hike.process_manager import ProcessManager
 from hike.persistence.repository import (
     IRepository,
     RepositoryError,
@@ -69,11 +71,17 @@ __all__ = [
     "field",
     "Aggregate",
     "UuidAggregate",
+    "authority",
     "Rule",
+    "CrossAggregateRule",
     "RuleBrokenError",
     "FunctionalRule",
     "rule",
     "DomainEvent",
+    "EventBus",
+    "InMemoryEventBus",
+    "DomainService",
+    "ProcessManager",
     "IRepository",
     "RepositoryError",
     "DBConnectionError",

@@ -190,7 +190,29 @@ Engine(speed=Speed(-1))     # raises RuleBrokenError
 
 ---
 
-## 7. Advanced: Subclassing `Rule` Directly
+## 7. Rules That Span Multiple Aggregates
+
+`Rule[T]` operates on a **single** aggregate. When a business rule involves two or more aggregates (e.g., "no duplicate email across all users", "a team cannot exceed its roster size"), use `CrossAggregateRule[T]` and a `DomainService` instead.
+
+```python
+from dataclasses import dataclass
+from hike import CrossAggregateRule, RuleBrokenError
+
+@dataclass
+class UniqueEmailContext:
+    email: str
+    existing_count: int
+
+class UniqueEmailRule(CrossAggregateRule[UniqueEmailContext]):
+    def is_broken(self, context: UniqueEmailContext) -> bool:
+        return context.existing_count > 0
+```
+
+Cross-aggregate rules are checked **explicitly** (they cannot be listed in `__invariants__`). See the full guide: **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)**.
+
+---
+
+## 8. Advanced: Subclassing `Rule` Directly
 
 The `@rule` decorator is a shortcut for the most common case. For complex rules with their own state or helper methods, subclass `Rule[T]` directly:
 
@@ -241,4 +263,4 @@ def mutate(self, ...) -> None: ...
 def mutate(self, ...) -> None: ...
 ```
 
-**Next Step**: Learn how to persist your aggregates using **[Repositories & Unit of Work](repositories-uow.md)**.
+**Next Step**: Learn how to persist your aggregates using **[Repositories & Unit of Work](repositories-uow.md)**, or jump to **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)** for rules that span multiple aggregates.

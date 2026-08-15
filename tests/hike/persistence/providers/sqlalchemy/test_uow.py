@@ -186,67 +186,50 @@ def truncate_tables(pg_engine: SAEngine) -> None:  # type: ignore[misc]
 
 
 @pytest.fixture
-def uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
+def uow(pg_engine: SAEngine) -> UnitOfWork[Session]:
     factory = sessionmaker(pg_engine)
     ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, dict_boat_mapper)
-    return UnitOfWork(ctx, repo=repo)
+    return UnitOfWork(ctx)
 
 
 @pytest.fixture
-def motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, dict_motorboat_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Boat]:  # noqa: ARG001
+    return SQLAlchemyRepository(Boat, dict_boat_mapper)
 
 
 @pytest.fixture
-def journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, dict_journey_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def motorboat_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, MotorBoat]:  # noqa: ARG001
+    return SQLAlchemyRepository(MotorBoat, dict_motorboat_mapper)
 
 
 @pytest.fixture
-def flat_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, flat_motorboat_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def journey_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Journey]:  # noqa: ARG001
+    return SQLAlchemyRepository(Journey, dict_journey_mapper)
 
 
 @pytest.fixture
-def flat_journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, flat_journey_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def flat_motorboat_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, MotorBoat]:  # noqa: ARG001
+    return SQLAlchemyRepository(MotorBoat, flat_motorboat_mapper)
 
 
 @pytest.fixture
-def auto_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Boat]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, auto_boat_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def flat_journey_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Journey]:  # noqa: ARG001
+    return SQLAlchemyRepository(Journey, flat_journey_mapper)
 
 
 @pytest.fixture
-def auto_motorboat_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, MotorBoat]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, MotorBoat] = SQLAlchemyRepository(MotorBoat, auto_motorboat_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def auto_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Boat]:  # noqa: ARG001
+    return SQLAlchemyRepository(Boat, auto_boat_mapper)
 
 
 @pytest.fixture
-def auto_journey_uow(pg_engine: SAEngine) -> UnitOfWork[Session, UUID, Journey]:
-    factory = sessionmaker(pg_engine)
-    ctx = SQLAlchemyDBContext(factory)
-    repo: SQLAlchemyRepository[UUID, Journey] = SQLAlchemyRepository(Journey, auto_journey_mapper)
-    return UnitOfWork(ctx, repo=repo)
+def auto_motorboat_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, MotorBoat]:  # noqa: ARG001
+    return SQLAlchemyRepository(MotorBoat, auto_motorboat_mapper)
+
+
+@pytest.fixture
+def auto_journey_repo(pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Journey]:  # noqa: ARG001
+    return SQLAlchemyRepository(Journey, auto_journey_mapper)
 
 
 # ---------------------------------------------------------------------------
@@ -264,175 +247,175 @@ def make_motorboat(name: str, boat_price: float, engine_price: float) -> MotorBo
 # ---------------------------------------------------------------------------
 
 
-def test_save_and_get_one(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_save_and_get_one(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
 
-    with uow:
-        uow.repo.save(boat)
+    with uow(repo):
+        repo.save(boat)
         uow.commit()
 
-    with uow:
-        fetched = uow.repo.get_one(boat.id)
+    with uow(repo):
+        fetched = repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
-def test_update(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_update(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Old Name"), price=Price(100.0))
 
-    with uow:
-        uow.repo.save(boat)
+    with uow(repo):
+        repo.save(boat)
         uow.commit()
 
     boat.price = Price(200.0)
-    with uow:
-        uow.repo.update(boat)
+    with uow(repo):
+        repo.update(boat)
         uow.commit()
 
-    with uow:
-        fetched = uow.repo.get_one(boat.id)
+    with uow(repo):
+        fetched = repo.get_one(boat.id)
 
     assert fetched.price == Price(200.0)
 
 
-def test_get_many_with_spec(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_get_many_with_spec(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
     boat_b = Boat(name=Name("Beta"), price=Price(50.0))
 
-    with uow:
-        uow.repo.save(boat_a)
-        uow.repo.save(boat_b)
+    with uow(repo):
+        repo.save(boat_a)
+        repo.save(boat_b)
         uow.commit()
 
-    with uow:
-        results = uow.repo.get_many(Boat.price > 20.0)
+    with uow(repo):
+        results = repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
     assert results[0].name == Name("Beta")
 
 
-def test_count_with_spec(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_count_with_spec(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
     boat_b = Boat(name=Name("Beta"), price=Price(50.0))
     boat_c = Boat(name=Name("Gamma"), price=Price(80.0))
 
-    with uow:
-        uow.repo.save(boat_a)
-        uow.repo.save(boat_b)
-        uow.repo.save(boat_c)
+    with uow(repo):
+        repo.save(boat_a)
+        repo.save(boat_b)
+        repo.save(boat_c)
         uow.commit()
 
-    with uow:
-        assert uow.repo.count(Boat.price > 20.0) == 2
+    with uow(repo):
+        assert repo.count(Boat.price > 20.0) == 2
 
-    with uow:
-        assert uow.repo.count(Boat.price > 100.0) == 0
+    with uow(repo):
+        assert repo.count(Boat.price > 100.0) == 0
 
 
-def test_upsert_creates_then_updates(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_upsert_creates_then_updates(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Ghost"), price=Price(1.0))
 
-    with uow:
-        uow.repo.upsert(boat)
+    with uow(repo):
+        repo.upsert(boat)
         uow.commit()
 
     boat.price = Price(2.0)
-    with uow:
-        uow.repo.upsert(boat)
+    with uow(repo):
+        repo.upsert(boat)
         uow.commit()
 
-    with uow:
-        fetched = uow.repo.get_one(boat.id)
+    with uow(repo):
+        fetched = repo.get_one(boat.id)
 
     assert fetched.price == Price(2.0)
 
 
-def test_delete(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_delete(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Doomed"), price=Price(0.01))
 
-    with uow:
-        uow.repo.save(boat)
+    with uow(repo):
+        repo.save(boat)
         uow.commit()
 
-    with uow:
-        uow.repo.delete(boat)
+    with uow(repo):
+        repo.delete(boat)
         uow.commit()
 
-    with uow:
+    with uow(repo):
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id)
+            repo.get_one(boat.id)
 
 
-def test_save_duplicate_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_save_duplicate_raises(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Twin"), price=Price(50.0))
 
-    with uow:
-        uow.repo.save(boat)
+    with uow(repo):
+        repo.save(boat)
         uow.commit()
 
     with pytest.raises(AggregateAlreadyExistError):
-        with uow:
-            uow.repo.save(boat)
+        with uow(repo):
+            repo.save(boat)
             uow.commit()
 
 
-def test_rollback_on_exception(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_rollback_on_exception(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Rollback Boat"), price=Price(99.0))
 
     with pytest.raises(ValueError, match="simulated failure"):
-        with uow:
-            uow.repo.save(boat)
+        with uow(repo):
+            repo.save(boat)
             raise ValueError("simulated failure")
 
-    with uow:
+    with uow(repo):
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(boat.id)
+            repo.get_one(boat.id)
 
 
-def test_optimistic_lock_conflict(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_optimistic_lock_conflict(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     """Second writer loses when it holds a stale version."""
     boat = Boat(name=Name("Contested"), price=Price(100.0))
 
-    with uow:
-        uow.repo.save(boat)
+    with uow(repo):
+        repo.save(boat)
         uow.commit()
 
-    with uow:
-        copy_a = uow.repo.get_one(boat.id)
-    with uow:
-        copy_b = uow.repo.get_one(boat.id)
+    with uow(repo):
+        copy_a = repo.get_one(boat.id)
+    with uow(repo):
+        copy_b = repo.get_one(boat.id)
 
     assert get_version(copy_a) == 0
     assert get_version(copy_b) == 0
 
     copy_a.price = Price(200.0)
-    with uow:
-        uow.repo.update(copy_a)
+    with uow(repo):
+        repo.update(copy_a)
         uow.commit()
     assert get_version(copy_a) == 1
 
     copy_b.price = Price(300.0)
     with pytest.raises(OptimisticLockError):
-        with uow:
-            uow.repo.update(copy_b)
+        with uow(repo):
+            repo.update(copy_b)
             uow.commit()
 
 
-def test_get_one_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_get_one_missing_raises(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     from uuid import uuid4
 
-    with uow:
+    with uow(repo):
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.get_one(EntityID(uuid4()))
+            repo.get_one(EntityID(uuid4()))
 
 
-def test_delete_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_delete_missing_raises(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     ghost = Boat(name=Name("Never Saved"), price=Price(1.0))
 
-    with uow:
+    with uow(repo):
         with pytest.raises(AggregateDoesNotExistError):
-            uow.repo.delete(ghost)
+            repo.delete(ghost)
 
 
 # ---------------------------------------------------------------------------
@@ -440,74 +423,74 @@ def test_delete_missing_raises(uow: UnitOfWork[Session, UUID, Boat]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_motorboat_save_and_get_one(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_motorboat_save_and_get_one(uow: UnitOfWork[Session], motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
 
-    with motorboat_uow:
-        motorboat_uow.repo.save(boat)
-        motorboat_uow.commit()
+    with uow(motorboat_repo):
+        motorboat_repo.save(boat)
+        uow.commit()
 
-    with motorboat_uow:
-        fetched = motorboat_uow.repo.get_one(boat.id)
+    with uow(motorboat_repo):
+        fetched = motorboat_repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
     assert fetched.engine.price == Price(1_200.0)
 
 
-def test_motorboat_filter_by_engine_price(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_motorboat_filter_by_engine_price(uow: UnitOfWork[Session], motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     """MotorBoat.engine.price > X produces a JOIN query and returns correct boats."""
     expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
     cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
 
-    with motorboat_uow:
-        motorboat_uow.repo.save(expensive)
-        motorboat_uow.repo.save(cheap)
-        motorboat_uow.commit()
+    with uow(motorboat_repo):
+        motorboat_repo.save(expensive)
+        motorboat_repo.save(cheap)
+        uow.commit()
 
-    with motorboat_uow:
-        results = motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
+    with uow(motorboat_repo):
+        results = motorboat_repo.get_many(MotorBoat.engine.price > 1_000.0)
 
     assert len(results) == 1
     assert results[0].name == Name("Yacht")
 
 
-def test_motorboat_combined_spec(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_motorboat_combined_spec(uow: UnitOfWork[Session], motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     """Spec combining boat price and engine price produces correct SQL with one JOIN."""
     a = make_motorboat("A", boat_price=1_000.0, engine_price=500.0)
     b = make_motorboat("B", boat_price=5_000.0, engine_price=500.0)
     c = make_motorboat("C", boat_price=5_000.0, engine_price=2_000.0)
 
-    with motorboat_uow:
-        motorboat_uow.repo.save(a)
-        motorboat_uow.repo.save(b)
-        motorboat_uow.repo.save(c)
-        motorboat_uow.commit()
+    with uow(motorboat_repo):
+        motorboat_repo.save(a)
+        motorboat_repo.save(b)
+        motorboat_repo.save(c)
+        uow.commit()
 
     # boat price > 2000 AND engine price > 1000 → only C
     spec = (MotorBoat.price > 2_000.0) & (MotorBoat.engine.price > 1_000.0)
-    with motorboat_uow:
-        results = motorboat_uow.repo.get_many(spec)
+    with uow(motorboat_repo):
+        results = motorboat_repo.get_many(spec)
 
     assert len(results) == 1
     assert results[0].name == Name("C")
 
 
-def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_motorboat_update_engine_price(uow: UnitOfWork[Session], motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
 
-    with motorboat_uow:
-        motorboat_uow.repo.save(boat)
-        motorboat_uow.commit()
+    with uow(motorboat_repo):
+        motorboat_repo.save(boat)
+        uow.commit()
 
     # Swap to a pricier engine
     boat.update_engine_price(Price(3_000.0))
-    with motorboat_uow:
-        motorboat_uow.repo.update(boat)
-        motorboat_uow.commit()
+    with uow(motorboat_repo):
+        motorboat_repo.update(boat)
+        uow.commit()
 
-    with motorboat_uow:
-        fetched = motorboat_uow.repo.get_one(boat.id)
+    with uow(motorboat_repo):
+        fetched = motorboat_repo.get_one(boat.id)
 
     assert fetched.engine.price == Price(3_000.0)
 
@@ -517,37 +500,37 @@ def test_motorboat_update_engine_price(motorboat_uow: UnitOfWork[Session, UUID, 
 # ---------------------------------------------------------------------------
 
 
-def test_journey_save_and_get_one_with_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+def test_journey_save_and_get_one_with_checkpoints(uow: UnitOfWork[Session], journey_repo: SQLAlchemyRepository[UUID, Journey]) -> None:
     cp1 = Checkpoint(name=Name("Paris"))
     cp2 = Checkpoint(name=Name("Lyon"))
     journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
 
-    with journey_uow:
-        journey_uow.repo.save(journey)
-        journey_uow.commit()
+    with uow(journey_repo):
+        journey_repo.save(journey)
+        uow.commit()
 
-    with journey_uow:
-        fetched = journey_uow.repo.get_one(journey.id)
+    with uow(journey_repo):
+        fetched = journey_repo.get_one(journey.id)
 
     assert fetched.name == Name("France Trip")
     assert len(fetched.checkpoints) == 2
     assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
 
 
-def test_journey_update_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+def test_journey_update_checkpoints(uow: UnitOfWork[Session], journey_repo: SQLAlchemyRepository[UUID, Journey]) -> None:
     journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
 
-    with journey_uow:
-        journey_uow.repo.save(journey)
-        journey_uow.commit()
+    with uow(journey_repo):
+        journey_repo.save(journey)
+        uow.commit()
 
     journey.checkpoints.append(Checkpoint(name=Name("B")))
-    with journey_uow:
-        journey_uow.repo.update(journey)
-        journey_uow.commit()
+    with uow(journey_repo):
+        journey_repo.update(journey)
+        uow.commit()
 
-    with journey_uow:
-        fetched = journey_uow.repo.get_one(journey.id)
+    with uow(journey_repo):
+        fetched = journey_repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
 
@@ -557,51 +540,51 @@ def test_journey_update_checkpoints(journey_uow: UnitOfWork[Session, UUID, Journ
 # ---------------------------------------------------------------------------
 
 
-def test_flat_motorboat_save_and_get_one(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_flat_motorboat_save_and_get_one(uow: UnitOfWork[Session], flat_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
 
-    with flat_motorboat_uow:
-        flat_motorboat_uow.repo.save(boat)
-        flat_motorboat_uow.commit()
+    with uow(flat_motorboat_repo):
+        flat_motorboat_repo.save(boat)
+        uow.commit()
 
-    with flat_motorboat_uow:
-        fetched = flat_motorboat_uow.repo.get_one(boat.id)
+    with uow(flat_motorboat_repo):
+        fetched = flat_motorboat_repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
     assert fetched.engine.price == Price(1_200.0)
 
 
-def test_flat_motorboat_filter_by_engine_price(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_flat_motorboat_filter_by_engine_price(uow: UnitOfWork[Session], flat_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
     cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
 
-    with flat_motorboat_uow:
-        flat_motorboat_uow.repo.save(expensive)
-        flat_motorboat_uow.repo.save(cheap)
-        flat_motorboat_uow.commit()
+    with uow(flat_motorboat_repo):
+        flat_motorboat_repo.save(expensive)
+        flat_motorboat_repo.save(cheap)
+        uow.commit()
 
-    with flat_motorboat_uow:
-        results = flat_motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
+    with uow(flat_motorboat_repo):
+        results = flat_motorboat_repo.get_many(MotorBoat.engine.price > 1_000.0)
 
     assert len(results) == 1
     assert results[0].name == Name("Yacht")
 
 
-def test_flat_motorboat_update_engine_price(flat_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_flat_motorboat_update_engine_price(uow: UnitOfWork[Session], flat_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
 
-    with flat_motorboat_uow:
-        flat_motorboat_uow.repo.save(boat)
-        flat_motorboat_uow.commit()
+    with uow(flat_motorboat_repo):
+        flat_motorboat_repo.save(boat)
+        uow.commit()
 
     boat.update_engine_price(Price(3_000.0))
-    with flat_motorboat_uow:
-        flat_motorboat_uow.repo.update(boat)
-        flat_motorboat_uow.commit()
+    with uow(flat_motorboat_repo):
+        flat_motorboat_repo.update(boat)
+        uow.commit()
 
-    with flat_motorboat_uow:
-        fetched = flat_motorboat_uow.repo.get_one(boat.id)
+    with uow(flat_motorboat_repo):
+        fetched = flat_motorboat_repo.get_one(boat.id)
 
     assert fetched.engine.price == Price(3_000.0)
 
@@ -611,37 +594,37 @@ def test_flat_motorboat_update_engine_price(flat_motorboat_uow: UnitOfWork[Sessi
 # ---------------------------------------------------------------------------
 
 
-def test_flat_journey_save_and_get_one(flat_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+def test_flat_journey_save_and_get_one(uow: UnitOfWork[Session], flat_journey_repo: SQLAlchemyRepository[UUID, Journey]) -> None:
     cp1 = Checkpoint(name=Name("Paris"))
     cp2 = Checkpoint(name=Name("Lyon"))
     journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
 
-    with flat_journey_uow:
-        flat_journey_uow.repo.save(journey)
-        flat_journey_uow.commit()
+    with uow(flat_journey_repo):
+        flat_journey_repo.save(journey)
+        uow.commit()
 
-    with flat_journey_uow:
-        fetched = flat_journey_uow.repo.get_one(journey.id)
+    with uow(flat_journey_repo):
+        fetched = flat_journey_repo.get_one(journey.id)
 
     assert fetched.name == Name("France Trip")
     assert len(fetched.checkpoints) == 2
     assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
 
 
-def test_flat_journey_update_checkpoints(flat_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+def test_flat_journey_update_checkpoints(uow: UnitOfWork[Session], flat_journey_repo: SQLAlchemyRepository[UUID, Journey]) -> None:
     journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
 
-    with flat_journey_uow:
-        flat_journey_uow.repo.save(journey)
-        flat_journey_uow.commit()
+    with uow(flat_journey_repo):
+        flat_journey_repo.save(journey)
+        uow.commit()
 
     journey.checkpoints.append(Checkpoint(name=Name("B")))
-    with flat_journey_uow:
-        flat_journey_uow.repo.update(journey)
-        flat_journey_uow.commit()
+    with uow(flat_journey_repo):
+        flat_journey_repo.update(journey)
+        uow.commit()
 
-    with flat_journey_uow:
-        fetched = flat_journey_uow.repo.get_one(journey.id)
+    with uow(flat_journey_repo):
+        fetched = flat_journey_repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
 
@@ -651,178 +634,179 @@ def test_flat_journey_update_checkpoints(flat_journey_uow: UnitOfWork[Session, U
 # ---------------------------------------------------------------------------
 
 
-def test_auto_save_and_get_one(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_auto_save_and_get_one(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
 
-    with auto_uow:
-        auto_uow.repo.save(boat)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.save(boat)
+        uow.commit()
 
-    with auto_uow:
-        fetched = auto_uow.repo.get_one(boat.id)
+    with uow(auto_repo):
+        fetched = auto_repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
 
 
-def test_auto_update(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_auto_update(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Old Name"), price=Price(100.0))
 
-    with auto_uow:
-        auto_uow.repo.save(boat)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.save(boat)
+        uow.commit()
 
     boat.price = Price(200.0)
-    with auto_uow:
-        auto_uow.repo.update(boat)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.update(boat)
+        uow.commit()
 
-    with auto_uow:
-        fetched = auto_uow.repo.get_one(boat.id)
+    with uow(auto_repo):
+        fetched = auto_repo.get_one(boat.id)
 
     assert fetched.price == Price(200.0)
 
 
-def test_auto_get_many_with_spec(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_auto_get_many_with_spec(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
     boat_b = Boat(name=Name("Beta"), price=Price(50.0))
 
-    with auto_uow:
-        auto_uow.repo.save(boat_a)
-        auto_uow.repo.save(boat_b)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.save(boat_a)
+        auto_repo.save(boat_b)
+        uow.commit()
 
-    with auto_uow:
-        results = auto_uow.repo.get_many(Boat.price > 20.0)
+    with uow(auto_repo):
+        results = auto_repo.get_many(Boat.price > 20.0)
 
     assert len(results) == 1
     assert results[0].name == Name("Beta")
 
 
-def test_auto_count_with_spec(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_auto_count_with_spec(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat_a = Boat(name=Name("Alpha"), price=Price(10.0))
     boat_b = Boat(name=Name("Beta"), price=Price(50.0))
     boat_c = Boat(name=Name("Gamma"), price=Price(80.0))
 
-    with auto_uow:
-        auto_uow.repo.save(boat_a)
-        auto_uow.repo.save(boat_b)
-        auto_uow.repo.save(boat_c)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.save(boat_a)
+        auto_repo.save(boat_b)
+        auto_repo.save(boat_c)
+        uow.commit()
 
-    with auto_uow:
-        assert auto_uow.repo.count(Boat.price > 20.0) == 2
+    with uow(auto_repo):
+        assert auto_repo.count(Boat.price > 20.0) == 2
 
-    with auto_uow:
-        assert auto_uow.repo.count(Boat.price > 100.0) == 0
+    with uow(auto_repo):
+        assert auto_repo.count(Boat.price > 100.0) == 0
 
 
-def test_auto_optimistic_lock_conflict(auto_uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_auto_optimistic_lock_conflict(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     boat = Boat(name=Name("Contested"), price=Price(100.0))
 
-    with auto_uow:
-        auto_uow.repo.save(boat)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.save(boat)
+        uow.commit()
 
-    with auto_uow:
-        copy_a = auto_uow.repo.get_one(boat.id)
-    with auto_uow:
-        copy_b = auto_uow.repo.get_one(boat.id)
+    with uow(auto_repo):
+        copy_a = auto_repo.get_one(boat.id)
+    with uow(auto_repo):
+        copy_b = auto_repo.get_one(boat.id)
 
     copy_a.price = Price(200.0)
-    with auto_uow:
-        auto_uow.repo.update(copy_a)
-        auto_uow.commit()
+    with uow(auto_repo):
+        auto_repo.update(copy_a)
+        uow.commit()
 
     copy_b.price = Price(300.0)
     with pytest.raises(OptimisticLockError):
-        with auto_uow:
-            auto_uow.repo.update(copy_b)
-            auto_uow.commit()
+        with uow(auto_repo):
+            auto_repo.update(copy_b)
+            uow.commit()
 
 
-def test_auto_motorboat_save_and_get_one(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_auto_motorboat_save_and_get_one(uow: UnitOfWork[Session], auto_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Sea Spirit", boat_price=4_999.99, engine_price=1_200.0)
 
-    with auto_motorboat_uow:
-        auto_motorboat_uow.repo.save(boat)
-        auto_motorboat_uow.commit()
+    with uow(auto_motorboat_repo):
+        auto_motorboat_repo.save(boat)
+        uow.commit()
 
-    with auto_motorboat_uow:
-        fetched = auto_motorboat_uow.repo.get_one(boat.id)
+    with uow(auto_motorboat_repo):
+        fetched = auto_motorboat_repo.get_one(boat.id)
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
     assert fetched.engine.price == Price(1_200.0)
 
 
-def test_auto_motorboat_filter_by_engine_price(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_auto_motorboat_filter_by_engine_price(uow: UnitOfWork[Session], auto_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     expensive = make_motorboat("Yacht", boat_price=50_000.0, engine_price=5_000.0)
     cheap = make_motorboat("Dinghy", boat_price=500.0, engine_price=200.0)
 
-    with auto_motorboat_uow:
-        auto_motorboat_uow.repo.save(expensive)
-        auto_motorboat_uow.repo.save(cheap)
-        auto_motorboat_uow.commit()
+    with uow(auto_motorboat_repo):
+        auto_motorboat_repo.save(expensive)
+        auto_motorboat_repo.save(cheap)
+        uow.commit()
 
-    with auto_motorboat_uow:
-        results = auto_motorboat_uow.repo.get_many(MotorBoat.engine.price > 1_000.0)
+    with uow(auto_motorboat_repo):
+        results = auto_motorboat_repo.get_many(MotorBoat.engine.price > 1_000.0)
 
     assert len(results) == 1
     assert results[0].name == Name("Yacht")
 
 
-def test_auto_motorboat_update_engine_price(auto_motorboat_uow: UnitOfWork[Session, UUID, MotorBoat]) -> None:
+def test_auto_motorboat_update_engine_price(uow: UnitOfWork[Session], auto_motorboat_repo: SQLAlchemyRepository[UUID, MotorBoat]) -> None:
     boat = make_motorboat("Cruiser", boat_price=10_000.0, engine_price=800.0)
 
-    with auto_motorboat_uow:
-        auto_motorboat_uow.repo.save(boat)
-        auto_motorboat_uow.commit()
+    with uow(auto_motorboat_repo):
+        auto_motorboat_repo.save(boat)
+        uow.commit()
 
     boat.update_engine_price(Price(3_000.0))
-    with auto_motorboat_uow:
-        auto_motorboat_uow.repo.update(boat)
-        auto_motorboat_uow.commit()
+    with uow(auto_motorboat_repo):
+        auto_motorboat_repo.update(boat)
+        uow.commit()
 
-    with auto_motorboat_uow:
-        fetched = auto_motorboat_uow.repo.get_one(boat.id)
+    with uow(auto_motorboat_repo):
+        fetched = auto_motorboat_repo.get_one(boat.id)
 
     assert fetched.engine.price == Price(3_000.0)
 
 
 def test_auto_journey_save_and_get_one_with_checkpoints(
-    auto_journey_uow: UnitOfWork[Session, UUID, Journey],
+    uow: UnitOfWork[Session],
+    auto_journey_repo: SQLAlchemyRepository[UUID, Journey],
 ) -> None:
     cp1 = Checkpoint(name=Name("Paris"))
     cp2 = Checkpoint(name=Name("Lyon"))
     journey = Journey(name=Name("France Trip"), checkpoints=[cp1, cp2])
 
-    with auto_journey_uow:
-        auto_journey_uow.repo.save(journey)
-        auto_journey_uow.commit()
+    with uow(auto_journey_repo):
+        auto_journey_repo.save(journey)
+        uow.commit()
 
-    with auto_journey_uow:
-        fetched = auto_journey_uow.repo.get_one(journey.id)
+    with uow(auto_journey_repo):
+        fetched = auto_journey_repo.get_one(journey.id)
 
     assert fetched.name == Name("France Trip")
     assert len(fetched.checkpoints) == 2
     assert {cp.name for cp in fetched.checkpoints} == {Name("Paris"), Name("Lyon")}
 
 
-def test_auto_journey_update_checkpoints(auto_journey_uow: UnitOfWork[Session, UUID, Journey]) -> None:
+def test_auto_journey_update_checkpoints(uow: UnitOfWork[Session], auto_journey_repo: SQLAlchemyRepository[UUID, Journey]) -> None:
     journey = Journey(name=Name("Tour"), checkpoints=[Checkpoint(name=Name("A"))])
 
-    with auto_journey_uow:
-        auto_journey_uow.repo.save(journey)
-        auto_journey_uow.commit()
+    with uow(auto_journey_repo):
+        auto_journey_repo.save(journey)
+        uow.commit()
 
     journey.checkpoints.append(Checkpoint(name=Name("B")))
-    with auto_journey_uow:
-        auto_journey_uow.repo.update(journey)
-        auto_journey_uow.commit()
+    with uow(auto_journey_repo):
+        auto_journey_repo.update(journey)
+        uow.commit()
 
-    with auto_journey_uow:
-        fetched = auto_journey_uow.repo.get_one(journey.id)
+    with uow(auto_journey_repo):
+        fetched = auto_journey_repo.get_one(journey.id)
 
     assert len(fetched.checkpoints) == 2
 
@@ -833,39 +817,39 @@ def test_auto_journey_update_checkpoints(auto_journey_uow: UnitOfWork[Session, U
 
 
 @pytest.fixture
-def fleet(uow: UnitOfWork[Session, UUID, Boat]) -> list[Boat]:
+def fleet(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> list[Boat]:
     """Save five boats with prices 10–50 and names A–E; return them price-sorted."""
     boats = [
         Boat(name=Name(n), price=Price(p))
         for n, p in zip("ABCDE", [10.0, 20.0, 30.0, 40.0, 50.0])
     ]
-    with uow:
+    with uow(repo):
         for b in boats:
-            uow.repo.save(b)
+            repo.save(b)
         uow.commit()
     return boats
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_ordering_price_asc(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
+def test_sa_ordering_price_asc(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        results = repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_ordering_price_desc(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
+def test_sa_ordering_price_desc(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        results = repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
     prices = [b.price.value for b in results]
     assert prices == sorted(prices, reverse=True)
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_offset_pagination_first_page(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        page = uow.repo.get_many(
+def test_sa_offset_pagination_first_page(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        page = repo.get_many(
             Boat.price >= 0.0,
             ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
@@ -877,9 +861,9 @@ def test_sa_offset_pagination_first_page(uow: UnitOfWork[Session, UUID, Boat]) -
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_offset_pagination_last_page(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        page = uow.repo.get_many(
+def test_sa_offset_pagination_last_page(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        page = repo.get_many(
             Boat.price >= 0.0,
             ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=4, limit=2),
@@ -890,9 +874,9 @@ def test_sa_offset_pagination_last_page(uow: UnitOfWork[Session, UUID, Boat]) ->
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_page_pagination(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        page = uow.repo.get_many(
+def test_sa_page_pagination(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        page = repo.get_many(
             Boat.price >= 0.0,
             ordering=[asc(Boat.price)],
             pagination=PagePagination(page=2, page_size=2),
@@ -903,13 +887,13 @@ def test_sa_page_pagination(uow: UnitOfWork[Session, UUID, Boat]) -> None:
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session, UUID, Boat]) -> None:
+def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     collected: list[float] = []
     cursor: str | None = None
 
     for _ in range(10):
-        with uow:
-            page = uow.repo.get_many(
+        with uow(repo):
+            page = repo.get_many(
                 Boat.price >= 0.0,
                 ordering=[asc(Boat.price)],
                 pagination=CursorPagination(limit=2, cursor=cursor),
@@ -926,9 +910,9 @@ def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session, UUID, Boat]
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        page = uow.repo.get_many(
+def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        page = repo.get_many(
             Boat.price > 20.0,
             ordering=[asc(Boat.price)],
             pagination=OffsetPagination(offset=0, limit=2),
@@ -939,17 +923,17 @@ def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session, UUID, Boat]) ->
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_ordering_single_orderby_shorthand(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
+def test_sa_ordering_single_orderby_shorthand(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        results = repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
     prices = [b.price.value for b in results]
     assert prices == sorted(prices)
 
 
 @pytest.mark.usefixtures("fleet")
-def test_sa_get_many_no_pagination_returns_list(uow: UnitOfWork[Session, UUID, Boat]) -> None:
-    with uow:
-        results = uow.repo.get_many(Boat.price >= 0.0)
+def test_sa_get_many_no_pagination_returns_list(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
+    with uow(repo):
+        results = repo.get_many(Boat.price >= 0.0)
     assert isinstance(results, list)
     assert len(results) == 5

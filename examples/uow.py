@@ -60,7 +60,7 @@ class Boat(UuidAggregate):
 
 context = InMemoryDBContext()
 repo: InMemoryRepository[UUID, Boat] = InMemoryRepository()
-uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, repo=repo)
+uow: UnitOfWork[dict[Any, Aggregate[Any]]] = UnitOfWork(context)
 
 # ---------------------------------------------------------------------------
 # Save
@@ -68,8 +68,8 @@ uow: UnitOfWork[dict[Any, Aggregate[Any]], UUID, Boat] = UnitOfWork(context, rep
 default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
 boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
 
-with uow:
-    uow.repo.save(boat)
+with uow(repo):
+    repo.save(boat)
     uow.commit()
 
 print(f"Saved: {boat.name.value} (id={boat.id.value})")
@@ -80,12 +80,12 @@ print(f"Saved: {boat.name.value} (id={boat.id.value})")
 
 cheap_engine = Engine(name=EngineName("tiny engine"), price=Price(49.99))
 cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=cheap_engine)
-with uow:
-    uow.repo.save(cheap)
+with uow(repo):
+    repo.save(cheap)
     uow.commit()
 
-with uow:
-    results = uow.repo.get_many(Boat.engine.price > 1_000.0)
+with uow(repo):
+    results = repo.get_many(Boat.engine.price > 1_000.0)
 
 print(f"Boats priced above 1000: {[b.name.value for b in results]}")
 
@@ -94,12 +94,12 @@ print(f"Boats priced above 1000: {[b.name.value for b in results]}")
 # ---------------------------------------------------------------------------
 
 boat.price = Price(3_999.99)
-with uow:
-    uow.repo.update(boat)
+with uow(repo):
+    repo.update(boat)
     uow.commit()
 
-with uow:
-    fetched = uow.repo.get_one(boat.id)
+with uow(repo):
+    fetched = repo.get_one(boat.id)
 print(f"Updated price: {fetched.price.value}")
 
 # ---------------------------------------------------------------------------
@@ -108,15 +108,15 @@ print(f"Updated price: {fetched.price.value}")
 
 ghost = Boat(name=BoatName("Ghost"), price=Price(10.0), engine=Engine(name=EngineName("tiny"), price=Price(1.0)))
 try:
-    with uow:
-        uow.repo.save(ghost)
+    with uow(repo):
+        repo.save(ghost)
         raise RuntimeError("something went wrong")
 except RuntimeError:
     pass
 
-with uow:
+with uow(repo):
     try:
-        uow.repo.get_one(ghost.id)
+        repo.get_one(ghost.id)
         print("ERROR: ghost should not exist")
     except AggregateDoesNotExistError:
         print("Rollback confirmed: ghost was not persisted")
