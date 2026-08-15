@@ -21,7 +21,7 @@ class DBContext[TSession](ABC):
 
     @abstractmethod
     def begin(self) -> None:
-        """Begin a transaction."""
+        """Begin a transaction. Creates and makes ``session`` available."""
 
     @abstractmethod
     def commit(self) -> None:
@@ -33,7 +33,7 @@ class DBContext[TSession](ABC):
 
     @abstractmethod
     def close(self) -> None:
-        """Close a transaction. Use after finishing a transaction successfully"""
+        """Close a transaction after finishing successfully. Destroys ``session`` and releases any held resources."""
 
 
 class UnitOfWork[TSessions, TId, TAggregate: Aggregate[Any]]:
@@ -41,15 +41,13 @@ class UnitOfWork[TSessions, TId, TAggregate: Aggregate[Any]]:
     def __init__(
             self,
             context: DBContext[TSessions],
-            repo: IRepository[TId, TSessions, TAggregate],
-            *,
-            auto_commit: bool = False
+            repo: IRepository[TId, TSessions, TAggregate]
     ):
         self._context = context
         self.repo = repo
-        self._auto_commit = auto_commit
 
-    def __enter__(self) -> Self:
+    def __enter__(self, auto_commit = False) -> Self:
+        self._auto_commit = auto_commit
         self._context.begin()
         self.repo.session = self._context.session
         return self
