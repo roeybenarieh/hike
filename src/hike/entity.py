@@ -408,6 +408,7 @@ class Entity[TId: Hashable](DomainObject):
 
     id: Field[EntityID[TId]]
     __invariants__: ClassVar[list[Rule[Any]]] = []
+    __allow_plain_fields__: ClassVar[bool] = False
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -448,11 +449,12 @@ class Entity[TId: Hashable](DomainObject):
                 elem = _list_args[0] if _list_args else None
                 elem_cls = elem if isinstance(elem, type) else get_origin(elem)
                 if not (get_origin(ann_type) is list and isinstance(elem_cls, type) and issubclass(elem_cls, DomainObject)):
-                    raise TypeError(
-                        f"{cls.__name__}.{name}: Entity fields must be declared as "
-                        f"Field[T] or list[T] where T is a DomainObject subclass, got {ann_type!r}. "
-                        f"Wrap the raw type in a ValueObject."
-                    )
+                    if not getattr(cls, '__allow_plain_fields__', False):
+                        raise TypeError(
+                            f"{cls.__name__}.{name}: Entity fields must be declared as "
+                            f"Field[T] or list[T] where T is a DomainObject subclass, got {ann_type!r}. "
+                            f"Wrap the raw type in a ValueObject."
+                        )
                 continue
             inner = unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
