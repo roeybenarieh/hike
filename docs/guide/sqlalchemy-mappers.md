@@ -4,12 +4,12 @@ Hike ships four SQLAlchemy mapper classes that bridge your domain entities to OR
 
 | Mapper | When to use |
 | :--- | :--- |
-| `DictAutoSQLAlchemyMapper` | Zero ORM boilerplate — Hike infers the full relational schema from your entity annotations |
-| `FlatAutoSQLAlchemyMapper` | Zero ORM boilerplate — like `DictAutoSQLAlchemyMapper` but uses one flat table instead of joins |
+| `DictAutoSQLAlchemyMapper` ✨ | Zero ORM boilerplate — Hike infers the full relational schema from your entity annotations |
+| `FlatAutoSQLAlchemyMapper` ✨ | Zero ORM boilerplate — like `DictAutoSQLAlchemyMapper` but uses one flat table instead of joins |
 | `DictSQLAlchemyMapper` | You control the ORM models; one table per entity class |
 | `FlatSQLAlchemyMapper` | You control the ORM model; everything on one table with prefixed column names |
 
-All four handle **optimistic locking** automatically — concurrent writes to the same aggregate are detected and rejected safely, with no extra schema work on your part.
+All four handle **🔒 optimistic locking** automatically — concurrent writes to the same aggregate are detected and rejected safely, with no extra schema work on your part.
 
 ---
 

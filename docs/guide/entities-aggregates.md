@@ -57,7 +57,7 @@ class Car(UuidAggregate):
 
 ---
 
-## 3. Aggregate Boundaries
+## 3. 🔒 Aggregate Boundaries
 
 Aggregates are not just a grouping convenience — they define strict boundaries around consistency, persistence, and ownership. Two rules govern how aggregates interact with each other and with a database.
 
@@ -111,7 +111,7 @@ This guarantees that invariant checks always see the complete picture. A partial
 
 ---
 
-## 4. Protecting Business Rules (Invariants)
+## 4. 🛡️ Protecting Business Rules (Invariants)
 
 In business software, certain rules must **never** be broken — not about a single value, but about the **combined state** of an aggregate. For example:
 - *A discount cannot exceed the order total.*

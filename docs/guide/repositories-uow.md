@@ -23,7 +23,7 @@ class OrderRepository(IRepository[UUID, Order, Any]):
         ...
 ```
 
-### Optimistic Concurrency Control (Safe Updates)
+### 🔒 Optimistic Concurrency Control (Safe Updates)
 Hike repositories automatically track aggregate versions. If two users try to edit the same order at the same time, Hike raises an `OptimisticLockError` to prevent one user's changes from silently overwriting the other's!
 
 ---
@@ -44,7 +44,7 @@ with uow(repo):             # pass repos when opening the transaction
     uow.commit()            # save all changes to database
 ```
 
-If anything crashes inside the `with` block before `.commit()` is called, Hike automatically **rolls back** the transaction so your database never ends up in a half-updated state.
+If anything crashes inside the `with` block before `.commit()` is called, Hike automatically **rolls back** 🔄 the transaction so your database never ends up in a half-updated state.
 
 ### Multiple repositories in one transaction
 
@@ -67,41 +67,40 @@ with uow(repo, auto_commit=True):
 # uow.commit() is called automatically on __exit__
 ```
 
-## 3. `InMemoryRepository` — Testing Without a Database
+## 3. The `IRepository` Interface and Persistence Providers
 
-Every Hike repository backend (SQLAlchemy, PyMongo, Redis) implements the same `IRepository` interface. For tests you can swap them all out with the built-in in-memory implementation:
+Hike defines `IRepository[TId, TAggregate, TSession]` as the standard contract every repository must satisfy. Your code depends only on this interface — the underlying storage technology is swapped by changing a single constructor call in your setup code.
 
-```python
-from hike.persistence.providers.in_memory import InMemoryRepository, InMemoryDBContext
-from hike.persistence.uow import UnitOfWork
+| Provider | When to use |
+| :--- | :--- |
+| `InMemoryRepository` 🧪 | Tests and prototyping — no database required |
+| `SQLAlchemyRepository` 🏛️ | Relational databases (PostgreSQL, SQLite, MySQL, …) |
+| `PyMongoRepository` 🍃 | MongoDB |
+| `RedisRepository` ⚡ | Redis |
 
-ctx = InMemoryDBContext()
-repo = InMemoryRepository()
-uow = UnitOfWork(ctx)
+Every provider implements the same methods (`save`, `get_one`, `update`, `delete`, `get_many`, `count`, `upsert`) so switching backends requires no changes to the code that uses the repository.
 
-with uow(repo):
-    repo.save(Order(price=Price(99)))
-    uow.commit()
-
-with uow(repo):
-    order = repo.get_one(order_id)
-    order.complete_checkout()
-    repo.update(order)
-    uow.commit()
-```
-
-The in-memory repository stores deep copies so each transaction sees an isolated snapshot. Optimistic locking works the same way as with real database backends — `OptimisticLockError` is raised on a version mismatch.
+For step-by-step setup instructions for each backend, see **[Persistence Providers](persistence-providers.md)**.
 
 ---
 
-## 4. Ordering Results
+## 4. 🔍 Querying Aggregates with `get_many`
 
-Pass an `ordering` argument to `get_many` to sort the results. Each `OrderBy` is built from a field proxy using `.asc()` or `.desc()`.
-
-You can pass **a single `OrderBy`** directly, or **a list** when sorting by multiple fields:
+`IRepository` includes a `get_many` method that returns multiple aggregates matching a **specification** (a composable filter — see [Specifications](specifications.md)). By default it returns a plain `list[TAggregate]`:
 
 ```python
-# Single field — pass directly (no list needed)
+with uow(repo):
+    orders = repo.get_many(Order.total > 0.0)   # list[Order]
+```
+
+### Ordering
+
+Pass an `ordering` argument to `get_many` method in order to sort results. Build each `OrderBy` with `asc()` or `desc()`. Pass a single value or a list for multi-field sorting:
+
+```python
+from hike import asc, desc
+
+# Single field
 with uow(repo):
     boats = repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
 
@@ -109,7 +108,7 @@ with uow(repo):
 with uow(repo):
     boats = repo.get_many(Boat.price >= 0.0, ordering=desc(Boat.price))
 
-# Multi-field — pass a list; priority is left-to-right
+# Multi-field — priority is left-to-right
 with uow(repo):
     boats = repo.get_many(
         Boat.price >= 0.0,
@@ -117,33 +116,25 @@ with uow(repo):
     )
 ```
 
-When `ordering` is provided **without** `pagination`, `get_many` still returns a plain `list` — fully backward-compatible.
+Without `pagination`, `get_many` returns a plain `list` regardless of whether `ordering` is passed.
 
----
+### Pagination
 
-## 5. Pagination
-
-Hike supports three styles of pagination, each suited to a different use case. When you pass a `pagination` argument, `get_many` returns a `Page[T]` object instead of a plain list.
-
-### `Page` — the result wrapper
+Pass a `pagination` argument to get a `Page[TAggregate]` back instead of a plain list. Hike supports three pagination styles:
 
 ```python
-from hike.ddd import Page
-
-page.items      # list[TAggregate] — the current page of results
-page.total      # int | None — total matching records (None for cursor pagination)
-page.has_next   # bool — True if there are more results after this page
-page.next_cursor  # str | None — opaque token for the next cursor page
+page.items        # list[TAggregate] — current page of results
+page.total        # int | None — total matching records (None for cursor pagination)
+page.has_next     # bool — True if more results follow
+page.next_cursor  # str | None — token for the next cursor page
 ```
 
----
+#### Offset pagination
 
-### Offset pagination
-
-Best for: classic "page 1, page 2 …" UIs where you know the exact position to skip to.
+Best for: classic "page 1, page 2 …" UIs where you know the exact row to start from.
 
 ```python
-from hike.ddd import OffsetPagination
+from hike import OffsetPagination
 
 with uow(repo):
     page = repo.get_many(
@@ -153,49 +144,37 @@ with uow(repo):
     )
 
 print(page.items)    # first 10 boats sorted by price
-print(page.total)    # total number of matching boats
+print(page.total)    # total matching boats
 print(page.has_next) # True if there are more boats beyond offset+limit
 ```
 
-Move to the next page by incrementing `offset` by `limit`:
+Move to the next page: `OffsetPagination(offset=10, limit=10)`.
+
+#### Page-number pagination
+
+Best for: page-number UIs ("give me page 3").
 
 ```python
-next_page = OffsetPagination(offset=10, limit=10)
-```
-
----
-
-### Page-number pagination
-
-Best for: situations where you think in terms of page numbers (e.g., "give me page 3").
-
-```python
-from hike.ddd import PagePagination
+from hike import PagePagination
 
 with uow(repo):
     page = repo.get_many(
         Boat.price >= 0.0,
         ordering=[asc(Boat.price)],
-        pagination=PagePagination(page=2, page_size=10),  # page is 1-indexed
+        pagination=PagePagination(page=2, page_size=10),  # 1-indexed
     )
-
-print(page.items)    # boats 11–20 sorted by price
-print(page.total)    # total matching boats
-print(page.has_next) # True if page 3 exists
 ```
 
-`PagePagination` is a convenience wrapper — `page=2, page_size=10` is equivalent to `OffsetPagination(offset=10, limit=10)`.
+`PagePagination(page=2, page_size=10)` is equivalent to `OffsetPagination(offset=10, limit=10)`.
 
----
+#### Cursor pagination (keyset)
 
-### Cursor pagination (keyset pagination)
-
-Best for: infinite-scroll UIs, large datasets, or any case where offset pagination gets slow. Cursor pagination stays fast at any depth because it uses a **keyset** (the values of the last item) instead of a row count to find the next page.
+Best for: infinite-scroll UIs and large datasets. Uses the values of the last returned row as a cursor instead of a row count, so it stays fast at any depth.
 
 ```python
-from hike.ddd import CursorPagination
+from hike import CursorPagination
 
-cursor: str | None = None  # start from the beginning
+cursor: str | None = None   # start from the beginning
 
 while True:
     with uow(repo):
@@ -209,74 +188,54 @@ while True:
 
     if not page.has_next:
         break
-    cursor = page.next_cursor  # pass the token to the next request
+    cursor = page.next_cursor
 ```
 
-Key properties of cursor pagination:
+- `page.total` is always `None` — a full row count defeats the performance benefit.
+- The cursor is an opaque token; do not construct or modify it manually.
 
-- `page.total` is always `None` — counting all rows defeats the performance benefit.
-- `page.next_cursor` is `None` when `has_next` is `False` (last page).
-- The cursor is an opaque, base64-encoded token. Do not construct or modify it manually.
-- Results are **stable** even when ordering fields have duplicate values — Hike automatically uses the aggregate `id` as an implicit tiebreaker.
-
----
-
-### Combining specs, ordering, and pagination
-
-All three arguments can be combined freely:
+#### Combining filter, ordering, and pagination
 
 ```python
 with uow(repo):
     page = repo.get_many(
-        Boat.price > 20.0,                        # filter
-        ordering=[asc(Boat.price)],              # sort
-        pagination=OffsetPagination(offset=0, limit=5),  # page
+        Boat.price > 20.0,
+        ordering=[asc(Boat.price)],
+        pagination=OffsetPagination(offset=0, limit=5),
     )
 ```
-
----
-
-### Backward compatibility
-
-Calling `get_many` without a `pagination` argument always returns a plain `list`, so existing code needs no changes:
-
-```python
-# Still returns list[Boat]
-with uow(repo):
-    boats = repo.get_many(Boat.price > 0.0)
-```
-
----
 
 ---
 
 ## Quick Reference
 
 ```python
-from hike import UnitOfWork, OptimisticLockError, asc, desc
-from hike import OffsetPagination, PagePagination, CursorPagination
+from hike import (
+    IRepository,
+    UnitOfWork, OptimisticLockError,
+    asc, desc,
+    OffsetPagination, PagePagination, CursorPagination,
+)
 from hike.persistence.providers.in_memory import InMemoryRepository, InMemoryDBContext
 
-# Setup (in-memory — ideal for tests)
+# IRepository[TId, TAggregate, TSession] — implement for a custom backend
+class OrderRepository(IRepository[UUID, Order, Any]): ...
+
+# In-memory setup (tests)
 ctx  = InMemoryDBContext()
 repo = InMemoryRepository()
 uow  = UnitOfWork(ctx)
 
 # Save
 with uow(repo):
-    repo.save(order)          # insert; raises AggregateAlreadyExistError if duplicate
+    repo.save(order)      # insert; raises AggregateAlreadyExistError if duplicate
     uow.commit()
 
 # Load & update
 with uow(repo):
     order = repo.get_one(order_id)
     order.do_something()
-    repo.update(order)        # version-checked; raises OptimisticLockError on conflict
-    uow.commit()
-
-# Upsert (no version check)
-with uow(repo):
-    repo.upsert(order)
+    repo.update(order)    # version-checked; raises OptimisticLockError on conflict
     uow.commit()
 
 # Query with ordering + pagination

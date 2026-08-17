@@ -47,9 +47,9 @@ my_price = Price(49.99)
 
 ## Key Benefits of Hike Value Objects
 
-1. **Frozen & Immutable**: Once you create a `Price(49.99)`, you cannot accidentally change its `.value` later. It's read-only.
-2. **Auto-Validation**: Validators run automatically when created.
-3. **Comparison Operators Built-In**: You can compare them naturally:
+1. 🔒 **Frozen & Immutable**: Once you create a `Price(49.99)`, you cannot accidentally change its `.value` later. It's read-only.
+2. ✅ **Auto-Validation**: Validators run automatically when created.
+3. ⚖️ **Comparison Operators Built-In**: You can compare them naturally:
    ```python
    Price(10) < Price(20)  # Returns True!
    ```
@@ -74,7 +74,7 @@ Price(10) == Price(10)   # True  — equality by value
 
 Pyright enforces operand types — `Price(10) < "hello"` is a type error at edit time.
 
-### Arithmetic
+### ➕ Arithmetic
 
 Arithmetic operators return a **new instance of the same concrete type** — `Price + Price` gives `Price`, not a raw number:
 
@@ -88,7 +88,7 @@ a * 2       # Price(20.0)  — scalar on either side
 4.0 / a     # Price(0.4)   — reflected forms work too
 ```
 
-Because the result is the concrete type, **validators run on the new instance**:
+Because the result is the concrete type, **validators run on the new instance** ✅:
 
 ```python
 class Price(ValueObject[float]):
