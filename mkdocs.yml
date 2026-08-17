@@ -1,0 +1,60 @@
+site_name: Hike Docs
+theme:
+  name: material
+  features:
+    - navigation.footer
+    - navigation.sections
+  palette:
+    # Palette toggle for dark mode (Default on first load)
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  logo: hike-icon.png
+  favicon: hike-icon.png
+  icon:
+    repo: fontawesome/brands/github
+
+repo_url: https://github.com/roeybenarieh/hike
+repo_name: roeybenarieh/hike
+
+extra:
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting Started: guide/getting-started.md
+  - DDD Primitives:
+      - Value Objects: guide/value-objects.md
+      - Entities & Aggregates: guide/entities-aggregates.md
+      - Rules, Commands & Invariants: guide/rules-commands.md
+  - Persistence:
+      - Repositories & UoW: guide/repositories-uow.md
+      - Persistence Providers: guide/persistence-providers.md
+      - Specifications: guide/specifications.md
+      - SQLAlchemy Mappers: guide/sqlalchemy-mappers.md
+  - Events & Consistency:
+      - Domain Events: guide/domain-events.md
+      - Cross-Aggregate Invariants: guide/cross-aggregate-invariants.md

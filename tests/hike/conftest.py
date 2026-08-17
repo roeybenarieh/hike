@@ -1,0 +1,149 @@
+"""Shared domain model and pytest fixtures for DDD tests.
+
+All classes below are importable by any test module under ``tests/hike/``::
+
+    from tests.hike.conftest import Boat, BoatEngine, Category, Checkpoint, \
+        Engine, Horsepower, Journey, ListingName, MotorBoat, Name, Price, \
+        ProductListing, Rating
+
+The ``boat``, ``engine``, and ``make_boat`` fixtures are auto-discovered by
+pytest and available to all tests under this directory, including provider
+integration tests.
+"""
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import field
+
+import pytest
+
+from hike.aggregate import UuidAggregate
+from hike.entity import Field, UuidEntity, command
+from hike.rules import rule
+from hike.value_object import ValueObject, between, non_empty, non_negative
+
+
+# ---------------------------------------------------------------------------
+# Value objects
+# ---------------------------------------------------------------------------
+
+
+class Price(ValueObject[float]):
+    __validators__ = [non_negative]
+
+
+class Name(ValueObject[str]):
+    __validators__ = [non_empty]
+
+
+class Horsepower(ValueObject[int]):
+    __validators__ = [non_negative]
+
+
+class Category(ValueObject[str]):
+    pass
+
+
+class Rating(ValueObject[float]):
+    __validators__ = [between(0.0, 5.0)]
+
+
+class ListingName(ValueObject[str]):
+    __validators__ = [non_empty]
+
+
+# ---------------------------------------------------------------------------
+# Entities (have identity, but are not aggregate roots)
+# ---------------------------------------------------------------------------
+
+
+@rule(message="Engine must have positive horsepower")
+def engine_horsepower_positive(e: "Engine") -> bool:
+    return e.horsepower.value <= 0
+
+
+class Engine(UuidEntity):
+    __invariants__ = [engine_horsepower_positive]
+
+    name: Field[Name]
+    horsepower: Field[Horsepower]
+
+
+class Checkpoint(UuidEntity):
+    name: Field[Name]
+
+
+class BoatEngine(UuidEntity):
+    name: Field[Name]
+    price: Field[Price]
+
+
+class ProductListing(UuidEntity):
+    price: Field[Price]
+    category: Field[Category]
+    rating: Field[Rating]
+    name: Field[ListingName]
+
+
+# ---------------------------------------------------------------------------
+# Aggregate roots
+# ---------------------------------------------------------------------------
+
+
+@rule(message="Boat price must be positive")
+def boat_price_positive(b: "Boat") -> bool:
+    return b.price.value <= 0
+
+
+class Boat(UuidAggregate):
+    __invariants__ = [boat_price_positive]
+
+    name: Field[Name]
+    price: Field[Price]
+
+    def discount_price(self) -> Price:
+        return Price(self.price.value * 0.9)
+
+
+class Journey(UuidAggregate):
+    name: Field[Name]
+    checkpoints: list[Checkpoint] = field(default_factory=list)
+
+
+@rule(message="Engine price must not exceed the motorboat price")
+def engine_price_within_boat_price(boat: MotorBoat) -> bool:
+    return boat.engine.price.value > boat.price.value
+
+
+class MotorBoat(UuidAggregate):
+    name: Field[Name]
+    price: Field[Price]
+    engine: Field[BoatEngine]
+    __invariants__ = [engine_price_within_boat_price]
+
+    @command(invariants=[engine_price_within_boat_price])
+    def update_engine_price(self, price: Price) -> None:
+        self.engine.price = price
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def engine() -> Engine:
+    return Engine(name=Name("V8"), horsepower=Horsepower(200))
+
+
+@pytest.fixture
+def boat() -> Boat:
+    return Boat(name=Name("Sea Spirit"), price=Price(4_999.99))
+
+
+@pytest.fixture
+def make_boat() -> Callable[..., Boat]:
+    """Factory fixture — call to create a Boat with a custom name/price."""
+    def _make(name: str = "Sea Spirit", price: float = 4_999.99) -> Boat:
+        return Boat(name=Name(name), price=Price(price))
+    return _make
