@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, command, non_empty, non_negative, rule
+from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, \
+    command, non_empty, non_negative, rule
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
 
@@ -59,7 +60,7 @@ class Boat(UuidAggregate):
 # ---------------------------------------------------------------------------
 
 context = InMemoryDBContext()
-repo: InMemoryRepository[UUID, Boat] = InMemoryRepository()
+repo = InMemoryRepository[UUID, Boat]()
 uow: UnitOfWork[dict[Any, Aggregate[Any]]] = UnitOfWork(context)
 
 # ---------------------------------------------------------------------------
