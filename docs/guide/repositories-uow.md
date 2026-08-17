@@ -13,10 +13,12 @@ A **Repository** acts like an in-memory collection of your Aggregates (like a py
 - It makes unit-testing super easy because you can swap out the database repository for a fake in-memory one in seconds.
 
 ```python
-from hike.ddd.repository import IRepository
+from hike import IRepository
+from typing import Any
+from uuid import UUID
 
-# A clean, abstract repository interface for orders
-class OrderRepository(IRepository[UUID, Any, Order]):
+# IRepository[TId, TAggregate, TSession]
+class OrderRepository(IRepository[UUID, Order, Any]):
     def save(self, aggregate: Order) -> UUID:
         ...
 ```
@@ -39,7 +41,7 @@ uow = UnitOfWork(context)   # created once, reused across transactions
 
 with uow(repo):             # pass repos when opening the transaction
     repo.save(order)
-    uow.commit()
+    uow.commit()            # save all changes to database
 ```
 
 If anything crashes inside the `with` block before `.commit()` is called, Hike automatically **rolls back** the transaction so your database never ends up in a half-updated state.
@@ -65,23 +67,7 @@ with uow(repo, auto_commit=True):
 # uow.commit() is called automatically on __exit__
 ```
 
-## 3. `upsert()` — Insert or Update Without a Version Check
-
-`update()` enforces optimistic locking and raises `OptimisticLockError` if the stored version has advanced. Sometimes you simply want to **write the latest state** regardless of version — for example, syncing a read model or applying an idempotent import.
-
-Use `upsert()` for that:
-
-```python
-with uow(repo):
-    repo.upsert(boat)   # inserts if not exists, overwrites if it does
-    uow.commit()
-```
-
-`upsert()` does not raise `OptimisticLockError` and does not sync the version back onto the aggregate. If you need to keep writing to the aggregate after an upsert, re-fetch it with `get_one()` first.
-
----
-
-## 4. `InMemoryRepository` — Testing Without a Database
+## 3. `InMemoryRepository` — Testing Without a Database
 
 Every Hike repository backend (SQLAlchemy, PyMongo, Redis) implements the same `IRepository` interface. For tests you can swap them all out with the built-in in-memory implementation:
 
@@ -108,7 +94,7 @@ The in-memory repository stores deep copies so each transaction sees an isolated
 
 ---
 
-## 5. Ordering Results
+## 4. Ordering Results
 
 Pass an `ordering` argument to `get_many` to sort the results. Each `OrderBy` is built from a field proxy using `.asc()` or `.desc()`.
 
@@ -135,7 +121,7 @@ When `ordering` is provided **without** `pagination`, `get_many` still returns a
 
 ---
 
-## 6. Pagination
+## 5. Pagination
 
 Hike supports three styles of pagination, each suited to a different use case. When you pass a `pagination` argument, `get_many` returns a `Page[T]` object instead of a plain list.
 
