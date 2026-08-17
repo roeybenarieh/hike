@@ -17,8 +17,8 @@ from tests.hike.conftest import Boat, Name, Price
 # Test-local aggregate and events
 #
 # DomainEvent tests require an aggregate that raises events through its own
-# methods — accessing _events directly from outside would be a protected-attr
-# violation and doesn't reflect real usage.
+# methods — the internal event list is name-mangled (__events) and inaccessible
+# outside the Aggregate class body.
 # ---------------------------------------------------------------------------
 
 
@@ -33,7 +33,7 @@ class Ship(UuidAggregate):
     name: Field[ShipName]
 
     def sell(self) -> None:
-        self._events.append(ShipSold())
+        self.raise_event(ShipSold())
 
 
 # ---------------------------------------------------------------------------

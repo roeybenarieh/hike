@@ -43,13 +43,16 @@ class Aggregate[TId: Hashable](Entity[TId]):
     view, so only ``Field[Entity]`` descriptors carry this protection.
     """
 
-    _events: list[DomainEvent] = _dc_field(default_factory=list, init=False, repr=False)  # pyright: ignore[reportUnknownVariableType]
+    __events: list[DomainEvent] = _dc_field(default_factory=list, init=False, repr=False)  # pyright: ignore[reportUnknownVariableType,reportGeneralTypeIssues]
+
+    def raise_event(self, event: DomainEvent) -> None:
+        self.__events.append(event)
 
     def get_events(self) -> list[DomainEvent]:
-        return list(self._events)
+        return list(self.__events)
 
     def clear_events(self) -> None:
-        self._events.clear()
+        self.__events.clear()
 
 
 # todo create a multi tenant aggregate(identifier is both id+tenant!)
