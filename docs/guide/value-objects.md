@@ -192,4 +192,3 @@ Price(10) / 4            # Price(2.5)
 ## Want to Learn More?
 
 - **External Reading**: Read Martin Fowler's classic explanation on [Value Objects](https://martinfowler.com/bliki/ValueObject.html).
-- **Next Step**: Now that you know about values, let's look at things that *do* have unique identities: **[Entities & Aggregates](entities-aggregates.md)**.
