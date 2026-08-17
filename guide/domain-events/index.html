@@ -1,0 +1,2367 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../sqlalchemy-mappers/">
+      
+      
+        <link rel="next" href="../cross-aggregate-invariants/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../hike-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Domain Events - Hike Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#domain-events" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Hike Docs" class="md-header__button md-logo" aria-label="Hike Docs" data-md-component="logo">
+      
+  <img src="../../hike-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Hike Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Domain Events
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/roeybenarieh/hike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roeybenarieh/hike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Hike Docs" class="md-nav__button md-logo" aria-label="Hike Docs" data-md-component="logo">
+      
+  <img src="../../hike-icon.png" alt="logo">
+
+    </a>
+    Hike Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/roeybenarieh/hike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    roeybenarieh/hike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DDD Primitives
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    DDD Primitives
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../value-objects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Value Objects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../entities-aggregates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entities & Aggregates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules, Commands & Invariants
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Persistence
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../repositories-uow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repositories & UoW
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence-providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence Providers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sqlalchemy-mappers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SQLAlchemy Mappers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events & Consistency
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Events & Consistency
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Domain Events
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Domain Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-domain-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why domain events?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#defining-an-event" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Defining an event
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#raising-events-from-an-aggregate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raising events from an aggregate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto-collection-by-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✨ Auto-collection by repositories
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-dispatch-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a dispatch mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mode-1-in-memory-synchronous" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode 1: In-memory synchronous
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mode 1: In-memory synchronous">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-handler-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two handler forms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sequence-of-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sequence of events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-a-handler-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a handler fails
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When a handler fails">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-domain-change-is-rolled-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The domain change is rolled back
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handlers-run-in-subscription-order-the-first-failure-stops-the-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handlers run in subscription order; the first failure stops the chain
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#suppressing-errors-inside-a-handler-fire-and-forget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Suppressing errors inside a handler ("fire and forget")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-and-reraise-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log-and-reraise pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compensation-rolling-back-previously-succeeded-handlers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compensation — rolling back previously-succeeded handlers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-repos-single-bus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple repos, single bus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto_commit-shorthand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto_commit shorthand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-in-memory-sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to use in-memory sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crossaggregateinvarianthandler-enforcing-rules-across-aggregates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CrossAggregateInvariantHandler — enforcing rules across aggregates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CrossAggregateInvariantHandler — enforcing rules across aggregates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transaction-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transaction model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-crossaggregateinvarianthandler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to use CrossAggregateInvariantHandler
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mode-2-outbox-inbox-reliable-cross-service-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-1-register-your-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: register your events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-produce-write-events-atomically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: produce — write events atomically
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-relay-dispatch-from-outbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: relay — dispatch from outbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-consume-inbox-for-exactly-once-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: consume — inbox for exactly-once processing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing-mode-2-without-a-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing Mode 2 without a database
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sequence-of-events-crash-safe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sequence of events (crash-safe)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serialization-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serialization reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#eventbusdrain-manual-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EventBus.drain() — manual dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementing-a-custom-eventbus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementing a custom EventBus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision guide
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cross-aggregate-invariants/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-Aggregate Invariants
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-domain-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why domain events?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#defining-an-event" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Defining an event
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#raising-events-from-an-aggregate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raising events from an aggregate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto-collection-by-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✨ Auto-collection by repositories
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-dispatch-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a dispatch mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mode-1-in-memory-synchronous" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode 1: In-memory synchronous
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mode 1: In-memory synchronous">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-handler-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two handler forms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sequence-of-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sequence of events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-a-handler-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a handler fails
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When a handler fails">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-domain-change-is-rolled-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The domain change is rolled back
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handlers-run-in-subscription-order-the-first-failure-stops-the-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handlers run in subscription order; the first failure stops the chain
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#suppressing-errors-inside-a-handler-fire-and-forget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Suppressing errors inside a handler ("fire and forget")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-and-reraise-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log-and-reraise pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compensation-rolling-back-previously-succeeded-handlers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compensation — rolling back previously-succeeded handlers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-repos-single-bus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple repos, single bus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto_commit-shorthand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto_commit shorthand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-in-memory-sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to use in-memory sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crossaggregateinvarianthandler-enforcing-rules-across-aggregates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CrossAggregateInvariantHandler — enforcing rules across aggregates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CrossAggregateInvariantHandler — enforcing rules across aggregates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transaction-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transaction model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-crossaggregateinvarianthandler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to use CrossAggregateInvariantHandler
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mode-2-outbox-inbox-reliable-cross-service-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-1-register-your-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: register your events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-produce-write-events-atomically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: produce — write events atomically
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-relay-dispatch-from-outbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: relay — dispatch from outbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-consume-inbox-for-exactly-once-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: consume — inbox for exactly-once processing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing-mode-2-without-a-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing Mode 2 without a database
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sequence-of-events-crash-safe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sequence of events (crash-safe)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serialization-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serialization reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#eventbusdrain-manual-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EventBus.drain() — manual dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementing-a-custom-eventbus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementing a custom EventBus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision guide
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="domain-events">Domain Events</h1>
+<div class="admonition warning">
+<p class="admonition-title">🚧 Work in Progress</p>
+<p>This page is actively being written. The API and examples are functional, but some sections may be incomplete or revised before the stable release.</p>
+</div>
+<p>When something important happens in your domain — an order is placed, a payment fails, a user upgrades their subscription — that fact deserves a name and a type. <strong>Domain events</strong> give meaningful things a permanent, typed record of <em>what happened</em>, and let other parts of the system react to them without being tightly coupled to the code that triggered them.</p>
+<hr />
+<h2 id="why-domain-events">Why domain events?</h2>
+<p>Consider an e-commerce checkout:</p>
+<ol>
+<li>The <code>Order</code> aggregate is saved. ✓</li>
+<li>An email confirmation should be sent.</li>
+<li>The product inventory should be decremented.</li>
+<li>The loyalty-points balance should be updated.</li>
+</ol>
+<p>If you put all of this inside <code>place_order()</code>, you've coupled <code>Order</code> to email, inventory, and loyalty — four separate concerns in one method. Change the email provider? Touch <code>Order</code>. Add a new reaction? Touch <code>Order</code> again.</p>
+<p>Domain events break this coupling. <code>Order.place()</code> raises an <code>OrderPlaced</code> event and stops there. Email, inventory, and loyalty each subscribe to <code>OrderPlaced</code> independently. Neither knows the other exists. Adding a fifth reaction requires zero changes to <code>Order</code>.</p>
+<hr />
+<h2 id="defining-an-event">Defining an event</h2>
+<p>An event describes something that <em>has already happened</em>, so its name is always in the past tense. Events are immutable value objects — use a frozen dataclass:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainEvent</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">OrderPlaced</span><span class="p">(</span><span class="n">DomainEvent</span><span class="p">):</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">order_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">customer_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">total</span><span class="p">:</span> <span class="nb">float</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="k">class</span><span class="w"> </span><span class="nc">PaymentFailed</span><span class="p">(</span><span class="n">DomainEvent</span><span class="p">):</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">order_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span>
+</span></code></pre></div>
+<blockquote>
+<p><strong>Keep events small.</strong> An event should contain only what a subscriber needs to react — IDs and key values. If a subscriber needs the full aggregate, it re-fetches it from the repository using the ID from the event.</p>
+</blockquote>
+<hr />
+<h2 id="raising-events-from-an-aggregate">Raising events from an aggregate</h2>
+<p>An aggregate raises events from inside its command methods by calling <code>self.raise_event()</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">UuidAggregate</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.entity</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">command</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.value_object</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValueObject</span><span class="p">,</span> <span class="n">non_empty</span><span class="p">,</span> <span class="n">non_negative</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">Price</span><span class="p">(</span><span class="n">ValueObject</span><span class="p">[</span><span class="nb">float</span><span class="p">]):</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">__validators__</span> <span class="o">=</span> <span class="p">[</span><span class="n">non_negative</span><span class="p">]</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">OrderStatus</span><span class="p">(</span><span class="n">ValueObject</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">__validators__</span> <span class="o">=</span> <span class="p">[</span><span class="n">non_empty</span><span class="p">]</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="k">class</span><span class="w"> </span><span class="nc">Order</span><span class="p">(</span><span class="n">UuidAggregate</span><span class="p">):</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">status</span><span class="p">:</span> <span class="n">Field</span><span class="p">[</span><span class="n">OrderStatus</span><span class="p">]</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">total</span><span class="p">:</span> <span class="n">Field</span><span class="p">[</span><span class="n">Price</span><span class="p">]</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">customer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">OrderStatus</span><span class="p">(</span><span class="s2">"placed"</span><span class="p">)</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">raise_event</span><span class="p">(</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>            <span class="n">OrderPlaced</span><span class="p">(</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>                <span class="n">order_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>                <span class="n">customer_id</span><span class="o">=</span><span class="n">customer_id</span><span class="p">,</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>                <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">total</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>            <span class="p">)</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>        <span class="p">)</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fail_payment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">OrderStatus</span><span class="p">(</span><span class="s2">"payment_failed"</span><span class="p">)</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">raise_event</span><span class="p">(</span><span class="n">PaymentFailed</span><span class="p">(</span><span class="n">order_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">value</span><span class="p">),</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Events accumulate internally until the <code>UnitOfWork</code> drains them on commit — you never call <code>get_events()</code> or <code>clear_events()</code> yourself in normal use.</p>
+<hr />
+<h2 id="auto-collection-by-repositories">✨ Auto-collection by repositories</h2>
+<p>This is the EF Core-inspired design at the heart of Hike's event system. Every repository (<code>save</code>, <code>update</code>, <code>upsert</code>) automatically calls <code>_collect_events(aggregate)</code> after writing, which:</p>
+<ol>
+<li>Transfers the aggregate's <code>_events</code> into the repo's internal pending queue.</li>
+<li>Clears the aggregate's <code>_events</code> so the same events are never dispatched twice.</li>
+</ol>
+<p>The <code>UnitOfWork</code> then drains the pending queue when you call <code>uow.commit()</code>. <strong>You never manually manage event collection.</strong> The only decision you make is <em>what to do with the events</em> — which is the dispatch mode.</p>
+<hr />
+<h2 id="choosing-a-dispatch-mode">Choosing a dispatch mode</h2>
+<p>Hike provides exactly two modes, configured via the <code>UnitOfWork</code>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Mode</th>
+<th style="text-align: left;">Parameter</th>
+<th style="text-align: left;">When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>In-memory synchronous</strong> ⚡</td>
+<td style="text-align: left;"><code>bus=</code></td>
+<td style="text-align: left;">Reactions run in the same process; handler failure rolls back the commit</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Outbox → Inbox</strong> 📬</td>
+<td style="text-align: left;"><code>outbox=</code></td>
+<td style="text-align: left;">Reactions run in a separate service; need crash safety</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="mode-1-in-memory-synchronous">Mode 1: In-memory synchronous</h2>
+<p>Pass a bus to <code>uow(...)</code> with <code>bus=</code>. The UoW dispatches all collected events to the bus's subscribers <strong>before</strong> the database commit. If any handler raises an exception, the commit is aborted and the transaction rolls back — giving you strong consistency between your domain change and its reaction.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryEventBus</span><span class="p">,</span> <span class="n">UnitOfWork</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.persistence.providers.in_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryDBContext</span><span class="p">,</span> <span class="n">InMemoryRepository</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># --- set up ---</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">bus</span> <span class="o">=</span> <span class="n">InMemoryEventBus</span><span class="p">()</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">context</span> <span class="o">=</span> <span class="n">InMemoryDBContext</span><span class="p">()</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">repo</span><span class="p">:</span> <span class="n">InMemoryRepository</span><span class="p">[</span><span class="n">UUID</span><span class="p">,</span> <span class="n">Order</span><span class="p">]</span> <span class="o">=</span> <span class="n">InMemoryRepository</span><span class="p">()</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">uow</span> <span class="o">=</span> <span class="n">UnitOfWork</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># --- subscribe handlers ---</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_confirmation_email</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sending email for order </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">order_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">decrement_inventory</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Decrementing stock for order </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">order_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">send_confirmation_email</span><span class="p">)</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">decrement_inventory</span><span class="p">)</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="c1"># --- use ---</span>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">order</span> <span class="o">=</span> <span class="n">Order</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="n">OrderStatus</span><span class="p">(</span><span class="s2">"draft"</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">Price</span><span class="p">(</span><span class="mf">49.99</span><span class="p">))</span>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-2-23"><a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>
+</span><span id="__span-2-24"><a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="k">with</span> <span class="n">uow</span><span class="p">(</span><span class="n">repo</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="n">bus</span><span class="p">):</span>
+</span><span id="__span-2-25"><a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>    <span class="n">repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-2-26"><a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>    <span class="n">uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-2-27"><a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>    <span class="c1"># ① bus.publish(OrderPlaced) → send_confirmation_email runs</span>
+</span><span id="__span-2-28"><a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>    <span class="c1">#                              → decrement_inventory runs</span>
+</span><span id="__span-2-29"><a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>    <span class="c1"># ② if all handlers succeed → db.commit()</span>
+</span><span id="__span-2-30"><a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>    <span class="c1"># ③ if any handler raises   → exception propagates, db.rollback()</span>
+</span></code></pre></div>
+<h3 id="two-handler-forms">Two handler forms</h3>
+<p><code>subscribe()</code> accepts either a plain <strong>callable</strong> or a <strong>handler object</strong> that subclasses <code>EventHandler[TEvent]</code>. Both work identically at dispatch time — the bus calls each as <code>handler(event)</code>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventHandler</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Form 1 — callable (function, lambda, or any callable):</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">send_confirmation_email</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Order: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">order_id</span><span class="si">}</span><span class="s2">"</span><span class="p">))</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Form 2 — handler object:</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">SendConfirmationEmail</span><span class="p">(</span><span class="n">EventHandler</span><span class="p">[</span><span class="n">OrderPlaced</span><span class="p">]):</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sending email for order </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">order_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">SendConfirmationEmail</span><span class="p">())</span>
+</span></code></pre></div>
+<p><strong>When to use a handler object instead of a callable:</strong></p>
+<ul>
+<li>The handler needs <strong>injected dependencies</strong> (a mailer, a logger, a repository) — store them in <code>__init__</code> and use them in <code>handle</code>.</li>
+<li>The handler is complex enough to warrant its own class and tests.</li>
+<li>You want to enforce that all handlers for a given event share a common interface.</li>
+</ul>
+<p>Both forms may be subscribed to the same event — the bus dispatches them in subscription order.</p>
+<h3 id="sequence-of-events">Sequence of events</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>order.place()             → OrderPlaced appended to order._events
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>repo.save(order)          → repo collects OrderPlaced, clears order._events
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>uow.commit():
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  ├─ bus.publish_all()    → handlers run synchronously, in order subscribed
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  │     if any raises     → exception propagates; __exit__ calls rollback()
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  └─ db.commit()          → order row written only if all handlers succeeded
+</span></code></pre></div>
+<h3 id="when-a-handler-fails">When a handler fails</h3>
+<h4 id="the-domain-change-is-rolled-back">The domain change is rolled back</h4>
+<p>This is the central guarantee of the in-memory mode. Because handlers run <strong>before</strong> <code>db.commit()</code>, any unhandled exception from a handler aborts the commit and rolls back the entire transaction. The domain change and the failed reaction are kept consistent — either both happen or neither does.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">enforce_credit_limit</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">total</span> <span class="o">&gt;</span> <span class="n">customer</span><span class="o">.</span><span class="n">credit_limit</span><span class="p">:</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>        <span class="k">raise</span> <span class="n">CreditLimitExceeded</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">customer_id</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">enforce_credit_limit</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="k">with</span> <span class="n">uow</span><span class="p">(</span><span class="n">repo</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="n">bus</span><span class="p">):</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>        <span class="n">repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="n">uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>        <span class="c1"># enforce_credit_limit raises CreditLimitExceeded</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="c1"># → db.commit() is never called</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>        <span class="c1"># → __exit__ calls rollback()</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        <span class="c1"># → order does not exist in the database</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="k">except</span> <span class="n">CreditLimitExceeded</span><span class="p">:</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    <span class="o">...</span>   <span class="c1"># handle the error at the application layer</span>
+</span></code></pre></div>
+<h4 id="handlers-run-in-subscription-order-the-first-failure-stops-the-chain">Handlers run in subscription order; the first failure stops the chain</h4>
+<p>Multiple handlers on the same event run in the order they were subscribed. If handler A raises, handler B (subscribed afterward) <strong>never runs</strong>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">send_confirmation_email</span><span class="p">)</span>   <span class="c1"># handler A — runs first</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">decrement_inventory</span><span class="p">)</span>       <span class="c1"># handler B — runs only if A succeeds</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">update_loyalty_points</span><span class="p">)</span>     <span class="c1"># handler C — runs only if A and B succeed</span>
+</span></code></pre></div>
+<p>Likewise, if a single <code>uow.commit()</code> drains events from multiple aggregates, a failure on the first event's handler means no subsequent events are dispatched at all.</p>
+<h4 id="suppressing-errors-inside-a-handler-fire-and-forget">Suppressing errors inside a handler ("fire and forget")</h4>
+<p>If you want a handler to proceed regardless of failure — for example, to send a non-critical notification — catch the exception inside the handler itself. The <code>InMemoryEventBus</code> has no built-in error swallowing; it is entirely up to the handler:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_marketing_email</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="n">mailer</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">customer_id</span><span class="p">,</span> <span class="n">template</span><span class="o">=</span><span class="s2">"order_placed"</span><span class="p">)</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="k">except</span> <span class="n">MailerUnavailable</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Marketing email skipped: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="c1"># no re-raise → handler returns normally → chain continues</span>
+</span></code></pre></div>
+<p>With this pattern, <code>send_marketing_email</code> can fail silently without rolling back the domain change or blocking subsequent handlers.</p>
+<h4 id="log-and-reraise-pattern">Log-and-reraise pattern</h4>
+<p>If you want to log the error and still roll back, re-raise after logging:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">sync_search_index</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">OrderPlaced</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        <span class="n">search</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">order_id</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">total</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">except</span> <span class="n">SearchServiceError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"Search sync failed for order </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">order_id</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="k">raise</span>   <span class="c1"># re-raise → transaction rolls back</span>
+</span></code></pre></div>
+<h4 id="summary">Summary</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Handler behaviour</th>
+<th style="text-align: left;">Effect on subsequent handlers</th>
+<th style="text-align: left;">Effect on DB commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Returns normally</td>
+<td style="text-align: left;">Next handler runs</td>
+<td style="text-align: left;">Proceeds (if all handlers succeed)</td>
+</tr>
+<tr>
+<td style="text-align: left;">Raises (unhandled)</td>
+<td style="text-align: left;">Remaining handlers <strong>do not run</strong></td>
+<td style="text-align: left;"><strong>Rolled back</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">Catches exception, does not re-raise</td>
+<td style="text-align: left;">Next handler runs</td>
+<td style="text-align: left;">Proceeds normally</td>
+</tr>
+<tr>
+<td style="text-align: left;">Catches exception, re-raises</td>
+<td style="text-align: left;">Remaining handlers <strong>do not run</strong></td>
+<td style="text-align: left;"><strong>Rolled back</strong></td>
+</tr>
+</tbody>
+</table>
+<h4 id="compensation-rolling-back-previously-succeeded-handlers">Compensation — rolling back previously-succeeded handlers</h4>
+<p>When multiple handlers subscribe to the same event (or a batch of events), the bus dispatches them in order. If handler B fails after handler A has already succeeded, handler A's side effects are <strong>not automatically reversed</strong> by the database rollback — they may have committed their own transaction (e.g. a <code>CrossAggregateInvariantHandler</code> that updated another aggregate).</p>
+<p>For this, <code>EventHandler</code> objects support a <code>compensate()</code> method. When any handler fails during <code>publish_all()</code>, the bus calls <code>compensate()</code> on every previously-succeeded handler object, in <strong>reverse order</strong>, before re-raising the original exception.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventHandler</span><span class="p">,</span> <span class="n">CrossAggregateInvariantHandler</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">IncrementHarborDockCount</span><span class="p">(</span><span class="n">CrossAggregateInvariantHandler</span><span class="p">[</span><span class="n">ShipLaunched</span><span class="p">]):</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">ShipLaunched</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="p">):</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>            <span class="n">harbor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">get_one</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_harbor_id</span><span class="p">)</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>            <span class="n">harbor</span><span class="o">.</span><span class="n">receive_ship</span><span class="p">()</span>   <span class="c1"># dock_count += 1</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">harbor</span><span class="p">)</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">compensate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">ShipLaunched</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>        <span class="c1"># Called if a later handler in the same publish_all() fails</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="p">):</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>            <span class="n">harbor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">get_one</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_harbor_id</span><span class="p">)</span>
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>            <span class="n">harbor</span><span class="o">.</span><span class="n">release_ship</span><span class="p">()</span>   <span class="c1"># dock_count -= 1</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">harbor</span><span class="p">)</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span></code></pre></div>
+<p><strong>Rules:</strong></p>
+<ul>
+<li><code>compensate()</code> is <strong>abstract</strong> — every <code>EventHandler</code> subclass must implement it, even if the body is just <code>pass</code>. This forces explicit acknowledgement of whether there is anything to undo.</li>
+<li><strong>Plain callables</strong> (functions, lambdas) are not tracked and are never compensated.</li>
+<li><strong>Compensation order</strong>: reverse of success order — the last succeeded handler is compensated first.</li>
+<li><strong>Compensation failures</strong> are logged (<code>logging.exception</code>) but do not replace the original exception. All succeeded handlers are still compensated before the original error propagates.</li>
+<li>Compensation is <strong>local</strong> — it runs in-process, synchronously, within the same <code>publish_all()</code> call.</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">ShipLaunched</span><span class="p">,</span> <span class="n">IncrementHarborDockCount</span><span class="p">(</span><span class="n">harbor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">harbor_repo</span><span class="p">,</span> <span class="n">harbor_uow</span><span class="p">))</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">ShipLaunched</span><span class="p">,</span> <span class="n">EnforceFuelCapacity</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>   <span class="c1"># fails</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># bus.publish_all([ShipLaunched(...)]):</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="c1">#   1. IncrementHarborDockCount.handle()  → succeeds (harbor dock_count += 1)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="c1">#   2. EnforceFuelCapacity.handle()       → raises FuelCapacityExceeded</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1">#   3. IncrementHarborDockCount.compensate() → harbor dock_count -= 1 (reversed)</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="c1">#   4. FuelCapacityExceeded propagates</span>
+</span></code></pre></div>
+<h3 id="multiple-repos-single-bus">Multiple repos, single bus</h3>
+<p>If you save aggregates from two repos in the same block, both repos' events are collected and dispatched together before commit:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">with</span> <span class="n">uow</span><span class="p">(</span><span class="n">order_repo</span><span class="p">,</span> <span class="n">inventory_repo</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="n">bus</span><span class="p">):</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">order_repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">inventory</span><span class="o">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">inventory_repo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inventory</span><span class="p">)</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="n">uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="c1"># All events from both repos → dispatched before commit</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="c1"># All handlers succeed → both writes committed atomically</span>
+</span></code></pre></div>
+<h3 id="auto_commit-shorthand"><code>auto_commit</code> shorthand</h3>
+<p>If you always call <code>uow.commit()</code> at the end of your block, you can skip writing it explicitly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">with</span> <span class="n">uow</span><span class="p">(</span><span class="n">repo</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="n">bus</span><span class="p">,</span> <span class="n">auto_commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># handlers run, then commit fires automatically on block exit</span>
+</span></code></pre></div>
+<h3 id="when-to-use-in-memory-sync">When to use in-memory sync</h3>
+<ul>
+<li>Reactions live in the same Python process (same service, same thread).</li>
+<li>You want handler failures to prevent the domain change from being committed.</li>
+<li>You want simplicity — no extra database tables or background threads.</li>
+</ul>
+<hr />
+<h2 id="crossaggregateinvarianthandler-enforcing-rules-across-aggregates"><code>CrossAggregateInvariantHandler</code> — enforcing rules across aggregates</h2>
+<p>When a domain event triggers a check or update on a <strong>second, different aggregate</strong>, use <code>CrossAggregateInvariantHandler</code>. It is a handler object that receives the repository and unit-of-work for the <em>other</em> aggregate at construction time, so <code>handle()</code> can load, check, and update it in its own transaction.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">CrossAggregateInvariantHandler</span><span class="p">,</span> <span class="n">UnitOfWork</span><span class="p">,</span> <span class="n">IRepository</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">IncrementHarborDockCount</span><span class="p">(</span><span class="n">CrossAggregateInvariantHandler</span><span class="p">[</span><span class="n">ShipLaunched</span><span class="p">]):</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="sd">"""On ShipLaunched, update the Harbor aggregate that owns the berth."""</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>        <span class="n">harbor_id</span><span class="p">:</span> <span class="n">HarborID</span><span class="p">,</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>        <span class="n">repo</span><span class="p">:</span> <span class="n">IRepository</span><span class="p">,</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>        <span class="n">uow</span><span class="p">:</span> <span class="n">UnitOfWork</span><span class="p">,</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">repo</span><span class="p">,</span> <span class="n">uow</span><span class="p">)</span>        <span class="c1"># stores as self._repo / self._uow</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_harbor_id</span> <span class="o">=</span> <span class="n">harbor_id</span>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">ShipLaunched</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="p">):</span>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a>            <span class="n">harbor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">get_one</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_harbor_id</span><span class="p">)</span>
+</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a>            <span class="n">CapacityRule</span><span class="p">()</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">HarborCtx</span><span class="p">(</span><span class="n">harbor</span><span class="o">=</span><span class="n">harbor</span><span class="p">))</span>   <span class="c1"># optional invariant check</span>
+</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a>            <span class="n">harbor</span><span class="o">.</span><span class="n">receive_ship</span><span class="p">()</span>
+</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">harbor</span><span class="p">)</span>
+</span><span id="__span-13-21"><a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-13-22"><a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a>
+</span><span id="__span-13-23"><a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">compensate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">ShipLaunched</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-13-24"><a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a>        <span class="c1"># Called automatically if a later handler fails in the same publish_all()</span>
+</span><span id="__span-13-25"><a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a>        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="p">):</span>
+</span><span id="__span-13-26"><a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a>            <span class="n">harbor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">get_one</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_harbor_id</span><span class="p">)</span>
+</span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a>            <span class="n">harbor</span><span class="o">.</span><span class="n">release_ship</span><span class="p">()</span>          <span class="c1"># undo the dock_count increment</span>
+</span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_repo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">harbor</span><span class="p">)</span>
+</span><span id="__span-13-29"><a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Subscribing and wiring:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">harbor_repo</span> <span class="o">=</span> <span class="o">...</span>   <span class="c1"># IRepository for Harbor</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">harbor_uow</span>  <span class="o">=</span> <span class="n">UnitOfWork</span><span class="p">(</span><span class="n">harbor_db_context</span><span class="p">)</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="n">handler</span> <span class="o">=</span> <span class="n">IncrementHarborDockCount</span><span class="p">(</span><span class="n">harbor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">harbor_repo</span><span class="p">,</span> <span class="n">harbor_uow</span><span class="p">)</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">ship_bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">ShipLaunched</span><span class="p">,</span> <span class="n">handler</span><span class="p">)</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># When a ship is launched:</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="k">with</span> <span class="n">ship_uow</span><span class="p">(</span><span class="n">ship_repo</span><span class="p">,</span> <span class="n">bus</span><span class="o">=</span><span class="n">ship_bus</span><span class="p">):</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="n">ship</span><span class="o">.</span><span class="n">launch</span><span class="p">()</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="n">ship_repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">ship</span><span class="p">)</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="n">ship_uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="c1"># ① ship_bus dispatches ShipLaunched</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="c1"># ② handler opens its own harbor_uow transaction</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>    <span class="c1"># ③ handler loads Harbor, checks CapacityRule, increments dock count, commits</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>    <span class="c1"># ④ ship_uow commits the ship write (if no error in ②–③)</span>
+</span></code></pre></div>
+<h3 id="transaction-model">Transaction model</h3>
+<p><code>CrossAggregateInvariantHandler</code> opens its <strong>own</strong> <code>UnitOfWork</code> transaction — separate from the one that raised the event. This means:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Scenario</th>
+<th style="text-align: left;">What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Handler's transaction succeeds</td>
+<td style="text-align: left;">Both the ship write and the harbor update commit</td>
+</tr>
+<tr>
+<td style="text-align: left;">Handler's transaction fails (exception)</td>
+<td style="text-align: left;">Handler exception propagates; ship write is <strong>rolled back</strong> (pre-commit dispatch)</td>
+</tr>
+<tr>
+<td style="text-align: left;">Ship write fails (exception in <code>uow.commit()</code>)</td>
+<td style="text-align: left;">Harbor update already committed; ship write rolls back — brief inconsistency</td>
+</tr>
+</tbody>
+</table>
+<p>For guaranteed atomicity across both aggregates in a single transaction, use a <code>DomainService</code> instead (see <a href="../cross-aggregate-invariants/">Cross-Aggregate Invariants</a>).</p>
+<h3 id="when-to-use-crossaggregateinvarianthandler">When to use <code>CrossAggregateInvariantHandler</code></h3>
+<ul>
+<li>An event from one aggregate must trigger a <strong>write</strong> on another aggregate.</li>
+<li>The invariant is enforced <strong>reactively</strong> (eventual consistency is acceptable).</li>
+<li>You want the handler to be composable, testable, and named explicitly.</li>
+</ul>
+<hr />
+<h2 id="mode-2-outbox-inbox-reliable-cross-service-delivery">Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)</h2>
+<p>The problem with in-memory dispatch is that if the process crashes <strong>after</strong> the database commit but <strong>before</strong> the bus dispatches, your events are lost forever. For reactions in other services — or for any event that must <em>definitely</em> be delivered — you need the <strong>outbox pattern</strong>.</p>
+<h3 id="how-it-works">How it works</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Producer service:
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>  uow.commit():
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    ├─ INSERT INTO orders (...)     ┐
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    └─ INSERT INTO hike_outbox (...)┘  same DB transaction → atomic
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>Background relay (same or separate process):
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>  loop:
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>    SELECT * FROM hike_outbox WHERE processed = false
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    for each row:
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>      bus.publish(deserialize(row))   → send to Kafka / HTTP / in-memory
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>      DELETE FROM hike_outbox WHERE id = row.id
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>Receiving bounded context:
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>  InboxProcessor.process(event_id, event):
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    IF already in hike_inbox → skip          (idempotency)
+</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>    INSERT INTO hike_inbox (event_id, ...)
+</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>    bus.publish(event) → handler runs
+</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>    UPDATE hike_inbox SET processed = true WHERE event_id = ...
+</span></code></pre></div>
+<p>The outbox and the domain change are committed <strong>atomically</strong>. Even if the process crashes immediately afterward, the relay will pick up the event on the next poll. The inbox prevents the same event from being processed twice.</p>
+<h3 id="step-1-register-your-events">Step 1: register your events</h3>
+<p>Events that go through the outbox must be serializable. Decorate them with <code>@register_event</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainEvent</span><span class="p">,</span> <span class="n">register_event</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="nd">@register_event</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">OrderPlaced</span><span class="p">(</span><span class="n">DomainEvent</span><span class="p">):</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>    <span class="n">order_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>    <span class="n">customer_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="n">total</span><span class="p">:</span> <span class="nb">float</span>
+</span></code></pre></div>
+<p><code>@register_event</code> stores the class in a global registry so <code>deserialize_event</code> can reconstruct it by name. <strong>The decorator must be the outermost decorator</strong> — apply it before <code>@dataclass</code>.</p>
+<blockquote>
+<p><strong>Field types</strong>: all fields must be JSON-serializable primitives (<code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>). Use <code>str</code> for UUIDs (<code>str(uuid)</code>) rather than <code>UUID</code> objects, since JSON has no UUID type.</p>
+</blockquote>
+<h3 id="step-2-produce-write-events-atomically">Step 2: produce — write events atomically</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.persistence.providers.sqlalchemy.outbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLAlchemyOutboxRepository</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_engine</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">sessionmaker</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="s2">"postgresql+psycopg://user:pass@localhost/db"</span><span class="p">)</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="n">SQLAlchemyOutboxRepository</span><span class="o">.</span><span class="n">create_tables</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>   <span class="c1"># creates hike_outbox, once at startup</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="n">session_factory</span> <span class="o">=</span> <span class="n">sessionmaker</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="n">outbox_repo</span> <span class="o">=</span> <span class="n">SQLAlchemyOutboxRepository</span><span class="p">()</span>
+</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>
+</span><span id="__span-17-11"><a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="k">with</span> <span class="n">uow</span><span class="p">(</span><span class="n">order_repo</span><span class="p">,</span> <span class="n">outbox</span><span class="o">=</span><span class="n">outbox_repo</span><span class="p">):</span>
+</span><span id="__span-17-12"><a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>    <span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-17-13"><a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a>    <span class="n">order_repo</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-17-14"><a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>    <span class="n">uow</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-17-15"><a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>    <span class="c1"># INSERT INTO orders + INSERT INTO hike_outbox in the same transaction</span>
+</span></code></pre></div>
+<h3 id="step-3-relay-dispatch-from-outbox">Step 3: relay — dispatch from outbox</h3>
+<p>The relay runs in a loop, reading pending outbox rows, publishing them, then deleting them:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutboxRelay</span><span class="p">,</span> <span class="n">InMemoryEventBus</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># The relay bus is your external transport — in-memory for local, or Kafka/Redis for real cross-service</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="n">relay_bus</span> <span class="o">=</span> <span class="n">InMemoryEventBus</span><span class="p">()</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="n">relay_bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="n">kafka_producer</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">"order-events"</span><span class="p">,</span> <span class="n">e</span><span class="p">))</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="n">relay</span> <span class="o">=</span> <span class="n">OutboxRelay</span><span class="p">(</span><span class="n">outbox_repo</span><span class="p">,</span> <span class="n">relay_bus</span><span class="p">)</span>
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>
+</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="c1"># Run in a daemon thread so it doesn't block your app startup:</span>
+</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">relay</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">"interval"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-18-12"><a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</span></code></pre></div>
+<p><code>relay.start(interval=1.0)</code> polls every second. For a cloud deployment you might run the relay as a separate process or container.</p>
+<h3 id="step-4-consume-inbox-for-exactly-once-processing">Step 4: consume — inbox for exactly-once processing</h3>
+<p>The receiving service reads from Kafka (or whichever transport you use) and hands events to <code>InboxProcessor</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">InboxProcessor</span><span class="p">,</span> <span class="n">InMemoryEventBus</span><span class="p">,</span> <span class="n">deserialize_event</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.persistence.providers.sqlalchemy.inbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLAlchemyInboxRepository</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="s2">"postgresql+psycopg://user:pass@localhost/receiving-db"</span><span class="p">)</span>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="n">SQLAlchemyInboxRepository</span><span class="o">.</span><span class="n">create_tables</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>   <span class="c1"># creates hike_inbox, once at startup</span>
+</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>
+</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="n">local_bus</span> <span class="o">=</span> <span class="n">InMemoryEventBus</span><span class="p">()</span>
+</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="n">local_bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">fulfill_order</span><span class="p">)</span>
+</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="n">local_bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">notify_warehouse</span><span class="p">)</span>
+</span><span id="__span-19-11"><a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>
+</span><span id="__span-19-12"><a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a><span class="n">inbox_repo</span> <span class="o">=</span> <span class="n">SQLAlchemyInboxRepository</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+</span><span id="__span-19-13"><a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a><span class="n">processor</span> <span class="o">=</span> <span class="n">InboxProcessor</span><span class="p">(</span><span class="n">inbox_repo</span><span class="p">,</span> <span class="n">local_bus</span><span class="p">)</span>
+</span><span id="__span-19-14"><a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a>
+</span><span id="__span-19-15"><a id="__codelineno-19-15" name="__codelineno-19-15" href="#__codelineno-19-15"></a><span class="c1"># Consumer loop — Kafka, Redis Streams, SQS, HTTP webhook, etc.</span>
+</span><span id="__span-19-16"><a id="__codelineno-19-16" name="__codelineno-19-16" href="#__codelineno-19-16"></a><span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">kafka_consumer</span><span class="p">:</span>
+</span><span id="__span-19-17"><a id="__codelineno-19-17" name="__codelineno-19-17" href="#__codelineno-19-17"></a>    <span class="n">event</span> <span class="o">=</span> <span class="n">deserialize_event</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">event_type</span><span class="p">,</span> <span class="n">message</span><span class="o">.</span><span class="n">event_data</span><span class="p">)</span>
+</span><span id="__span-19-18"><a id="__codelineno-19-18" name="__codelineno-19-18" href="#__codelineno-19-18"></a>    <span class="n">processor</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">event_id</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">message_id</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="p">)</span>
+</span><span id="__span-19-19"><a id="__codelineno-19-19" name="__codelineno-19-19" href="#__codelineno-19-19"></a>    <span class="n">kafka_consumer</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>   <span class="c1"># ack only after processing</span>
+</span></code></pre></div>
+<p><code>InboxProcessor.process</code> is idempotent: if <code>event_id</code> has already been processed, the call returns immediately without dispatching.</p>
+<h3 id="testing-mode-2-without-a-database">🧪 Testing Mode 2 without a database</h3>
+<p>Replace the SQLAlchemy repositories with the library-provided in-memory versions — no database or schema setup needed:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryOutboxRepository</span><span class="p">,</span> <span class="n">InMemoryInboxRepository</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="c1"># Drop-in replacements for testing:</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="n">outbox_repo</span> <span class="o">=</span> <span class="n">InMemoryOutboxRepository</span><span class="p">()</span>   <span class="c1"># instead of SQLAlchemyOutboxRepository()</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="n">inbox_repo</span>  <span class="o">=</span> <span class="n">InMemoryInboxRepository</span><span class="p">()</span>   <span class="c1"># instead of SQLAlchemyInboxRepository(session)</span>
+</span></code></pre></div>
+<p>Both work identically to the SQLAlchemy implementations. <code>InMemoryOutboxRepository</code> integrates with <code>uow(outbox=...)</code> and stores records in a plain dict. <code>InMemoryInboxRepository</code> integrates with <code>InboxProcessor</code> for exactly-once deduplication.</p>
+<hr />
+<h3 id="sequence-of-events-crash-safe">Sequence of events (crash-safe)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Order service:
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>  order.place()              → OrderPlaced in order._events
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>  order_repo.save(order)     → repo collects OrderPlaced
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>  uow.commit():
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>    ├─ INSERT INTO orders
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>    └─ INSERT INTO hike_outbox  ← same transaction; crash here = no data loss
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>  [crash here? hike_outbox row survives in the database]
+</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>
+</span><span id="__span-21-10"><a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>Relay (restarts after crash):
+</span><span id="__span-21-11"><a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>  SELECT * FROM hike_outbox  → finds the surviving row
+</span><span id="__span-21-12"><a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a>  bus.publish(OrderPlaced)   → sends to Kafka
+</span><span id="__span-21-13"><a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a>  DELETE FROM hike_outbox    → cleanup
+</span><span id="__span-21-14"><a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a>
+</span><span id="__span-21-15"><a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a>Fulfillment service:
+</span><span id="__span-21-16"><a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a>  for message in kafka:
+</span><span id="__span-21-17"><a id="__codelineno-21-17" name="__codelineno-21-17" href="#__codelineno-21-17"></a>    InboxProcessor.process("msg-id-123", event):
+</span><span id="__span-21-18"><a id="__codelineno-21-18" name="__codelineno-21-18" href="#__codelineno-21-18"></a>      is_processed("msg-id-123") → False
+</span><span id="__span-21-19"><a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a>      INSERT INTO hike_inbox
+</span><span id="__span-21-20"><a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a>      local_bus.publish(event) → fulfill_order runs
+</span><span id="__span-21-21"><a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a>      UPDATE processed = true
+</span><span id="__span-21-22"><a id="__codelineno-21-22" name="__codelineno-21-22" href="#__codelineno-21-22"></a>    kafka.commit()
+</span><span id="__span-21-23"><a id="__codelineno-21-23" name="__codelineno-21-23" href="#__codelineno-21-23"></a>
+</span><span id="__span-21-24"><a id="__codelineno-21-24" name="__codelineno-21-24" href="#__codelineno-21-24"></a>  [duplicate delivery? process() returns immediately — idempotent]
+</span></code></pre></div>
+<hr />
+<h2 id="serialization-reference">Serialization reference</h2>
+<p><code>@register_event</code>, <code>serialize_event</code>, and <code>deserialize_event</code> form the serialization layer used by the outbox and inbox:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_event</span><span class="p">,</span> <span class="n">serialize_event</span><span class="p">,</span> <span class="n">deserialize_event</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="nd">@register_event</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">ShipDispatched</span><span class="p">(</span><span class="n">DomainEvent</span><span class="p">):</span>
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>    <span class="n">shipment_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>    <span class="n">destination</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="c1"># Serialize (used by outbox on save)</span>
+</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="n">event</span> <span class="o">=</span> <span class="n">ShipDispatched</span><span class="p">(</span><span class="n">shipment_id</span><span class="o">=</span><span class="s2">"sh-1"</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="s2">"London"</span><span class="p">)</span>
+</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="n">event_type</span><span class="p">,</span> <span class="n">json_data</span> <span class="o">=</span> <span class="n">serialize_event</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="c1"># event_type → "ShipDispatched"</span>
+</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="c1"># json_data  → '{"shipment_id": "sh-1", "destination": "London"}'</span>
+</span><span id="__span-22-14"><a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>
+</span><span id="__span-22-15"><a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a><span class="c1"># Deserialize (used by relay and inbox consumer)</span>
+</span><span id="__span-22-16"><a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a><span class="n">restored</span> <span class="o">=</span> <span class="n">deserialize_event</span><span class="p">(</span><span class="s2">"ShipDispatched"</span><span class="p">,</span> <span class="n">json_data</span><span class="p">)</span>
+</span><span id="__span-22-17"><a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">restored</span><span class="p">,</span> <span class="n">ShipDispatched</span><span class="p">)</span>
+</span><span id="__span-22-18"><a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a><span class="k">assert</span> <span class="n">restored</span><span class="o">.</span><span class="n">destination</span> <span class="o">==</span> <span class="s2">"London"</span>
+</span></code></pre></div>
+<hr />
+<h2 id="eventbusdrain-manual-dispatch"><code>EventBus.drain()</code> — manual dispatch</h2>
+<p>For tests, scripts, or thin application layers that don't use the full UoW pipeline, <code>drain()</code> publishes and clears an aggregate's events in one call:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="n">bus</span> <span class="o">=</span> <span class="n">InMemoryEventBus</span><span class="p">()</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">record_audit_log</span><span class="p">)</span>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="n">bus</span><span class="o">.</span><span class="n">drain</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="c1"># equivalent to:</span>
+</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="c1">#   bus.publish_all(order.get_events())</span>
+</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="c1">#   order.clear_events()</span>
+</span></code></pre></div>
+<p>This is useful when writing integration tests that exercise the aggregate directly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_order_placed_event_is_raised</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>    <span class="n">bus</span> <span class="o">=</span> <span class="n">InMemoryEventBus</span><span class="p">()</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>    <span class="n">received</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DomainEvent</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>    <span class="n">bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">OrderPlaced</span><span class="p">,</span> <span class="n">received</span><span class="o">.</span><span class="n">append</span><span class="p">)</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>    <span class="n">order</span> <span class="o">=</span> <span class="n">Order</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="n">OrderStatus</span><span class="p">(</span><span class="s2">"draft"</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">Price</span><span class="p">(</span><span class="mf">49.99</span><span class="p">))</span>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a>    <span class="n">order</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="s2">"user-42"</span><span class="p">)</span>
+</span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>
+</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a>    <span class="n">bus</span><span class="o">.</span><span class="n">drain</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+</span><span id="__span-24-10"><a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a>
+</span><span id="__span-24-11"><a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">received</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-24-12"><a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a>    <span class="k">assert</span> <span class="n">received</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">customer_id</span> <span class="o">==</span> <span class="s2">"user-42"</span>
+</span></code></pre></div>
+<hr />
+<h2 id="implementing-a-custom-eventbus">Implementing a custom <code>EventBus</code></h2>
+<p><code>InMemoryEventBus</code> is synchronous and in-process — great for development, tests, and same-service reactions. For production cross-service delivery, subclass <code>EventBus</code> and implement <code>subscribe</code> and <code>publish</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventBus</span><span class="p">,</span> <span class="n">DomainEvent</span>
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+</span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+</span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+</span><span id="__span-25-5"><a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">KafkaEventBus</span><span class="p">(</span><span class="n">EventBus</span><span class="p">):</span>
+</span><span id="__span-25-6"><a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">producer</span><span class="p">:</span> <span class="n">KafkaProducer</span><span class="p">,</span> <span class="n">topic</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-25-7"><a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_producer</span> <span class="o">=</span> <span class="n">producer</span>
+</span><span id="__span-25-8"><a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_topic</span> <span class="o">=</span> <span class="n">topic</span>
+</span><span id="__span-25-9"><a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a>
+</span><span id="__span-25-10"><a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">[</span><span class="n">TEvent</span><span class="p">:</span> <span class="n">DomainEvent</span><span class="p">](</span>
+</span><span id="__span-25-11"><a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-25-12"><a id="__codelineno-25-12" name="__codelineno-25-12" href="#__codelineno-25-12"></a>        <span class="n">event_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">TEvent</span><span class="p">],</span>
+</span><span id="__span-25-13"><a id="__codelineno-25-13" name="__codelineno-25-13" href="#__codelineno-25-13"></a>        <span class="n">handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TEvent</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="n">EventHandler</span><span class="p">[</span><span class="n">TEvent</span><span class="p">],</span>
+</span><span id="__span-25-14"><a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-25-15"><a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a>        <span class="c1"># Kafka is fire-and-forget from the producer side;</span>
+</span><span id="__span-25-16"><a id="__codelineno-25-16" name="__codelineno-25-16" href="#__codelineno-25-16"></a>        <span class="c1"># consumers subscribe separately via their Kafka consumer group.</span>
+</span><span id="__span-25-17"><a id="__codelineno-25-17" name="__codelineno-25-17" href="#__codelineno-25-17"></a>        <span class="k">pass</span>
+</span><span id="__span-25-18"><a id="__codelineno-25-18" name="__codelineno-25-18" href="#__codelineno-25-18"></a>
+</span><span id="__span-25-19"><a id="__codelineno-25-19" name="__codelineno-25-19" href="#__codelineno-25-19"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">DomainEvent</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-25-20"><a id="__codelineno-25-20" name="__codelineno-25-20" href="#__codelineno-25-20"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="n">serialize_event</span>
+</span><span id="__span-25-21"><a id="__codelineno-25-21" name="__codelineno-25-21" href="#__codelineno-25-21"></a>        <span class="n">event_type</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="n">serialize_event</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+</span><span id="__span-25-22"><a id="__codelineno-25-22" name="__codelineno-25-22" href="#__codelineno-25-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_producer</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+</span><span id="__span-25-23"><a id="__codelineno-25-23" name="__codelineno-25-23" href="#__codelineno-25-23"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_topic</span><span class="p">,</span>
+</span><span id="__span-25-24"><a id="__codelineno-25-24" name="__codelineno-25-24" href="#__codelineno-25-24"></a>            <span class="n">value</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"event_type"</span><span class="p">:</span> <span class="n">event_type</span><span class="p">,</span> <span class="s2">"data"</span><span class="p">:</span> <span class="n">payload</span><span class="p">})</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>
+</span><span id="__span-25-25"><a id="__codelineno-25-25" name="__codelineno-25-25" href="#__codelineno-25-25"></a>        <span class="p">)</span>
+</span></code></pre></div>
+<p>Pass this as <code>bus=</code> on a UoW if you want direct post-commit publication, or as the bus argument to <code>OutboxRelay</code> for the relay pattern.</p>
+<hr />
+<h2 id="quick-reference">Quick reference</h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>    <span class="n">DomainEvent</span><span class="p">,</span>                      <span class="c1"># base class for all events</span>
+</span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>    <span class="n">register_event</span><span class="p">,</span>                   <span class="c1"># @register_event: required for outbox serialization</span>
+</span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>    <span class="n">serialize_event</span><span class="p">,</span>                  <span class="c1"># (type_name, json_str) ← used by outbox</span>
+</span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>    <span class="n">deserialize_event</span><span class="p">,</span>                <span class="c1"># DomainEvent ← used by relay and inbox consumer</span>
+</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>    <span class="n">EventBus</span><span class="p">,</span>                         <span class="c1"># abstract pub/sub interface</span>
+</span><span id="__span-26-7"><a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>    <span class="n">EventHandler</span><span class="p">,</span>                     <span class="c1"># abstract handler object base class</span>
+</span><span id="__span-26-8"><a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>    <span class="n">InMemoryEventBus</span><span class="p">,</span>                 <span class="c1"># synchronous, in-process bus</span>
+</span><span id="__span-26-9"><a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>    <span class="n">CrossAggregateInvariantHandler</span><span class="p">,</span>   <span class="c1"># handler with repo+uow for the other aggregate</span>
+</span><span id="__span-26-10"><a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>    <span class="n">IOutboxRepository</span><span class="p">,</span>                <span class="c1"># abstract outbox — extend for custom backends</span>
+</span><span id="__span-26-11"><a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>    <span class="n">OutboxRecord</span><span class="p">,</span>                     <span class="c1"># infrastructure Aggregate for one hike_outbox row</span>
+</span><span id="__span-26-12"><a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>    <span class="n">OutboxRelay</span><span class="p">,</span>                      <span class="c1"># polls outbox → publishes → deletes</span>
+</span><span id="__span-26-13"><a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>    <span class="n">IInboxRepository</span><span class="p">,</span>                 <span class="c1"># abstract inbox — extend for custom backends</span>
+</span><span id="__span-26-14"><a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>    <span class="n">InboxRecord</span><span class="p">,</span>                      <span class="c1"># infrastructure Aggregate[str] for one hike_inbox row</span>
+</span><span id="__span-26-15"><a id="__codelineno-26-15" name="__codelineno-26-15" href="#__codelineno-26-15"></a>    <span class="n">InboxProcessor</span><span class="p">,</span>                   <span class="c1"># exactly-once dispatch for incoming events</span>
+</span><span id="__span-26-16"><a id="__codelineno-26-16" name="__codelineno-26-16" href="#__codelineno-26-16"></a>    <span class="n">InMemoryOutboxRepository</span><span class="p">,</span>         <span class="c1"># in-memory outbox — drop-in for tests</span>
+</span><span id="__span-26-17"><a id="__codelineno-26-17" name="__codelineno-26-17" href="#__codelineno-26-17"></a>    <span class="n">InMemoryInboxRepository</span><span class="p">,</span>          <span class="c1"># in-memory inbox — drop-in for tests</span>
+</span><span id="__span-26-18"><a id="__codelineno-26-18" name="__codelineno-26-18" href="#__codelineno-26-18"></a><span class="p">)</span>
+</span><span id="__span-26-19"><a id="__codelineno-26-19" name="__codelineno-26-19" href="#__codelineno-26-19"></a>
+</span><span id="__span-26-20"><a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a><span class="c1"># SQLAlchemy concrete implementations (production):</span>
+</span><span id="__span-26-21"><a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.persistence.providers.sqlalchemy.outbox</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-26-22"><a id="__codelineno-26-22" name="__codelineno-26-22" href="#__codelineno-26-22"></a>    <span class="n">SQLAlchemyOutboxRepository</span><span class="p">,</span>
+</span><span id="__span-26-23"><a id="__codelineno-26-23" name="__codelineno-26-23" href="#__codelineno-26-23"></a>    <span class="n">OutboxModel</span><span class="p">,</span>            <span class="c1"># the ORM model (include in Base.metadata if needed)</span>
+</span><span id="__span-26-24"><a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a><span class="p">)</span>
+</span><span id="__span-26-25"><a id="__codelineno-26-25" name="__codelineno-26-25" href="#__codelineno-26-25"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hike.persistence.providers.sqlalchemy.inbox</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-26-26"><a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>    <span class="n">SQLAlchemyInboxRepository</span><span class="p">,</span>
+</span><span id="__span-26-27"><a id="__codelineno-26-27" name="__codelineno-26-27" href="#__codelineno-26-27"></a>    <span class="n">InboxModel</span><span class="p">,</span>
+</span><span id="__span-26-28"><a id="__codelineno-26-28" name="__codelineno-26-28" href="#__codelineno-26-28"></a><span class="p">)</span>
+</span></code></pre></div>
+<hr />
+<h2 id="decision-guide">Decision guide</h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>Does the reaction live in the same Python process?
+</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>├─ Yes → use bus= (InMemoryEventBus)
+</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>│         Handlers run before commit; a handler failure rolls back the domain change.
+</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>│         Zero infrastructure, strong consistency within the process.
+</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>│
+</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>└─ No (another service, another container):
+</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a>   Does the event need to survive a process crash?
+</span><span id="__span-27-8"><a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a>   ├─ Yes → use outbox= + OutboxRelay + InboxProcessor
+</span><span id="__span-27-9"><a id="__codelineno-27-9" name="__codelineno-27-9" href="#__codelineno-27-9"></a>   │         Events committed atomically with domain changes.
+</span><span id="__span-27-10"><a id="__codelineno-27-10" name="__codelineno-27-10" href="#__codelineno-27-10"></a>   │         At-least-once delivery; inbox deduplication ensures exactly-once.
+</span><span id="__span-27-11"><a id="__codelineno-27-11" name="__codelineno-27-11" href="#__codelineno-27-11"></a>   │
+</span><span id="__span-27-12"><a id="__codelineno-27-12" name="__codelineno-27-12" href="#__codelineno-27-12"></a>   └─ No (best-effort, loss acceptable) → use bus= with a network-aware EventBus
+</span><span id="__span-27-13"><a id="__codelineno-27-13" name="__codelineno-27-13" href="#__codelineno-27-13"></a>             (Custom Kafka/Redis bus — no outbox table needed, but no crash safety.)
+</span></code></pre></div>
+<p><strong>Next step:</strong> See <a href="../cross-aggregate-invariants/">Cross-Aggregate Invariants</a> to learn how to use domain events to enforce rules that span multiple aggregates.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../sqlalchemy-mappers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: SQLAlchemy Mappers">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                SQLAlchemy Mappers
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../cross-aggregate-invariants/" class="md-footer__link md-footer__link--next" aria-label="Next: Cross-Aggregate Invariants">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Cross-Aggregate Invariants
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.footer", "navigation.sections"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
