@@ -28,7 +28,7 @@ class InboxRecord(Aggregate[str]):
 
 # TODO: Allow for none str inbox/outbox record id
 # TODO: make event_data not a JSON string
-class IInboxRepository(IRepository[str, Any, InboxRecord], ABC):
+class IInboxRepository(IRepository[str, InboxRecord, Any], ABC):
     """Inbox repository with concrete idempotency helpers."""
 
     def is_processed(self, event_id: str) -> bool:

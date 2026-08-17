@@ -27,7 +27,7 @@ from hike.persistence.repository import (
 from hike.specifications import ISpecification
 
 
-class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]):
+class InMemoryRepository(IRepository[TId, TAggregate, dict[Any, Aggregate[Any]]]):
     """In-memory repository for testing and prototyping.
 
     Stores deepcopies of aggregates in the session dict (keyed by raw

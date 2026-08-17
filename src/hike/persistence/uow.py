@@ -41,14 +41,14 @@ class UnitOfWork[TSessions]:
 
     def __init__(self, context: DBContext[TSessions]) -> None:
         self._context = context
-        self._repos: tuple[IRepository[Any, TSessions, Any], ...] = ()
+        self._repos: tuple[IRepository[Any, Any, TSessions], ...] = ()
         self._auto_commit: bool = False
         self._bus: EventBus | None = None
         self._outbox: IOutboxRepository | None = None
 
     def __call__(
             self,
-            *repos: IRepository[Any, TSessions, Any],
+            *repos: IRepository[Any, Any, TSessions],
             auto_commit: bool = False,
             bus: EventBus | None = None,
             outbox: IOutboxRepository | None = None,

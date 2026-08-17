@@ -76,7 +76,7 @@ def _get_doc_value(doc: dict[str, Any], path: list[str]) -> Any:
     return val
 
 
-class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
+class PyMongoRepository(IRepository[TId, TAggregate, ClientSession]):
     """Generic MongoDB repository with optimistic concurrency control.
 
     Serialization (``to_dict``) flattens ValueObject fields to their raw

@@ -63,7 +63,7 @@ class OptimisticLockError(AggregateError):
 # HACK: Python has no higher-kinded types, so we cannot statically enforce that
 # TId is TAggregate's ID type, nor that TAggregate is parameterized by TId.
 # Subclasses must keep them consistent by convention.
-class IRepository(Generic[TId, TSession, TAggregate], ABC):
+class IRepository(Generic[TId, TAggregate, TSession], ABC):
     _session: TSession | None = None
 
     def __init__(self) -> None:

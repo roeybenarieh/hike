@@ -65,7 +65,7 @@ def _build_sa_keyset_filter(
     return or_(*clauses)
 
 
-class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
+class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
     """Generic SQLAlchemy ORM repository with optimistic concurrency control.
 
     ``aggregate_class`` is the domain aggregate root class.  ``mapper`` bridges

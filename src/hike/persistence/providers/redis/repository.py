@@ -47,7 +47,7 @@ def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
     return obj
 
 
-class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
+class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
     """Generic Redis repository with optimistic concurrency control.
 
     Aggregates are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.

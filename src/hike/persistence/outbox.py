@@ -27,7 +27,7 @@ class OutboxRecord(UuidAggregate):
     created_at: datetime
 
 
-class IOutboxRepository(IRepository[UUID, Any, OutboxRecord], ABC):
+class IOutboxRepository(IRepository[UUID, OutboxRecord, Any], ABC):
     """Outbox repository — shares the UoW session so writes are atomic with domain changes."""
 
     def save_all(self, events: Iterable[DomainEvent]) -> None:
