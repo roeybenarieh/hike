@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, Callable, ClassVar, Self, cast
 
 from .common import DomainObject
@@ -136,4 +137,58 @@ def matches(pattern: str) -> Callable[[str], None]:
     def _validate(value: str) -> None:
         if not compiled.fullmatch(value):
             raise ValueError(f"Value {value!r} does not match pattern {pattern!r}")
+    return _validate
+
+
+# ---------------------------------------------------------------------------
+# Datetime validators
+# ---------------------------------------------------------------------------
+
+def _now(value: datetime) -> datetime:
+    return datetime.now(UTC) if value.tzinfo is not None else datetime.now()
+
+
+def in_past(value: datetime) -> None:
+    """Value must be strictly before now."""
+    if value >= _now(value):
+        raise ValueError(f"Value must be in the past, got {value!r}")
+
+
+def in_future(value: datetime) -> None:
+    """Value must be strictly after now."""
+    if value <= _now(value):
+        raise ValueError(f"Value must be in the future, got {value!r}")
+
+
+def not_before(earliest: datetime) -> Callable[[datetime], None]:
+    """Factory: value must be >= *earliest*."""
+    def _validate(value: datetime) -> None:
+        if value < earliest:
+            raise ValueError(f"Value must not be before {earliest!r}, got {value!r}")
+    return _validate
+
+
+def not_after(latest: datetime) -> Callable[[datetime], None]:
+    """Factory: value must be <= *latest*."""
+    def _validate(value: datetime) -> None:
+        if value > latest:
+            raise ValueError(f"Value must not be after {latest!r}, got {value!r}")
+    return _validate
+
+
+def within_past(delta: timedelta) -> Callable[[datetime], None]:
+    """Factory: value must fall within ``[now - delta, now]``."""
+    def _validate(value: datetime) -> None:
+        now = _now(value)
+        if not (now - delta <= value <= now):
+            raise ValueError(f"Value must be within the past {delta}, got {value!r}")
+    return _validate
+
+
+def within_future(delta: timedelta) -> Callable[[datetime], None]:
+    """Factory: value must fall within ``[now, now + delta]``."""
+    def _validate(value: datetime) -> None:
+        now = _now(value)
+        if not (now <= value <= now + delta):
+            raise ValueError(f"Value must be within the next {delta}, got {value!r}")
     return _validate

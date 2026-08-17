@@ -9,6 +9,12 @@ from hike.value_object import (
     min_length,
     max_length,
     matches,
+    in_past,
+    in_future,
+    not_before,
+    not_after,
+    within_past,
+    within_future,
 )
 from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
 from hike.aggregate import Aggregate, UuidAggregate, authority
@@ -75,6 +81,12 @@ __all__ = [
     "min_length",
     "max_length",
     "matches",
+    "in_past",
+    "in_future",
+    "not_before",
+    "not_after",
+    "within_past",
+    "within_future",
     "Entity",
     "EntityID",
     "Field",
