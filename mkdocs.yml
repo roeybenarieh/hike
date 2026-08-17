@@ -43,4 +43,5 @@ nav:
       - Specifications & Querying: guide/specifications.md
       - Repositories & UoW: guide/repositories-uow.md
       - SQLAlchemy Mappers: guide/sqlalchemy-mappers.md
+      - Domain Events: guide/domain-events.md
       - Cross-Aggregate Invariants: guide/cross-aggregate-invariants.md

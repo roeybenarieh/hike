@@ -30,7 +30,8 @@ Neither is universally better. The right choice depends on how bad a temporary v
 | [`CrossAggregateRule[T]`](#1-crossaggregaterule-naming-the-invariant) | either | You want to **name and type** a cross-aggregate rule explicitly |
 | [`DomainService`](#2-domainservice-orchestrating-the-check) | strong | You need to **orchestrate** a read-then-write across two aggregates |
 | [`@authority`](#3-authority-designating-the-owning-aggregate) | strong | One aggregate is the clear **owner** of the invariant |
-| [`EventBus` / `InMemoryEventBus`](#4-eventbus-publishing-domain-events) | eventual | You want **decoupled** reactions after a commit |
+| [`EventBus` / `InMemoryEventBus`](#4-eventbus-publishing-domain-events) | eventual | You want **decoupled** reactions within the same bounded context |
+| [`CrossAggregateInvariantHandler`](domain-events.md#crossaggregateinvarianthandler--enforcing-rules-across-aggregates) | eventual | A handler needs the **repo + UoW** of the other aggregate to react |
 | [`ProcessManager`](#5-processmanager-long-running-workflows) | eventual | You need to **coordinate** a multi-step workflow across aggregates |
 
 ---
@@ -182,83 +183,26 @@ def add_player(team_id, player, team_repo, player_repo, uow):
 
 ## 4. `EventBus` — Publishing Domain Events
 
-`EventBus` provides a **publish/subscribe interface** for domain events. After a successful commit, your aggregate's events are published to the bus; subscribers react independently.
+`EventBus` provides a **publish/subscribe interface** for domain events. Aggregate commands raise events; repositories collect them automatically. The `UnitOfWork` dispatches them on commit via one of two modes:
 
-### Why eventual consistency?
-
-Consider a user registration flow:
-
-1. A `User` aggregate is saved. ✓
-2. A welcome email should be sent. (But the email service might be slow or temporarily down.)
-3. The user's name should be added to a search index. (The search service is separate.)
-
-Bundling all of this in one transaction is fragile — a flaky email service would roll back the entire registration. With an event bus, step 1 commits independently; steps 2 and 3 react asynchronously.
-
-### Defining events
+- **`bus=`** — in-memory synchronous dispatch, same process.
+- **`outbox=`** — events written to DB atomically, relayed to another bounded context via outbox/inbox.
 
 ```python
-from dataclasses import dataclass
-from hike import DomainEvent
+# In-memory sync
+with uow(repo, bus=bus):
+    order.place()
+    repo.save(order)
+    uow.commit()  # → bus dispatches OrderPlaced, then commit (handler error = rollback)
 
-@dataclass(frozen=True)
-class UserRegistered(DomainEvent):
-    user_id: object
-    email: str
+# Outbox (cross-service, crash-safe)
+with uow(repo, outbox=outbox_repo):
+    order.place()
+    repo.save(order)
+    uow.commit()  # → order + outbox row committed atomically
 ```
 
-### Subscribing and publishing
-
-```python
-from hike import InMemoryEventBus
-
-bus = InMemoryEventBus()
-
-# Subscribe a handler to an event type
-def send_welcome_email(event: UserRegistered) -> None:
-    print(f"Sending welcome email to {event.email}")
-
-bus.subscribe(UserRegistered, send_welcome_email)
-
-# After committing, publish the aggregate's events
-with uow(user_repo):
-    user_repo.save(user)
-    uow.commit()
-
-bus.publish_all(user.get_events())
-user.clear_events()
-```
-
-`publish_all` dispatches each event to all subscribed handlers in the order they were subscribed. `InMemoryEventBus` is **synchronous** — handlers run in the same thread before `publish_all` returns.
-
-### Implementing a custom bus
-
-For production you'll typically want an async bus backed by a message broker (RabbitMQ, Kafka, Redis Streams). Subclass `EventBus` and implement `subscribe` and `publish`:
-
-```python
-from hike import EventBus, DomainEvent
-from collections.abc import Callable
-
-class RedisEventBus(EventBus):
-    def subscribe[TEvent: DomainEvent](
-        self,
-        event_type: type[TEvent],
-        handler: Callable[[TEvent], None],
-    ) -> None:
-        # register the handler in your broker subscription layer
-        ...
-
-    def publish(self, event: DomainEvent) -> None:
-        # serialize and publish to Redis Streams
-        ...
-```
-
-### When to use `EventBus`
-
-| Use it when… | Don't use it when… |
-| :--- | :--- |
-| Side effects are in a different subsystem (email, search, notifications) | The reaction must be atomic with the write |
-| Decoupling bounded contexts | A single-method `DomainService` is clearer |
-| The subscriber might temporarily be unavailable | The downstream failure should roll back the original transaction |
+For the full explanation — why, when, and step-by-step setup — see the **[Domain Events](domain-events.md)** guide.
 
 ---
 
@@ -351,15 +295,19 @@ Does the invariant involve more than one aggregate?
 
 ```python
 from hike import (
-    CrossAggregateRule,   # name and type a cross-aggregate invariant
-    DomainService,        # orchestrate the check + save
-    authority,            # mark which aggregate owns the invariant
-    EventBus,             # publish/subscribe interface
-    InMemoryEventBus,     # synchronous in-memory bus (great for tests)
-    ProcessManager,       # coordinate a multi-step workflow
-    RuleBrokenError,      # raised when any rule (single or cross-aggregate) fires
+    CrossAggregateRule,              # name and type a cross-aggregate invariant
+    DomainService,                   # orchestrate the check + save
+    authority,                       # mark which aggregate owns the invariant
+    EventBus,                        # publish/subscribe interface
+    EventHandler,                    # abstract handler object base class
+    InMemoryEventBus,                # synchronous in-memory bus (great for tests)
+    CrossAggregateInvariantHandler,  # handler with repo+uow for the other aggregate
+    ProcessManager,                  # coordinate a multi-step workflow
+    RuleBrokenError,                 # raised when any rule (single or cross-aggregate) fires
 )
 ```
+
+For event serialization, outbox, and inbox imports see the **[Domain Events](domain-events.md)** quick reference.
 
 ---
 

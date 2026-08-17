@@ -65,6 +65,26 @@ with uow(repo, auto_commit=True):
 # uow.commit() is called automatically on __exit__
 ```
 
+### Domain event dispatch
+
+`UnitOfWork` also accepts `bus=` and `outbox=` to automatically dispatch aggregate domain events at commit time. Repositories collect events from aggregates automatically (no manual `get_events()` needed), and the UoW routes them to the appropriate channel on `commit()`:
+
+```python
+# Synchronous in-memory dispatch (handler failure rolls back the commit):
+with uow(repo, bus=bus):
+    order.place(customer_id="user-42")
+    repo.save(order)
+    uow.commit()   # → bus dispatches OrderPlaced, then db.commit()
+
+# Outbox (crash-safe, cross-service):
+with uow(repo, outbox=outbox_repo):
+    order.place(customer_id="user-42")
+    repo.save(order)
+    uow.commit()   # → order + outbox row committed atomically
+```
+
+For the full explanation — handler forms (callable and object), `CrossAggregateInvariantHandler`, outbox relay, inbox deduplication — see the **[Domain Events](domain-events.md)** guide.
+
 ---
 
 ## 3. `upsert()` — Insert or Update Without a Version Check
