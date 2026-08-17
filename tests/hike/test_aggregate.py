@@ -8,7 +8,7 @@ import pytest
 from hike.aggregate import UuidAggregate
 from hike.domain_event import DomainEvent
 from hike.entity import EntityID, Field
-from hike.rules import Rule, RuleBrokenError
+from hike.rules import Rule, RuleBrokenError, SpecificationRule
 from hike.value_object import ValueObject
 from tests.hike.conftest import Boat, Name, Price
 
@@ -120,6 +120,63 @@ class TestRule:
         with pytest.raises(RuleBrokenError) as exc_info:
             rule.raise_on_broken_rule(yacht)
         assert exc_info.value.broken_rule is rule
+
+
+class TestSpecificationRule:
+    def test_satisfied_spec_does_not_raise(self, boat: Boat) -> None:
+        spec = Boat.price > 1_000.0
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        rule.raise_on_broken_rule(boat)
+
+    def test_unsatisfied_spec_raises(self, boat: Boat) -> None:
+        spec = Boat.price > 10_000.0
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        with pytest.raises(RuleBrokenError):
+            rule.raise_on_broken_rule(boat)
+
+    def test_error_carries_rule(self, boat: Boat) -> None:
+        spec = Boat.price > 10_000.0
+        sr: SpecificationRule[Boat] = SpecificationRule(spec)
+        with pytest.raises(RuleBrokenError) as exc_info:
+            sr.raise_on_broken_rule(boat)
+        assert exc_info.value.broken_rule is sr
+
+    def test_is_broken_false_when_satisfied(self, boat: Boat) -> None:
+        spec = Boat.price > 1_000.0
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        assert rule.is_broken(boat) is False
+
+    def test_is_broken_true_when_not_satisfied(self, boat: Boat) -> None:
+        spec = Boat.price > 10_000.0
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        assert rule.is_broken(boat) is True
+
+    def test_and_spec_both_true_does_not_raise(self, boat: Boat) -> None:
+        spec = (Boat.price > 1_000.0) & (Boat.name == "Sea Spirit")
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        rule.raise_on_broken_rule(boat)
+
+    def test_and_spec_one_false_raises(self, boat: Boat) -> None:
+        spec = (Boat.price > 1_000.0) & (Boat.name == "Wrong Name")
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        with pytest.raises(RuleBrokenError):
+            rule.raise_on_broken_rule(boat)
+
+    def test_or_spec_one_true_does_not_raise(self, boat: Boat) -> None:
+        spec = (Boat.price > 10_000.0) | (Boat.name == "Sea Spirit")
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        rule.raise_on_broken_rule(boat)
+
+    def test_not_spec_inverts_result(self, boat: Boat) -> None:
+        spec = ~(Boat.price > 10_000.0)
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        rule.raise_on_broken_rule(boat)
+
+    def test_value_object_field_unwrapped(self, boat: Boat) -> None:
+        # Price is a ValueObject[float]; evaluator must unwrap .value for comparison
+        spec = Boat.price == 4_999.99
+        rule: SpecificationRule[Boat] = SpecificationRule(spec)
+        assert rule.is_broken(boat) is False
 
 
 class TestUuidAggregate:
