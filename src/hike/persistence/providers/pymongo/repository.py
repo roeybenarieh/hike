@@ -124,6 +124,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
         if not result.acknowledged:
             raise UnknownError("insert_one not acknowledged")
         set_version(aggregate, 0)
+        self._collect_events(aggregate)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: EntityID[TId]) -> None:
@@ -229,6 +230,7 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
                 raise AggregateDoesNotExistError(aggregate)
             raise OptimisticLockError(aggregate)
         set_version(aggregate, v + 1)
+        self._collect_events(aggregate)
 
     def count(self, specification: ISpecification) -> int:
         visitor = MongoDBEvaluationSpecificationVisitor()
@@ -245,3 +247,4 @@ class PyMongoRepository(IRepository[TId, ClientSession, TAggregate]):
             upsert=True,
             session=self._session,
         )
+        self._collect_events(aggregate)

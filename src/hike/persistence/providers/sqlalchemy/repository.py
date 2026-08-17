@@ -254,6 +254,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
         except Exception as exc:
             raise AggregateAlreadyExistError(aggregate) from exc
         set_version(aggregate, getattr(model, VERSION_ATTR))
+        self._collect_events(aggregate)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: EntityID[TId]) -> None:
@@ -352,6 +353,7 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             setattr(model, key, val)
         setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
         set_version(aggregate, get_version(aggregate) + 1)
+        self._collect_events(aggregate)
 
     def upsert(self, aggregate: TAggregate) -> None:
         model = self.session.get(self._model_class, aggregate.id.value)
@@ -361,3 +363,4 @@ class SQLAlchemyRepository(IRepository[TId, Session, TAggregate]):
             for key, val in self._to_model_dict(aggregate).items():
                 setattr(model, key, val)
             setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
+        self._collect_events(aggregate)

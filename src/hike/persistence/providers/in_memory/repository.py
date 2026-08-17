@@ -42,8 +42,10 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
             raise AggregateAlreadyExistError(aggregate)
         copy = deepcopy(aggregate)
         set_version(copy, 0)
+        copy.clear_events()
         self.session[key] = copy
         set_version(aggregate, 0)
+        self._collect_events(aggregate)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: EntityID[TId]) -> None:
@@ -121,8 +123,10 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
             raise OptimisticLockError(aggregate)
         copy = deepcopy(aggregate)
         set_version(copy, get_version(aggregate) + 1)
+        copy.clear_events()
         self.session[key] = copy
         set_version(aggregate, get_version(aggregate) + 1)
+        self._collect_events(aggregate)
 
     def count(self, specification: ISpecification) -> int:
         return sum(1 for agg in self.session.values() if specification.is_satisfied(agg))
@@ -132,4 +136,6 @@ class InMemoryRepository(IRepository[TId, dict[Any, Aggregate[Any]], TAggregate]
         existing = cast(TAggregate | None, self.session.get(key))
         copy = deepcopy(aggregate)
         set_version(copy, (get_version(existing) + 1) if existing is not None else 0)
+        copy.clear_events()
         self.session[key] = copy
+        self._collect_events(aggregate)

@@ -4,6 +4,7 @@ from typing import Any, Generic, TypeVar, overload, final
 
 from hike.aggregate import Aggregate
 from hike.common import DomainError
+from hike.domain_event import DomainEvent
 from hike.entity import EntityID
 from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import Page, Pagination
@@ -64,6 +65,20 @@ class OptimisticLockError(AggregateError):
 # Subclasses must keep them consistent by convention.
 class IRepository(Generic[TId, TSession, TAggregate], ABC):
     _session: TSession | None = None
+
+    def __init__(self) -> None:
+        self._pending_events: list[DomainEvent] = []
+
+    def _collect_events(self, aggregate: TAggregate) -> None:
+        """Transfer aggregate's raised events into pending queue and clear the aggregate."""
+        self._pending_events.extend(aggregate.get_events())
+        aggregate.clear_events()
+
+    def drain_events(self) -> list[DomainEvent]:
+        """Return and clear all pending events. Called by UnitOfWork on commit."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     @property
     def session(self) -> TSession:

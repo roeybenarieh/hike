@@ -103,6 +103,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
             raise AggregateAlreadyExistError(aggregate)
         self.session.set(key, self._serialize(aggregate, version=0))
         set_version(aggregate, 0)
+        self._collect_events(aggregate)
         return aggregate.id  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: EntityID[TId]) -> None:
@@ -196,6 +197,7 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
             raise OptimisticLockError(aggregate)
         self.session.set(key, self._serialize(aggregate, version=v + 1))
         set_version(aggregate, v + 1)
+        self._collect_events(aggregate)
 
     def count(self, specification: ISpecification) -> int:
         total = 0
@@ -214,3 +216,4 @@ class RedisRepository(IRepository[TId, Pipeline, TAggregate]):
         else:
             new_version = 0
         self.session.set(key, self._serialize(aggregate, version=new_version))
+        self._collect_events(aggregate)
