@@ -1,5 +1,5 @@
 [project]
-name = "hike"
+name = "ihike"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
 pymongo    = ["pymongo>=4.16.0"]
 redis      = ["redis>=7.4.0"]
 sqlalchemy = ["sqlalchemy>=2.0.49", "psycopg[binary]>=3.0"]
-all        = ["hike[pymongo,redis,sqlalchemy]"]
+all        = ["ihike[pymongo,redis,sqlalchemy]"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
@@ -26,7 +26,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "hike[all]",
+    "ihike[all]",
     "pytest>=9.0.3",
     "testcontainers[mongodb,postgres,redis]>=4.15.0",
 ]
