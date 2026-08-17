@@ -35,6 +35,27 @@ This reads like plain English, is 100% type-safe, and can be translated into SQL
 
 ---
 
+---
+
+## Quick Reference
+
+```python
+# Build specs from class-level field comparisons
+is_active   = Product.status == "active"
+is_cheap    = Product.price < 50.0
+has_stock   = Product.quantity > 0
+
+# Compose with operators
+active_and_cheap = is_active & is_cheap          # AND
+active_or_cheap  = is_active | is_cheap          # OR
+not_active       = ~is_active                    # NOT
+combined         = is_active & (is_cheap | has_stock)
+
+# Pass directly to the repository
+with uow(repo):
+    products = repo.get_many(active_and_cheap)
+```
+
 ## Recommended External Reading
 
 - [Martin Fowler's Specification Pattern Primer](https://martinfowler.com/aps8/refactoringSpecification.html)

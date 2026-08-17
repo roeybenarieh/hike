@@ -22,34 +22,22 @@ A **Rule** is a predicate that returns `True` when the rule is **broken** (i.e. 
 from hike import rule
 
 @rule
-def price_positive(boat: "Boat") -> bool:
-    return boat.price.value <= 0          # True means the rule IS broken
+def discount_within_total(order: "Order") -> bool:
+    return order.discount > order.total   # True means the rule IS broken
 ```
 
 The function name is used as the human-readable message. Override it with an explicit message:
 
 ```python
-@rule(message="Price must be between €1,000 and €500,000")
-def price_in_range(boat: "Boat") -> bool:
-    return not (1_000 <= boat.price.value <= 500_000)
-```
-
-Rules can be shared across types using a `Protocol`:
-
-```python
-from typing import Protocol
-
-class HasValue(Protocol):
-    value: int | float
-
-@rule(message="Value must be positive")
-def positive(obj: HasValue) -> bool:
-    return obj.value <= 0
+@rule(message="Meeting must last at least 15 minutes")
+def minimum_duration(meeting: "Meeting") -> bool:
+    delta = meeting.end_time.value - meeting.start_time.value
+    return delta.total_seconds() < 15 * 60
 ```
 
 ---
 
-## 2. Enforcing Invariants at Construction (`__invariants__`)
+## 2. Enforcing Invariants at Construction
 
 Attach rules to any Entity or Aggregate by listing them in `__invariants__`. Hike checks every rule in the list automatically after `__init__` completes — including in subclass constructors:
 
@@ -57,17 +45,19 @@ Attach rules to any Entity or Aggregate by listing them in `__invariants__`. Hik
 from hike import UuidAggregate, Field, ValueObject, rule
 
 class Price(ValueObject[float]): ...
+class Discount(ValueObject[float]): ...
 
-@rule(message="Price must be positive")
-def price_positive(order: "Order") -> bool:
-    return order.price.value <= 0
+@rule(message="Discount cannot exceed the order total")
+def discount_within_total(order: "Order") -> bool:
+    return order.discount.value > order.total.value   # True = broken
 
 class Order(UuidAggregate):
-    price: Field[Price]
-    __invariants__ = [price_positive]
+    total: Field[Price]
+    discount: Field[Discount]
+    __invariants__ = [discount_within_total]
 
-Order(price=Price(100))   # OK
-Order(price=Price(-1))    # raises RuleBrokenError immediately
+Order(total=Price(100), discount=Discount(20))    # OK
+Order(total=Price(100), discount=Discount(150))   # raises RuleBrokenError immediately
 ```
 
 Invariants are collected from the **full class hierarchy** (MRO), so a subclass inherits its parent's constraints automatically.
@@ -82,9 +72,9 @@ When an invariant fires, Hike raises `RuleBrokenError`. The exception carries a 
 from hike import RuleBrokenError
 
 try:
-    Order(price=Price(-1))
+    Order(total=Price(100), discount=Discount(150))
 except RuleBrokenError as e:
-    print(e.broken_rule)   # FunctionalRule('Price must be positive')
+    print(e.broken_rule)   # FunctionalRule('Discount cannot exceed the order total')
 ```
 
 ---
@@ -93,7 +83,7 @@ except RuleBrokenError as e:
 
 Direct field assignment on nested `Field[Entity]` values is blocked outside a `@command` (see [ReadOnlyView](#5-the-readonlyview-guard) below). All mutations must go through a method decorated with `@command`.
 
-### Bare `@command` — just grants mutable access, no rule check
+### Bare `@command` — grants mutable access
 
 ```python
 from hike import UuidAggregate, UuidEntity, Field, command
@@ -112,24 +102,33 @@ class Car(UuidAggregate):
 ### `@command(invariants=[...])` — check specific rules after the mutation
 
 ```python
+from hike import ValueObject, UuidAggregate, Field, command, rule
+
+class OrderStatus(ValueObject[str]):
+    value: str
+
 @rule(message="Order must have at least one item")
 def order_has_items(order: "Order") -> bool:
     return len(order.items) == 0
 
 class Order(UuidAggregate):
     items: list[OrderItem]
+    status: Field[OrderStatus]
 
     @command(invariants=[order_has_items])
     def ship(self) -> None:
-        self._shipped = True
+        self.status = OrderStatus("shipped")
 ```
 
-Hike runs each listed rule *after* the method body completes. If any rule is broken, `RuleBrokenError` is raised and the state change is **not** rolled back (commands are not transactional by themselves — use a Unit of Work for that).
+Hike runs each listed rule *after* the method body completes. If any rule is broken, `RuleBrokenError` is raised.
 
 ### `@command(invariants='all')` — re-check every rule in `__invariants__`
 
 ```python
 class Order(UuidAggregate):
+    items: list[OrderItem]
+    status: Field[OrderStatus]
+    total: Field[Price]
     __invariants__ = [order_total_matches_items]
 
     @command(invariants='all')
@@ -172,43 +171,28 @@ car.tune(Speed(100))            # OK
 `__invariants__` and `@command` are not limited to aggregates — they work on any `Entity` subclass:
 
 ```python
-@rule(message="Speed cannot be negative")
-def speed_non_negative(engine: "Engine") -> bool:
-    return engine.speed.value < 0
+@rule(message="Current gear cannot exceed the engine's maximum")
+def gear_within_range(engine: "Engine") -> bool:
+    return engine.current_gear.value > engine.max_gear.value
 
 class Engine(UuidEntity):
-    __invariants__ = [speed_non_negative]
-    speed: Field[Speed]
+    current_gear: Field[Gear]
+    max_gear: Field[Gear]
+    __invariants__ = [gear_within_range]
 
-    @command(invariants=[speed_non_negative])
-    def set_speed(self, new_speed: Speed) -> None:
-        self.speed = new_speed
+    @command(invariants=[gear_within_range])
+    def shift_to(self, gear: Gear) -> None:
+        self.current_gear = gear
 
-Engine(speed=Speed(100))    # OK
-Engine(speed=Speed(-1))     # raises RuleBrokenError
+Engine(current_gear=Gear(1), max_gear=Gear(6))   # OK
+Engine(current_gear=Gear(7), max_gear=Gear(6))   # raises RuleBrokenError
 ```
 
 ---
 
 ## 7. Rules That Span Multiple Aggregates
 
-`Rule[T]` operates on a **single** aggregate. When a business rule involves two or more aggregates (e.g., "no duplicate email across all users", "a team cannot exceed its roster size"), use `CrossAggregateRule[T]` and a `DomainService` instead.
-
-```python
-from dataclasses import dataclass
-from hike import CrossAggregateRule, RuleBrokenError
-
-@dataclass
-class UniqueEmailContext:
-    email: str
-    existing_count: int
-
-class UniqueEmailRule(CrossAggregateRule[UniqueEmailContext]):
-    def is_broken(self, context: UniqueEmailContext) -> bool:
-        return context.existing_count > 0
-```
-
-Cross-aggregate rules are checked **explicitly** (they cannot be listed in `__invariants__`). See the full guide: **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)**.
+`Rule[T]` operates on a **single** aggregate. When a business rule involves two or more aggregates, you need a different approach — see **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)**.
 
 ---
 
@@ -236,7 +220,7 @@ Subclass rules can be used anywhere `@rule`-decorated rules can.
 ```python
 from hike import rule, command, Rule, RuleBrokenError
 
-# Define a rule
+# Define a rule on an entity/aggregate
 @rule
 def my_rule(obj: MyType) -> bool:
     return obj.value <= 0          # True = broken
@@ -246,7 +230,7 @@ def my_rule(obj: MyType) -> bool:
 def my_rule(obj: MyType) -> bool:
     return obj.value <= 0
 
-# Attach to a class (checked at init)
+# Attach to an entity/aggregate (checked at init)
 class MyEntity(UuidEntity):
     __invariants__ = [my_rule]
 

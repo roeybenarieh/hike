@@ -219,4 +219,38 @@ Need full control over schema (indexes, constraints, column types)?
   → FlatSQLAlchemyMapper             # single-table, bring your own ORM model
 ```
 
+---
+
+## Quick Reference
+
+```python
+from hike.ddd.providers.sqlalchemy import (
+    SQLAlchemyRepository,       # default mapper: DictAutoSQLAlchemyMapper
+    DictAutoSQLAlchemyMapper,   # auto schema, one table per entity (relational)
+    FlatAutoSQLAlchemyMapper,   # auto schema, single flat table
+    DictSQLAlchemyMapper,       # explicit ORM models, one per entity
+    FlatSQLAlchemyMapper,       # explicit ORM model, single table
+)
+
+# Zero boilerplate — relational (default)
+repo = SQLAlchemyRepository(MyAggregate)
+
+# Zero boilerplate — flat
+mapper = FlatAutoSQLAlchemyMapper(MyAggregate)
+repo   = SQLAlchemyRepository(MyAggregate, mapper)
+
+# Explicit ORM models — relational
+mapper = DictSQLAlchemyMapper({MyAggregate: AggModel, MyEntity: EntityModel})
+repo   = SQLAlchemyRepository(MyAggregate, mapper)
+
+# Explicit ORM model — flat
+mapper = FlatSQLAlchemyMapper(FlatModel)
+repo   = SQLAlchemyRepository(MyAggregate, mapper)
+
+# Share a DeclarativeBase with the rest of your app
+class Base(DeclarativeBase): ...
+mapper = DictAutoSQLAlchemyMapper(MyAggregate, base=Base)
+Base.metadata.create_all(engine)
+```
+
 **Next Step**: See the **[Repositories & Unit of Work](repositories-uow.md)** guide to learn how to wire a mapper into a repository and wrap it in a transaction.

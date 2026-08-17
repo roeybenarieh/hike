@@ -65,28 +65,6 @@ with uow(repo, auto_commit=True):
 # uow.commit() is called automatically on __exit__
 ```
 
-### Domain event dispatch
-
-`UnitOfWork` also accepts `bus=` and `outbox=` to automatically dispatch aggregate domain events at commit time. Repositories collect events from aggregates automatically (no manual `get_events()` needed), and the UoW routes them to the appropriate channel on `commit()`:
-
-```python
-# Synchronous in-memory dispatch (handler failure rolls back the commit):
-with uow(repo, bus=bus):
-    order.place(customer_id="user-42")
-    repo.save(order)
-    uow.commit()   # → bus dispatches OrderPlaced, then db.commit()
-
-# Outbox (crash-safe, cross-service):
-with uow(repo, outbox=outbox_repo):
-    order.place(customer_id="user-42")
-    repo.save(order)
-    uow.commit()   # → order + outbox row committed atomically
-```
-
-For the full explanation — handler forms (callable and object), `CrossAggregateInvariantHandler`, outbox relay, inbox deduplication — see the **[Domain Events](domain-events.md)** guide.
-
----
-
 ## 3. `upsert()` — Insert or Update Without a Version Check
 
 `update()` enforces optimistic locking and raises `OptimisticLockError` if the stored version has advanced. Sometimes you simply want to **write the latest state** regardless of version — for example, syncing a read model or applying an idempotent import.
@@ -283,6 +261,61 @@ with uow(repo):
 ```
 
 ---
+
+---
+
+## Quick Reference
+
+```python
+from hike import UnitOfWork, OptimisticLockError, asc, desc
+from hike import OffsetPagination, PagePagination, CursorPagination
+from hike.persistence.providers.in_memory import InMemoryRepository, InMemoryDBContext
+
+# Setup (in-memory — ideal for tests)
+ctx  = InMemoryDBContext()
+repo = InMemoryRepository()
+uow  = UnitOfWork(ctx)
+
+# Save
+with uow(repo):
+    repo.save(order)          # insert; raises AggregateAlreadyExistError if duplicate
+    uow.commit()
+
+# Load & update
+with uow(repo):
+    order = repo.get_one(order_id)
+    order.do_something()
+    repo.update(order)        # version-checked; raises OptimisticLockError on conflict
+    uow.commit()
+
+# Upsert (no version check)
+with uow(repo):
+    repo.upsert(order)
+    uow.commit()
+
+# Query with ordering + pagination
+with uow(repo):
+    page = repo.get_many(
+        Order.total >= 0.0,
+        ordering=[asc(Order.total), desc(Order.id)],
+        pagination=OffsetPagination(offset=0, limit=10),
+    )
+    page.items      # list[Order]
+    page.total      # int | None
+    page.has_next   # bool
+
+# Domain events — in-memory sync
+with uow(repo, bus=bus):
+    order.place()
+    repo.save(order)
+    uow.commit()    # handlers run before db.commit(); failure rolls back
+
+# Domain events — crash-safe outbox
+with uow(repo, outbox=outbox_repo):
+    order.place()
+    repo.save(order)
+    uow.commit()    # order row + outbox row committed atomically
+```
 
 ## Recommended External Reading
 

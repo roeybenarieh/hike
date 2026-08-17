@@ -6,50 +6,47 @@ Welcome! This guide will walk you through installing Hike and building your very
 
 | Requirement | Version | Why it matters |
 |-------------|---------|----------------|
-| **Python** | `>= 3.14` | Hike uses modern type‑hinting features that require Python 3.14+. |
-| **Package Manager** | `uv` (recommended) | A fast, zero‑config installer that handles transitive dependencies automatically. |
+| **Python** | `>= 3.14` | Hike uses modern type‑hinting features that require Python 3.14+. |
+| **pip** | latest | The standard Python package installer, included with Python. |
 
-> **If you don’t have `uv` yet:** Install it in one line:
+> **Check your Python version:**
 > ```bash
-> curl -sSf https://astral.sh/uv/install.py | sh
+> python --version   # must be 3.14 or higher
 > ```
+> If it prints `3.13` or lower, download a newer release from [python.org](https://www.python.org/downloads/).
 
 ## 2. Install Hike
 
-### a) Basic Installation (quickest way)
+### a) Basic installation
 
 ```bash
-uv sync
+pip install hike
 ```
-
-That command reads a `pyproject.toml` file (which already contains `hike` as a dependency) and installs Hike and any other declared dependencies.
 
 ### b) Installing optional database connectors
 
-If you plan to persist data to a database, you’ll need an extra for each backend:
+If you plan to persist data to a database, add the extra for each backend:
 
 ```bash
-# SQLAlchemy (relational DBs)
-uv pip install -e ".[sqlalchemy]"
+# SQLAlchemy (relational DBs — PostgreSQL, SQLite, MySQL, …)
+pip install "hike[sqlalchemy]"
 
 # PyMongo (MongoDB)
-uv pip install -e ".[pymongo]"
+pip install "hike[pymongo]"
 
 # Redis (key‑value store)
-uv pip install -e ".[redis]"
+pip install "hike[redis]"
 ```
 
 ### c) Install everything at once
 
-All extra connectors under a single flag:
-
 ```bash
-uv pip install -e ".[all]"
+pip install "hike[all]"
 ```
 
 ## 3. Verify the Installation
 
-After installation, open a Python REPL and run:
+Open a Python REPL and run:
 
 ```python
 import hike
@@ -62,7 +59,7 @@ You should see something like:
 Hike version: 0.1.0
 ```
 
-If you see no errors, you’re ready to move on to the fun part: **building your first domain model!**
+If you see no errors, you're ready to move on to the fun part: **building your first domain model!**
 
 ---
 
