@@ -266,7 +266,3 @@ with uow(repo, outbox=outbox_repo):
 
 - [Martin Fowler on the Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)
 - [Martin Fowler on Unit of Work](https://martinfowler.com/eaaCatalog/unitOfWork.html)
-
----
-
-**Next Step**: Learn how to wire up the SQLAlchemy backend using **[SQLAlchemy Mappers](sqlalchemy-mappers.md)**.

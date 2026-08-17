@@ -192,6 +192,4 @@ class Order(UuidAggregate):
 
 ## Recommended External Reading
 
-- [Martin Fowler's Aggregate Pattern Overview](https://martinfowler.com/bliki/DDD_Aggregate.html) — A great deep-dive into aggregates.
-- **Next Step**: Learn how to enforce invariants on mutations using **[Rules, Commands & Invariants](rules-commands.md)**, then query your models with **[Specifications](specifications.md)**.
-- For rules that span **multiple aggregates** and for publishing domain events to an `EventBus`, see **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)**.
+- [Martin Fowler's Aggregate Pattern Overview](https://martinfowler.com/bliki/DDD_Aggregate.html) — A great deep-dive into aggregates.- For rules that span **multiple aggregates** and for publishing domain events to an `EventBus`, see **[Cross-Aggregate Invariants](cross-aggregate-invariants.md)**.

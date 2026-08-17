@@ -319,5 +319,3 @@ For event serialization, outbox, and inbox imports see the **[Domain Events](dom
 - [Effective Aggregate Design Part II — Making Aggregates Work Together](https://kalele.io/wp-content/uploads/2019/01/DDD_COMMUNITY_ESSAY_AGGREGATES_PART_2.pdf) — Vaughn Vernon's canonical guide.
 - [Saga and Process Manager — Event-Driven.io](https://event-driven.io/en/saga_process_manager_distributed_transactions/) — Practical comparison of the two patterns.
 - [Set-Based Validation in Event Sourcing](https://medium.com/@arsalan.valoojerdi/cross-aggregate-validations-exploring-set-based-validation-techniques-in-event-sourcing-e28d9e0ffce6) — Deep dive on uniqueness checks at scale.
-
-**Next Step**: Return to the **[Repositories & Unit of Work](repositories-uow.md)** guide to see how `UnitOfWork` fits into the patterns above.

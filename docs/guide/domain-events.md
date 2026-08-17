@@ -730,5 +730,3 @@ Does the reaction live in the same Python process?
    └─ No (best-effort, loss acceptable) → use bus= with a network-aware EventBus
              (Custom Kafka/Redis bus — no outbox table needed, but no crash safety.)
 ```
-
-**Next step:** See [Cross-Aggregate Invariants](cross-aggregate-invariants.md) to learn how to use domain events to enforce rules that span multiple aggregates.
