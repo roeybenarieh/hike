@@ -13,7 +13,16 @@ from hike.value_object import (
 from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
 from hike.aggregate import Aggregate, UuidAggregate, authority
 from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule
-from hike.domain_event import DomainEvent, EventBus, InMemoryEventBus
+from hike.domain_event import (
+    DomainEvent,
+    EventBus,
+    EventHandler,
+    InMemoryEventBus,
+    register_event,
+    serialize_event,
+    deserialize_event,
+)
+from hike.handlers import CrossAggregateInvariantHandler
 from hike.domain_service import DomainService
 from hike.process_manager import ProcessManager
 from hike.persistence.repository import (
@@ -29,6 +38,9 @@ from hike.persistence.repository import (
     set_version,
 )
 from hike.persistence.uow import DBContext, UnitOfWork
+from hike.persistence.outbox import IOutboxRepository, OutboxRecord, OutboxRelay
+from hike.persistence.inbox import IInboxRepository, InboxRecord, InboxProcessor
+from hike.persistence.providers.in_memory import InMemoryOutboxRepository, InMemoryInboxRepository
 from hike.persistence.ordering import OrderBy, asc, desc
 from hike.persistence.pagination import (
     CursorPagination,
@@ -79,7 +91,12 @@ __all__ = [
     "rule",
     "DomainEvent",
     "EventBus",
+    "EventHandler",
     "InMemoryEventBus",
+    "CrossAggregateInvariantHandler",
+    "register_event",
+    "serialize_event",
+    "deserialize_event",
     "DomainService",
     "ProcessManager",
     "IRepository",
@@ -94,6 +111,14 @@ __all__ = [
     "set_version",
     "DBContext",
     "UnitOfWork",
+    "IOutboxRepository",
+    "OutboxRecord",
+    "OutboxRelay",
+    "IInboxRepository",
+    "InboxRecord",
+    "InboxProcessor",
+    "InMemoryOutboxRepository",
+    "InMemoryInboxRepository",
     "CursorPagination",
     "OffsetPagination",
     "OrderBy",
