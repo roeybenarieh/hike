@@ -198,4 +198,3 @@ class Product(UuidAggregate):
 ## Recommended External Reading
 
 - [Martin Fowler's Specification Pattern](https://martinfowler.com/apsupp/spec.pdf)
-- **Next Step**: Learn how to save and load your models using **[Repositories & Unit of Work](repositories-uow.md)**.

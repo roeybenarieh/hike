@@ -63,10 +63,4 @@ If you see no errors, you're ready to move on to the fun part: **building your f
 
 ---
 
-## 4. Next Steps
-
-- **Learn the basics** – Read our [Value Objects](value-objects.md) and [Entities & Aggregates](entities-aggregates.md) guides to understand the core building blocks.
-- **Persist data** – Check out the [Repositories & Unit of Work](repositories-uow.md) page to see how to store and retrieve your objects safely.
-- **Write reusable business rules** – See the [Specifications](specifications.md) page for a gentle intro to composable query filters.
-
 Happy coding! 🚀

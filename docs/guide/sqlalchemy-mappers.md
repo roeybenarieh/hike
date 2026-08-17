@@ -252,5 +252,3 @@ class Base(DeclarativeBase): ...
 mapper = DictAutoSQLAlchemyMapper(MyAggregate, base=Base)
 Base.metadata.create_all(engine)
 ```
-
-**Next Step**: See the **[Repositories & Unit of Work](repositories-uow.md)** guide to learn how to wire a mapper into a repository and wrap it in a transaction.
