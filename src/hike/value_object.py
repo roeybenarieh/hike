@@ -56,6 +56,18 @@ class ValueObject[V](DomainObject):
         # gets its own __init__ with the correctly-typed `value` parameter.
         dataclass(frozen=True)(cls)
 
+    def __add__(self, other: Self | V) -> Self:
+        return type(self)(self.value + _cmp_value(other))  # type: ignore[operator,return-value]
+
+    def __sub__(self, other: Self | V) -> Self:
+        return type(self)(self.value - _cmp_value(other))  # type: ignore[operator,return-value]
+
+    def __mul__(self, other: Self | V) -> Self:
+        return type(self)(self.value * _cmp_value(other))  # type: ignore[operator,return-value]
+
+    def __truediv__(self, other: Self | V) -> Self:
+        return type(self)(self.value / _cmp_value(other))  # type: ignore[operator,return-value]
+
     def __lt__(self, other: Self | V) -> bool:
         return self.value < _cmp_value(other)
 

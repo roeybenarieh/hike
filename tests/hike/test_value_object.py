@@ -69,6 +69,41 @@ class TestValueObjectComparisons:
             Price(5) < Name("something")  # pyright: ignore[reportOperatorIssue, reportUnusedExpression]
 
 
+class TestValueObjectArithmetic:
+    def test_add_two_value_objects(self) -> None:
+        assert Price(5.0) + Price(3.0) == Price(8.0)
+
+    def test_add_raw_value(self) -> None:
+        assert Price(5.0) + 3.0 == Price(8.0)
+
+    def test_sub_two_value_objects(self) -> None:
+        assert Price(8.0) - Price(3.0) == Price(5.0)
+
+    def test_sub_raw_value(self) -> None:
+        assert Price(8.0) - 3.0 == Price(5.0)
+
+    def test_mul_two_value_objects(self) -> None:
+        assert Price(4.0) * Price(2.0) == Price(8.0)
+
+    def test_mul_raw_value(self) -> None:
+        assert Price(4.0) * 2.0 == Price(8.0)
+
+    def test_truediv_two_value_objects(self) -> None:
+        assert Price(10.0) / Price(2.0) == Price(5.0)
+
+    def test_truediv_raw_value(self) -> None:
+        assert Price(10.0) / 2.0 == Price(5.0)
+
+    def test_result_is_concrete_type(self) -> None:
+        result = Price(5.0) + Price(3.0)
+        assert type(result) is Price
+
+    def test_validators_run_on_arithmetic_result(self) -> None:
+        # Price has non_negative; subtraction yielding a negative should raise
+        with pytest.raises(ValueError, match="non-negative"):
+            _ = Price(3.0) - Price(5.0)
+
+
 class TestValueObjectImmutability:
     def test_frozen_raises_on_set(self) -> None:
         p = Price(5)
