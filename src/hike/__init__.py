@@ -18,7 +18,7 @@ from hike.value_object import (
 )
 from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
 from hike.aggregate import Aggregate, UuidAggregate, authority
-from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule
+from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule, SpecificationRule
 from hike.domain_event import (
     DomainEvent,
     EventBus,
@@ -101,6 +101,7 @@ __all__ = [
     "RuleBrokenError",
     "FunctionalRule",
     "rule",
+    "SpecificationRule",
     "DomainEvent",
     "EventBus",
     "EventHandler",

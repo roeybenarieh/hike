@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import overload
+from typing import TYPE_CHECKING, overload
 
 from .common import DomainError, DomainObject
+
+if TYPE_CHECKING:
+    from .specifications.interfaces import ISpecification
 
 
 class _AnyRule(ABC):
@@ -74,6 +77,20 @@ class FunctionalRule[T: DomainObject](Rule[T]):
 
     def __repr__(self) -> str:
         return f"FunctionalRule({self._message!r})"
+
+
+class SpecificationRule[T: DomainObject](Rule[T]):
+    """A ``Rule`` that delegates to an ``ISpecification``.
+
+    The rule is broken when the specification is *not* satisfied.
+    Evaluation uses the in-memory evaluator via ``ISpecification.is_satisfied``.
+    """
+
+    def __init__(self, spec: "ISpecification") -> None:
+        self._spec = spec
+
+    def is_broken(self, obj: T) -> bool:
+        return not self._spec.is_satisfied(obj)
 
 
 @overload
