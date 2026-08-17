@@ -8,9 +8,9 @@ Hike gives you a first-class way to express **business rules** that must never b
 
 | Concept | What it does |
 | :--- | :--- |
-| `@rule` | Turns a predicate function into a reusable `Rule` object |
-| `__invariants__` | List of rules checked automatically whenever an Entity or Aggregate is constructed |
-| `@command` | Marks a mutation method; unlocks nested entity writes and optionally re-checks rules after the mutation |
+| `@rule` 📏 | Turns a predicate function into a reusable `Rule` object |
+| `__invariants__` 🛡️ | List of rules checked automatically whenever an Entity or Aggregate is constructed |
+| `@command` ⚡ | Marks a mutation method; unlocks nested entity writes and optionally re-checks rules after the mutation |
 
 ---
 
@@ -143,7 +143,7 @@ class Order(UuidAggregate):
 
 ---
 
-## 5. The `ReadOnlyView` Guard
+## 5. 🚫 The `ReadOnlyView` Guard
 
 Hike automatically wraps `Field[Entity]` fields in a **read-only proxy** whenever they are accessed outside a `@command`. Any attempt to write through the proxy raises `AttributeError`:
 

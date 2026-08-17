@@ -1,5 +1,8 @@
 # Cross-Aggregate Invariants
 
+!!! warning "🚧 Work in Progress"
+    This page is actively being written. The API and examples are functional, but some sections may be incomplete or revised before the stable release.
+
 A single aggregate enforces its own rules perfectly — you can write `Order(price=Price(-1))` and Hike rejects it immediately. But some business rules span **two or more aggregates**. For example:
 
 - *A `Team` may not exceed its roster size limit.*
@@ -27,12 +30,12 @@ Neither is universally better. The right choice depends on how bad a temporary v
 
 | Tool | Consistency | Use when |
 | :--- | :--- | :--- |
-| [`CrossAggregateRule[T]`](#1-crossaggregaterule-naming-the-invariant) | either | You want to **name and type** a cross-aggregate rule explicitly |
-| [`DomainService`](#2-domainservice-orchestrating-the-check) | strong | You need to **orchestrate** a read-then-write across two aggregates |
-| [`@authority`](#3-authority-designating-the-owning-aggregate) | strong | One aggregate is the clear **owner** of the invariant |
-| [`EventBus` / `InMemoryEventBus`](#4-eventbus-publishing-domain-events) | eventual | You want **decoupled** reactions within the same bounded context |
-| [`CrossAggregateInvariantHandler`](domain-events.md#crossaggregateinvarianthandler--enforcing-rules-across-aggregates) | eventual | A handler needs the **repo + UoW** of the other aggregate to react |
-| [`ProcessManager`](#5-processmanager-long-running-workflows) | eventual | You need to **coordinate** a multi-step workflow across aggregates |
+| [`CrossAggregateRule[T]`](#1-crossaggregaterule-naming-the-invariant) 📏 | either | You want to **name and type** a cross-aggregate rule explicitly |
+| [`DomainService`](#2-domainservice-orchestrating-the-check) 🎯 | strong | You need to **orchestrate** a read-then-write across two aggregates |
+| [`@authority`](#3-authority-designating-the-owning-aggregate) 👑 | strong | One aggregate is the clear **owner** of the invariant |
+| [`EventBus` / `InMemoryEventBus`](#4-eventbus-publishing-domain-events) 📡 | eventual | You want **decoupled** reactions within the same bounded context |
+| [`CrossAggregateInvariantHandler`](domain-events.md#crossaggregateinvarianthandler--enforcing-rules-across-aggregates) 🔗 | eventual | A handler needs the **repo + UoW** of the other aggregate to react |
+| [`ProcessManager`](#5-processmanager-long-running-workflows) 🔄 | eventual | You need to **coordinate** a multi-step workflow across aggregates |
 
 ---
 

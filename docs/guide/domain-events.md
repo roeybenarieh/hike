@@ -1,5 +1,8 @@
 # Domain Events
 
+!!! warning "🚧 Work in Progress"
+    This page is actively being written. The API and examples are functional, but some sections may be incomplete or revised before the stable release.
+
 When something important happens in your domain — an order is placed, a payment fails, a user upgrades their subscription — that fact deserves a name and a type. **Domain events** give meaningful things a permanent, typed record of *what happened*, and let other parts of the system react to them without being tightly coupled to the code that triggered them.
 
 ---
@@ -81,7 +84,7 @@ Events accumulate internally until the `UnitOfWork` drains them on commit — yo
 
 ---
 
-## Auto-collection by repositories
+## ✨ Auto-collection by repositories
 
 This is the EF Core-inspired design at the heart of Hike's event system. Every repository (`save`, `update`, `upsert`) automatically calls `_collect_events(aggregate)` after writing, which:
 
@@ -98,8 +101,8 @@ Hike provides exactly two modes, configured via the `UnitOfWork`:
 
 | Mode | Parameter | When to use |
 | :--- | :--- | :--- |
-| **In-memory synchronous** | `bus=` | Reactions run in the same process; handler failure rolls back the commit |
-| **Outbox → Inbox** | `outbox=` | Reactions run in a separate service; need crash safety |
+| **In-memory synchronous** ⚡ | `bus=` | Reactions run in the same process; handler failure rolls back the commit |
+| **Outbox → Inbox** 📬 | `outbox=` | Reactions run in a separate service; need crash safety |
 
 ---
 
@@ -412,7 +415,7 @@ For guaranteed atomicity across both aggregates in a single transaction, use a `
 
 ---
 
-## Mode 2: Outbox → Inbox (reliable cross-service delivery)
+## Mode 2: 📬 Outbox → Inbox (reliable cross-service delivery)
 
 The problem with in-memory dispatch is that if the process crashes **after** the database commit but **before** the bus dispatches, your events are lost forever. For reactions in other services — or for any event that must *definitely* be delivered — you need the **outbox pattern**.
 
@@ -530,7 +533,7 @@ for message in kafka_consumer:
 
 `InboxProcessor.process` is idempotent: if `event_id` has already been processed, the call returns immediately without dispatching.
 
-### Testing Mode 2 without a database
+### 🧪 Testing Mode 2 without a database
 
 Replace the SQLAlchemy repositories with the library-provided in-memory versions — no database or schema setup needed:
 
