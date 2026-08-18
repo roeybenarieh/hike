@@ -36,10 +36,11 @@
               echo "  docker  : $(docker --version 2>&1)"
               echo ""
               echo "Run 'devenv up [process...]' to start backing services:"
-              echo "  devenv up                        all services"
-              echo "  devenv up postgres               PostgreSQL  postgresql+psycopg://localhost:5432/hike"
+              echo "  devenv up                        all services + GUI"
+              echo "  devenv up postgres               PostgreSQL   postgresql+psycopg://localhost:5432/hike"
               echo "  devenv up redis                  Redis        redis://127.0.0.1:6379"
               echo "  devenv up mongodb                MongoDB      mongodb://127.0.0.1:27017/?directConnection=true"
+              echo "  devenv up dbgate                 DbGate       desktop app  (PostgreSQL + MongoDB + Redis)"
               exec "$(getent passwd $USER | cut -d: -f7)"
             '';
           };
