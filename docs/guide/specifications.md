@@ -52,6 +52,18 @@ All six comparison operators are supported:
 
 ---
 
+## Limitation: no field-to-field comparisons
+
+Specifications only compare a **field against a constant value**.  
+`Product.price < Product.discount` is **not** supported — the right-hand side must be a literal.
+
+??? note "Why this isn't supported"
+    SQL, MongoDB, and the in-memory provider all support field-to-field filtering natively and efficiently. Redis, however, has no native way to compare two fields on the same record — it would require fetching every record and evaluating the comparison in Python (a full scan).
+
+    Hike enforces a **provider parity rule**: a feature must work identically across all providers, or it must not be available in any of them. Because Redis cannot support field-to-field filtering efficiently, this capability is withheld from every provider rather than silently degrading performance for Redis users or raising `NotImplementedError` at runtime.
+
+---
+
 ## 2. Composing Specifications
 
 Combine specifications using standard Python operators:
