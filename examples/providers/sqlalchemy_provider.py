@@ -1,20 +1,43 @@
-"""Unit of Work example with in-memory storage.
+"""SQLAlchemy provider example.
 
-Demonstrates the UnitOfWork pattern using InMemoryDBContext and
-InMemoryRepository — no external dependencies required.
+Demonstrates save, query, update, and rollback using PostgreSQL as the
+backing store via ``SQLAlchemyDBContext`` and ``SQLAlchemyRepository``
+with the auto-inferring ``DictAutoSQLAlchemyMapper``.
+
+The mapper derives the full relational schema from aggregate annotations:
+one table per entity class, no hand-written ORM models required.
+
+Start with devenv::
+
+    devenv up postgres
 
 Run with::
 
-    uv run python examples/uow.py
+    uv run python examples/providers/sqlalchemy_provider.py
 """
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, \
-    command, non_empty, non_negative, rule
-from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from hike import (
+    AggregateDoesNotExistError,
+    Field,
+    UnitOfWork,
+    UuidAggregate,
+    UuidEntity,
+    ValueObject,
+    non_empty,
+    non_negative,
+    rule,
+)
+from hike.persistence.providers.sqlalchemy import (
+    DictAutoSQLAlchemyMapper,
+    SQLAlchemyDBContext,
+    SQLAlchemyRepository,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -50,64 +73,78 @@ class Boat(UuidAggregate):
     price: Field[Price]
     __invariants__ = [engine_price_within_boat_price]
 
-    @command(invariants=[engine_price_within_boat_price])
-    def update_engine_price(self, price: float) -> None:
-        self.engine.price = Price(price)
-
 
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
 
-context = InMemoryDBContext()
-repo = InMemoryRepository[UUID, Boat]()
-uow: UnitOfWork[dict[Any, Aggregate[Any]]] = UnitOfWork(context)
+engine = create_engine("postgresql+psycopg://localhost:5432/hike", echo=False)
+
+mapper = DictAutoSQLAlchemyMapper(Boat)
+mapper.create_tables(engine)           # no-op if tables already exist
+
+# Drop and recreate for a repeatable demo
+mapper._base.metadata.drop_all(engine)  # pyright: ignore[reportPrivateUsage]
+mapper.create_tables(engine)
+
+session_factory: sessionmaker[Session] = sessionmaker(bind=engine)
+ctx = SQLAlchemyDBContext(session_factory)
+repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, mapper)
+uow: UnitOfWork[Session] = UnitOfWork(ctx)
 
 # ---------------------------------------------------------------------------
 # Save
 # ---------------------------------------------------------------------------
-default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
-boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
+
+eng = Engine(name=EngineName("V8 Turbo"), price=Price(1_500.0))
+boat = Boat(name=BoatName("Sea Spirit"), price=Price(9_999.0), engine=eng)
 
 with uow(repo):
     repo.save(boat)
     uow.commit()
 
-print(f"Saved: {boat.name.value} (id={boat.id.value})")
+print(f"Saved:   {boat.name.value!r} (id={boat.id.value})")
 
 # ---------------------------------------------------------------------------
 # Query with a specification
 # ---------------------------------------------------------------------------
 
-cheap_engine = Engine(name=EngineName("tiny engine"), price=Price(49.99))
-cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=cheap_engine)
+budget_eng = Engine(name=EngineName("40hp Outboard"), price=Price(400.0))
+budget_boat = Boat(name=BoatName("Dinghy"), price=Price(799.0), engine=budget_eng)
+
 with uow(repo):
-    repo.save(cheap)
+    repo.save(budget_boat)
     uow.commit()
 
 with uow(repo):
-    results = repo.get_many(Boat.engine.price > 1_000.0)
+    expensive = repo.get_many(Boat.price > 5_000.0)
 
-print(f"Boats priced above 1000: {[b.name.value for b in results]}")
+print(f"Boats over 5 000: {[b.name.value for b in expensive]}")
 
 # ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------
 
-boat.price = Price(3_999.99)
+boat.price = Price(8_499.0)
 with uow(repo):
     repo.update(boat)
     uow.commit()
 
 with uow(repo):
     fetched = repo.get_one(boat.id)
-print(f"Updated price: {fetched.price.value}")
+
+print(f"Updated price:   {fetched.price.value}")
 
 # ---------------------------------------------------------------------------
 # Rollback on error
 # ---------------------------------------------------------------------------
 
-ghost = Boat(name=BoatName("Ghost"), price=Price(10.0), engine=Engine(name=EngineName("tiny"), price=Price(1.0)))
+ghost = Boat(
+    name=BoatName("Ghost"),
+    price=Price(10.0),
+    engine=Engine(name=EngineName("tiny"), price=Price(1.0)),
+)
+
 try:
     with uow(repo):
         repo.save(ghost)

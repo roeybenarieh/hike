@@ -44,6 +44,11 @@ ci: check test
 docs:
   uv run mkdocs serve
 
+
+# get a nix shell with all dependencies
+dependencies:
+  nix develop
+
 # Remove build artifacts
 clean:
     rm -rf dist/ .pytest_cache/ __pycache__

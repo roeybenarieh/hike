@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import assert_type
 from uuid import UUID
 
-from hike.entity import get_fields, to_dict
+from hike.entity import from_dict, get_fields, to_dict
 from hike.specifications import (
     AndSpecification,
     EqualSpecification,
@@ -17,7 +17,7 @@ from hike.specifications import (
     OrSpecification,
 )
 
-from tests.hike.conftest import Boat, Engine, Horsepower, Name, Price
+from tests.hike.conftest import Boat, BoatEngine, Engine, Horsepower, MotorBoat, Name, Price
 
 
 class TestUuidEntityIdentity:
@@ -209,3 +209,49 @@ class TestToDict:
         # Engine (UuidEntity) has no non-init fields, so the set is exact.
         e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert {f.name for f in get_fields(e)} == {"id", "name", "horsepower"}
+
+
+class TestToDictFromDictNestedEntity:
+    """Regression tests for the to_dict / from_dict Field[Entity] bug.
+
+    Before the fix, to_dict stored a ReadOnlyView proxy for Field[Entity] fields
+    instead of recursing into the nested entity, making the result
+    non-serialisable and from_dict unable to reconstruct the object.
+    """
+
+    def _make_motorboat(self) -> MotorBoat:
+        eng = BoatEngine(name=Name("V8 Turbo"), price=Price(1_500.0))
+        return MotorBoat(name=Name("Sea Spirit"), price=Price(9_999.0), engine=eng)
+
+    def test_to_dict_nested_entity_is_dict_not_proxy(self) -> None:
+        boat = self._make_motorboat()
+        d = to_dict(boat)
+        assert isinstance(d["engine"], dict), (
+            "to_dict must recurse into Field[Entity] and produce a plain dict, "
+            f"got {type(d['engine'])!r} instead"
+        )
+
+    def test_to_dict_nested_entity_contains_expected_keys(self) -> None:
+        from typing import Any, cast
+        boat = self._make_motorboat()
+        engine_dict = cast(dict[str, Any], to_dict(boat)["engine"])
+        assert isinstance(engine_dict, dict)
+        assert set(engine_dict.keys()) == {"id", "name", "price"}
+
+    def test_to_dict_nested_entity_values_are_scalars(self) -> None:
+        boat = self._make_motorboat()
+        engine_dict = to_dict(boat)["engine"]
+        assert isinstance(engine_dict, dict)
+        assert engine_dict["name"] == "V8 Turbo"
+        assert engine_dict["price"] == 1_500.0
+
+    def test_from_dict_round_trips_nested_entity(self) -> None:
+        boat = self._make_motorboat()
+        d = to_dict(boat)
+        restored: MotorBoat = from_dict(MotorBoat, d)
+        assert restored.id == boat.id
+        assert restored.name.value == boat.name.value
+        assert restored.price.value == boat.price.value
+        assert restored.engine.id == boat.engine.id
+        assert restored.engine.name.value == boat.engine.name.value
+        assert restored.engine.price.value == boat.engine.price.value

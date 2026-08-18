@@ -78,26 +78,35 @@ class TerminalFieldProxy:
             node = node.parent
         return node
 
-    def __eq__(self, other: object) -> EqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def _reject_proxy_operand(self, other: object) -> None:
         if isinstance(other, TerminalFieldProxy):
-            return EqualSpecification(self, other is self)
+            raise TypeError(
+                f"Field-to-field comparisons are not supported. "
+                f"Use a scalar value as the operand, not {other!r}."
+            )
+
+    def __eq__(self, other: object) -> EqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
+        self._reject_proxy_operand(other)
         return EqualSpecification(self, other)
 
     def __ne__(self, other: object) -> NotEqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
-        if isinstance(other, TerminalFieldProxy):
-            return NotEqualSpecification(self, other is not self)
+        self._reject_proxy_operand(other)
         return NotEqualSpecification(self, other)
 
     def __lt__(self, other: object) -> LessThanSpecification:
+        self._reject_proxy_operand(other)
         return LessThanSpecification(self, other)
 
     def __le__(self, other: object) -> LessThanEqualSpecification:
+        self._reject_proxy_operand(other)
         return LessThanEqualSpecification(self, other)
 
     def __gt__(self, other: object) -> GreaterThanSpecification:
+        self._reject_proxy_operand(other)
         return GreaterThanSpecification(self, other)
 
     def __ge__(self, other: object) -> GreaterThanEqualSpecification:
+        self._reject_proxy_operand(other)
         return GreaterThanEqualSpecification(self, other)
 
     def __hash__(self) -> int:
@@ -570,7 +579,8 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
     """Serialize *entity* to a plain dict.
 
     ValueObject fields are flattened to their raw ``.value``.
-    Entity fields in lists are recursively serialized via ``to_dict``.
+    Single Entity fields (``Field[Entity]``) and list Entity fields are
+    recursively serialized via ``to_dict``.
     """
     result: dict[str, Any] = {}
     for f in get_fields(entity):
@@ -579,6 +589,11 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
         val: Any = getattr(cast(Any, entity), f.name)
         if isinstance(val, ValueObject):
             result[f.name] = cast(Any, val).value
+        elif isinstance(val, ReadOnlyView):
+            inner: Entity[Any] = object.__getattribute__(cast(ReadOnlyView[Any], val), '_entity')
+            result[f.name] = to_dict(inner)
+        elif isinstance(val, Entity):
+            result[f.name] = to_dict(cast(Entity[Any], val))
         elif isinstance(val, list):
             result[f.name] = [
                 cast(Any, v).value if isinstance(v, ValueObject)
@@ -594,9 +609,10 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
 def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
     """Reconstruct an entity from a plain dict produced by ``to_dict``.
 
-    Handles nested ``list[Entity]`` fields by recursing into element dicts and
-    calling ``from_dict`` with the declared element type.  Scalar ValueObject
-    fields are reconstructed automatically by ``_FieldDescriptor.__set__``.
+    Handles nested ``Field[Entity]`` fields (single entity) and
+    ``list[Entity]`` fields by recursing into element dicts.  Scalar
+    ValueObject fields are reconstructed automatically by
+    ``_FieldDescriptor.__set__``.
     """
     try:
         hints: dict[str, Any] = get_type_hints(entity_class)
@@ -609,12 +625,24 @@ def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
             continue
         val = data[name]
         ann = hints.get(name)
-        if ann is not None and get_origin(ann) is list:
-            list_args: tuple[Any, ...] = getattr(ann, "__args__", ())
-            elem_cls = list_args[0] if list_args else None
-            if isinstance(elem_cls, type) and issubclass(elem_cls, Entity):
-                kwargs[name] = [from_dict(cast(type[Any], elem_cls), item) for item in cast(list[Any], val)]
+        if ann is not None:
+            # Field[Entity] — single nested entity serialised as a dict
+            inner_cls = unwrap_annotation(ann)
+            if (
+                inner_cls is not None
+                and issubclass(inner_cls, Entity)
+                and not issubclass(inner_cls, ValueObject)
+                and isinstance(val, dict)
+            ):
+                kwargs[name] = from_dict(cast(type[Any], inner_cls), cast(dict[str, Any], val))
                 continue
+            # list[Entity]
+            if get_origin(ann) is list:
+                list_args: tuple[Any, ...] = getattr(ann, "__args__", ())
+                elem_cls = list_args[0] if list_args else None
+                if isinstance(elem_cls, type) and issubclass(elem_cls, Entity):
+                    kwargs[name] = [from_dict(cast(type[Any], elem_cls), item) for item in cast(list[Any], val)]
+                    continue
         kwargs[name] = val
     return cast(Any, entity_class)(**kwargs)
 
