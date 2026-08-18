@@ -149,8 +149,8 @@ with uow(repo):
 
 **How transactions work**: write operations (`save`, `update`, `delete`, `upsert`) are queued into a Redis pipeline and executed atomically via `MULTI/EXEC` on commit. Read operations (`get_one`, `get_many`) bypass the pipeline and read directly from Redis.
 
-!!! note "`get_many` scans all keys"
-    The Redis provider has no index support. `get_many` with a specification scans every key matching `{key_prefix}:*` and evaluates the specification in memory. This is fine for small datasets; for large ones, consider a relational or document database that can push filtering to the storage engine.
+!!! note "`get_many` evaluates specifications in memory"
+    `get_many` scans every key matching `{key_prefix}:*` and evaluates the specification in Python. This is the correct approach for Redis: RediSearch indices require a static field schema declared at creation time, which is fundamentally at odds with the dynamic, composable specification pattern — you cannot know at repository initialisation which fields will be queried, or with which operators. For small-to-medium datasets this is fine; if you need server-side filtering at scale, use a relational or document database instead.
 
 ---
 
