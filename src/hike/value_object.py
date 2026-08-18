@@ -54,7 +54,17 @@ class ValueObject[V](DomainObject):
         super().__init_subclass__(**kwargs)
         # Auto-apply @dataclass(frozen=True) to each subclass so the subclass
         # gets its own __init__ with the correctly-typed `value` parameter.
-        dataclass(frozen=True)(cls)
+        # eq=False: subclasses inherit __eq__ and __hash__ from ValueObject
+        # rather than getting dataclass-generated versions that would override them.
+        dataclass(frozen=True, eq=False)(cls)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ValueObject):
+            return type(self) is type(other) and self.value == cast(ValueObject[Any], other).value  # type: ignore[reportUnknownArgumentType]
+        return self.value == other  # type: ignore[operator]
+
+    def __hash__(self) -> int:
+        return hash(self.value)
 
     def __add__(self, other: Self | V) -> Self:
         return type(self)(self.value + _cmp_value(other))  # type: ignore[operator,return-value]

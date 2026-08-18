@@ -56,7 +56,7 @@ class FunctionalRule[T: DomainObject](Rule[T]):
 
         @rule
         def price_in_range(boat: Boat) -> bool:
-            return not (1_000 <= boat.price.value <= 500_000)
+            return not (1_000 <= boat.price <= 500_000)
 
     For cross-type reuse, pair with a ``Protocol``::
 
@@ -112,11 +112,11 @@ def rule[T: DomainObject](
 
         @rule
         def price_in_range(boat: Boat) -> bool:
-            return not (1_000 <= boat.price.value <= 500_000)
+            return not (1_000 <= boat.price <= 500_000)
 
         @rule(message="Price must be between €1,000 and €500,000")
         def price_in_range(boat: Boat) -> bool:
-            return not (1_000 <= boat.price.value <= 500_000)
+            return not (1_000 <= boat.price <= 500_000)
     """
     def _make(fn: Callable[[T], bool]) -> FunctionalRule[T]:
         return FunctionalRule(fn, message or getattr(fn, '__name__', ''))

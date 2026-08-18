@@ -505,10 +505,10 @@ class Harbor(UuidAggregate):
     dock_count: Field[DockCount]
 
     def receive_ship(self) -> None:
-        self.dock_count = DockCount(self.dock_count.value + 1)
+        self.dock_count = self.dock_count + 1
 
     def release_ship(self) -> None:
-        self.dock_count = DockCount(self.dock_count.value - 1)
+        self.dock_count = self.dock_count - 1
 
 
 def make_harbor_uow() -> tuple[UnitOfWork[Any], InMemoryRepository[UUID, Harbor]]:
@@ -569,7 +569,7 @@ def test_cross_aggregate_invariant_handler_updates_other_aggregate() -> None:
 
     with harbor_uow(harbor_repo):
         updated_harbor = harbor_repo.get_one(harbor.id)
-    assert updated_harbor.dock_count.value == 1
+    assert updated_harbor.dock_count == 1
 
 
 def test_cross_aggregate_invariant_handler_is_also_callable() -> None:
@@ -586,7 +586,7 @@ def test_cross_aggregate_invariant_handler_is_also_callable() -> None:
 
     with harbor_uow(harbor_repo):
         updated = harbor_repo.get_one(harbor.id)
-    assert updated.dock_count.value == 6
+    assert updated.dock_count == 6
 
 
 # ---------------------------------------------------------------------------
@@ -714,4 +714,4 @@ def test_cross_aggregate_handler_compensate_reverses_db_write() -> None:
 
     with harbor_uow(harbor_repo):
         final_harbor = harbor_repo.get_one(harbor.id)
-    assert final_harbor.dock_count.value == 0  # compensation reversed the +1
+    assert final_harbor.dock_count == 0  # compensation reversed the +1

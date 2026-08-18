@@ -134,9 +134,9 @@ class Order(UuidAggregate):
     @command(invariants='all')
     def apply_discount(self, percent: float) -> None:
         factor = 1 - percent / 100
-        self.total = Money(self.total.value * factor)
+        self.total = self.total * factor
         for item in self.items:
-            item.price = Money(item.price.value * factor)
+            item.price = item.price * factor
 ```
 
 `'all'` collects every rule from `__invariants__` across the full MRO, so no rule is missed even if defined on a parent class.
@@ -173,7 +173,7 @@ car.tune(Speed(100))            # OK
 ```python
 @rule(message="Current gear cannot exceed the engine's maximum")
 def gear_within_range(engine: "Engine") -> bool:
-    return engine.current_gear.value > engine.max_gear.value
+    return engine.current_gear > engine.max_gear
 
 class Engine(UuidEntity):
     current_gear: Field[Gear]

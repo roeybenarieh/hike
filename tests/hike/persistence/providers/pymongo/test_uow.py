@@ -359,7 +359,7 @@ def fleet(uow: UnitOfWork[ClientSession], repo: PyMongoRepository[UUID, Boat]) -
 def test_mongo_ordering_price_asc(uow: UnitOfWork[ClientSession], repo: PyMongoRepository[UUID, Boat]) -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 
@@ -367,7 +367,7 @@ def test_mongo_ordering_price_asc(uow: UnitOfWork[ClientSession], repo: PyMongoR
 def test_mongo_ordering_price_desc(uow: UnitOfWork[ClientSession], repo: PyMongoRepository[UUID, Boat]) -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices, reverse=True)
 
 
@@ -382,7 +382,7 @@ def test_mongo_offset_pagination(uow: UnitOfWork[ClientSession], repo: PyMongoRe
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is True
-    assert [b.price.value for b in page.items] == [10.0, 20.0]
+    assert [b.price for b in page.items] == [10.0, 20.0]
 
 
 @pytest.mark.usefixtures("fleet")
@@ -394,12 +394,12 @@ def test_mongo_page_pagination(uow: UnitOfWork[ClientSession], repo: PyMongoRepo
             pagination=PagePagination(page=2, page_size=2),
         )
     assert isinstance(page, Page)
-    assert [b.price.value for b in page.items] == [30.0, 40.0]
+    assert [b.price for b in page.items] == [30.0, 40.0]
 
 
 @pytest.mark.usefixtures("fleet")
 def test_mongo_cursor_pagination_traverses_all(uow: UnitOfWork[ClientSession], repo: PyMongoRepository[UUID, Boat]) -> None:
-    collected: list[float] = []
+    collected: list[Price] = []
     cursor: str | None = None
 
     for _ in range(10):
@@ -410,7 +410,7 @@ def test_mongo_cursor_pagination_traverses_all(uow: UnitOfWork[ClientSession], r
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
-        collected.extend(b.price.value for b in page.items)
+        collected.extend(b.price for b in page.items)
         if not page.has_next:
             break
         cursor = page.next_cursor
@@ -425,7 +425,7 @@ def test_mongo_ordering_single_orderby_shorthand(uow: UnitOfWork[ClientSession],
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 

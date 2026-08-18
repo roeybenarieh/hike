@@ -267,7 +267,7 @@ def test_ordering_price_asc() -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
     assert isinstance(results, list)
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 
@@ -276,7 +276,7 @@ def test_ordering_price_desc() -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
     assert isinstance(results, list)
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices, reverse=True)
 
 
@@ -285,7 +285,7 @@ def test_ordering_name_asc() -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.name)])
     assert isinstance(results, list)
-    names = [b.name.value for b in results]
+    names = [b.name for b in results]
     assert names == sorted(names)
 
 
@@ -294,7 +294,7 @@ def test_ordering_single_orderby_shorthand() -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 
@@ -328,7 +328,7 @@ def test_offset_pagination_first_page() -> None:
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is True
-    assert [b.price.value for b in page.items] == [10.0, 20.0]
+    assert [b.price for b in page.items] == [10.0, 20.0]
 
 
 def test_offset_pagination_middle_page() -> None:
@@ -342,7 +342,7 @@ def test_offset_pagination_middle_page() -> None:
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is True
-    assert [b.price.value for b in page.items] == [30.0, 40.0]
+    assert [b.price for b in page.items] == [30.0, 40.0]
 
 
 def test_offset_pagination_last_page() -> None:
@@ -356,7 +356,7 @@ def test_offset_pagination_last_page() -> None:
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is False
-    assert [b.price.value for b in page.items] == [50.0]
+    assert [b.price for b in page.items] == [50.0]
 
 
 def test_offset_pagination_exact_fit() -> None:
@@ -399,7 +399,7 @@ def test_page_pagination_page1() -> None:
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is True
-    assert [b.price.value for b in page.items] == [10.0, 20.0]
+    assert [b.price for b in page.items] == [10.0, 20.0]
 
 
 def test_page_pagination_last_page() -> None:
@@ -413,7 +413,7 @@ def test_page_pagination_last_page() -> None:
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is False
-    assert [b.price.value for b in page.items] == [50.0]
+    assert [b.price for b in page.items] == [50.0]
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +422,7 @@ def test_page_pagination_last_page() -> None:
 
 def test_cursor_pagination_traverses_all_pages() -> None:
     uow, repo, _ = _make_fleet()
-    collected: list[float] = []
+    collected: list[Price] = []
     cursor: str | None = None
 
     for _ in range(10):  # guard against infinite loops
@@ -433,7 +433,7 @@ def test_cursor_pagination_traverses_all_pages() -> None:
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
-        collected.extend(b.price.value for b in page.items)
+        collected.extend(b.price for b in page.items)
         if not page.has_next:
             break
         cursor = page.next_cursor
@@ -490,7 +490,7 @@ def test_ordering_with_offset_pagination() -> None:
             pagination=OffsetPagination(offset=0, limit=2),
         )
     assert isinstance(page, Page)
-    assert [b.price.value for b in page.items] == [50.0, 40.0]
+    assert [b.price for b in page.items] == [50.0, 40.0]
 
 
 def test_spec_with_offset_pagination() -> None:
@@ -503,12 +503,12 @@ def test_spec_with_offset_pagination() -> None:
         )
     assert isinstance(page, Page)
     assert page.total == 3  # 30, 40, 50
-    assert [b.price.value for b in page.items] == [30.0, 40.0]
+    assert [b.price for b in page.items] == [30.0, 40.0]
 
 
 def test_ordering_with_cursor_pagination() -> None:
     uow, repo, _ = _make_fleet()
-    collected: list[float] = []
+    collected: list[Price] = []
     cursor: str | None = None
 
     for _ in range(10):
@@ -519,7 +519,7 @@ def test_ordering_with_cursor_pagination() -> None:
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
-        collected.extend(b.price.value for b in page.items)
+        collected.extend(b.price for b in page.items)
         if not page.has_next:
             break
         cursor = page.next_cursor

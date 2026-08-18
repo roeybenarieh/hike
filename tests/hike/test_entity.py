@@ -80,7 +80,7 @@ class TestFieldDescriptor:
 
     def test_price_field_on_boat(self) -> None:
         b = Boat(name=Name("My Boat"), price=Price(100))
-        assert b.price.value == 100.0
+        assert b.price == 100.0
 
     def test_discount_price_method(self) -> None:
         b = Boat(name=Name("My Boat"), price=Price(100))
@@ -91,7 +91,7 @@ class TestFieldDescriptor:
     def test_horsepower_field_is_value_object(self) -> None:
         e = Engine(name=Name("V8"), horsepower=Horsepower(200))
         assert isinstance(e.horsepower, Horsepower)
-        assert e.horsepower.value == 200
+        assert e.horsepower == 200
 
 
 class TestFieldProxySpecifications:
@@ -250,8 +250,8 @@ class TestToDictFromDictNestedEntity:
         d = to_dict(boat)
         restored: MotorBoat = from_dict(MotorBoat, d)
         assert restored.id == boat.id
-        assert restored.name.value == boat.name.value
-        assert restored.price.value == boat.price.value
+        assert restored.name == boat.name
+        assert restored.price == boat.price
         assert restored.engine.id == boat.engine.id
-        assert restored.engine.name.value == boat.engine.name.value
-        assert restored.engine.price.value == boat.engine.price.value
+        assert restored.engine.name == boat.engine.name
+        assert restored.engine.price == boat.engine.price

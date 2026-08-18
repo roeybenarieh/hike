@@ -303,7 +303,7 @@ class TestCatalogFiltering:
         spec = affordable & ~electronics
 
         results = self._filter(all_listings, spec)
-        names = {r.name.value for r in results}
+        names = {r.name for r in results}
         # python_book: 45.00, books → True
         # desk_lamp: 35.00, home → True
         assert names == {"Python Book", "Desk Lamp"}
@@ -312,10 +312,10 @@ class TestCatalogFiltering:
         spec = ProductListing.price > 100
         results = self._filter(all_listings, spec)
         assert len(results) == 1
-        assert results[0].name.value == "Pro Headphones"
+        assert results[0].name == "Pro Headphones"
 
     def test_name_not_equal(self, all_listings: list[ProductListing]) -> None:
         spec = ProductListing.name != "Cheap Cable"
         results = self._filter(all_listings, spec)
         assert len(results) == 4
-        assert all(r.name.value != "Cheap Cable" for r in results)
+        assert all(r.name != "Cheap Cable" for r in results)

@@ -834,7 +834,7 @@ def fleet(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> l
 def test_sa_ordering_price_asc(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[asc(Boat.price)])
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 
@@ -842,7 +842,7 @@ def test_sa_ordering_price_asc(uow: UnitOfWork[Session], repo: SQLAlchemyReposit
 def test_sa_ordering_price_desc(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=[desc(Boat.price)])
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices, reverse=True)
 
 
@@ -857,7 +857,7 @@ def test_sa_offset_pagination_first_page(uow: UnitOfWork[Session], repo: SQLAlch
     assert isinstance(page, Page)
     assert page.total == 5
     assert page.has_next is True
-    assert [b.price.value for b in page.items] == [10.0, 20.0]
+    assert [b.price for b in page.items] == [10.0, 20.0]
 
 
 @pytest.mark.usefixtures("fleet")
@@ -870,7 +870,7 @@ def test_sa_offset_pagination_last_page(uow: UnitOfWork[Session], repo: SQLAlche
         )
     assert isinstance(page, Page)
     assert page.has_next is False
-    assert [b.price.value for b in page.items] == [50.0]
+    assert [b.price for b in page.items] == [50.0]
 
 
 @pytest.mark.usefixtures("fleet")
@@ -883,12 +883,12 @@ def test_sa_page_pagination(uow: UnitOfWork[Session], repo: SQLAlchemyRepository
         )
     assert isinstance(page, Page)
     assert page.total == 5
-    assert [b.price.value for b in page.items] == [30.0, 40.0]
+    assert [b.price for b in page.items] == [30.0, 40.0]
 
 
 @pytest.mark.usefixtures("fleet")
 def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session], repo: SQLAlchemyRepository[UUID, Boat]) -> None:
-    collected: list[float] = []
+    collected: list[Price] = []
     cursor: str | None = None
 
     for _ in range(10):
@@ -899,7 +899,7 @@ def test_sa_cursor_pagination_traverses_all(uow: UnitOfWork[Session], repo: SQLA
                 pagination=CursorPagination(limit=2, cursor=cursor),
             )
         assert isinstance(page, Page)
-        collected.extend(b.price.value for b in page.items)
+        collected.extend(b.price for b in page.items)
         if not page.has_next:
             break
         cursor = page.next_cursor
@@ -919,7 +919,7 @@ def test_sa_spec_with_offset_pagination(uow: UnitOfWork[Session], repo: SQLAlche
         )
     assert isinstance(page, Page)
     assert page.total == 3
-    assert [b.price.value for b in page.items] == [30.0, 40.0]
+    assert [b.price for b in page.items] == [30.0, 40.0]
 
 
 @pytest.mark.usefixtures("fleet")
@@ -927,7 +927,7 @@ def test_sa_ordering_single_orderby_shorthand(uow: UnitOfWork[Session], repo: SQ
     with uow(repo):
         results = repo.get_many(Boat.price >= 0.0, ordering=asc(Boat.price))
     assert isinstance(results, list)
-    prices = [b.price.value for b in results]
+    prices = [b.price for b in results]
     assert prices == sorted(prices)
 
 

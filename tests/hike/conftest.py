@@ -59,7 +59,7 @@ class ListingName(ValueObject[str]):
 
 @rule(message="Engine must have positive horsepower")
 def engine_horsepower_positive(e: "Engine") -> bool:
-    return e.horsepower.value <= 0
+    return e.horsepower <= 0
 
 
 class Engine(UuidEntity):
@@ -92,7 +92,7 @@ class ProductListing(UuidEntity):
 
 @rule(message="Boat price must be positive")
 def boat_price_positive(b: "Boat") -> bool:
-    return b.price.value <= 0
+    return b.price <= 0
 
 
 class Boat(UuidAggregate):
@@ -102,7 +102,7 @@ class Boat(UuidAggregate):
     price: Field[Price]
 
     def discount_price(self) -> Price:
-        return Price(self.price.value * 0.9)
+        return self.price * 0.9
 
 
 class Journey(UuidAggregate):
@@ -112,7 +112,7 @@ class Journey(UuidAggregate):
 
 @rule(message="Engine price must not exceed the motorboat price")
 def engine_price_within_boat_price(boat: MotorBoat) -> bool:
-    return boat.engine.price.value > boat.price.value
+    return boat.engine.price > boat.price
 
 
 class MotorBoat(UuidAggregate):
