@@ -43,3 +43,7 @@ site/
 # Tools
 .serena/
 graphify-out/
+
+# devenv local state and direnv hook (generated; not project code)
+.devenv/
+.envrc
