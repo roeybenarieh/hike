@@ -38,6 +38,26 @@ class TestValueObjectEquality:
     def test_different_type_not_equal(self) -> None:
         assert Price(5) != Name("5")
 
+    def test_equal_raw_value(self) -> None:
+        assert Price(5.0) == 5.0
+
+    def test_not_equal_different_raw_value(self) -> None:
+        assert Price(5.0) != 6.0
+
+    def test_equal_raw_string_value(self) -> None:
+        assert Name("hello") == "hello"
+
+    def test_hash_matches_raw_value(self) -> None:
+        assert hash(Price(5.0)) == hash(5.0)
+        assert hash(Name("foo")) == hash("foo")
+
+    def test_raw_value_in_set_of_vos(self) -> None:
+        s = {Price(1.0), Price(2.0)}
+        assert Price(1.0) in s
+
+    def test_different_vo_types_same_raw_value_not_equal(self) -> None:
+        assert Price(5) != Name("5")  # already covered, but explicitly for cross-type VO
+
 
 class TestValueObjectComparisons:
     def test_less_than(self) -> None:

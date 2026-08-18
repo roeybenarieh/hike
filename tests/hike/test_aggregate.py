@@ -48,7 +48,7 @@ class PriceAboveRule(Rule[Boat]):
         self.ceiling = ceiling
 
     def is_broken(self, obj: Boat) -> bool:
-        return obj.price.value > self.ceiling
+        return obj.price > self.ceiling
 
 
 class PriceBelowRule(Rule[Boat]):
@@ -58,7 +58,7 @@ class PriceBelowRule(Rule[Boat]):
         self.floor = floor
 
     def is_broken(self, obj: Boat) -> bool:
-        return obj.price.value < self.floor
+        return obj.price < self.floor
 
 
 # ---------------------------------------------------------------------------

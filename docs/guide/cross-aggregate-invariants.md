@@ -128,7 +128,7 @@ class TeamRosterService(DomainService):
 
         # 3. Update both aggregates in one transaction
         with self._uow(self._teams, self._players):
-            team.roster_size = RosterSize(team.roster_size.value + 1)
+            team.roster_size = team.roster_size + 1
             self._players.save(player)
             self._teams.update(team)
             self._uow.commit()
