@@ -37,7 +37,7 @@ with uow(repo):
 **Install**
 
 ```
-pip install hike[sqlalchemy]
+pip install ihike[sqlalchemy]
 ```
 
 ```python
@@ -83,7 +83,7 @@ with uow(repo):
 **Install**
 
 ```
-pip install hike[pymongo]
+pip install ihike[pymongo]
 ```
 
 ```python
@@ -123,7 +123,7 @@ Aggregates are serialized to flat MongoDB documents. `UUID` fields are stored us
 **Install**
 
 ```
-pip install hike[redis]
+pip install ihike[redis]
 ```
 
 ```python

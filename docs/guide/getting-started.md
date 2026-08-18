@@ -20,7 +20,7 @@ Welcome! This guide will walk you through installing Hike and building your very
 ### a) Basic installation
 
 ```bash
-pip install hike
+pip install ihike
 ```
 
 ### b) Installing optional database connectors
@@ -29,19 +29,19 @@ If you plan to persist data to a database, add the extra for each backend:
 
 ```bash
 # SQLAlchemy (relational DBs — PostgreSQL, SQLite, MySQL, …)
-pip install "hike[sqlalchemy]"
+pip install "ihike[sqlalchemy]"
 
 # PyMongo (MongoDB)
-pip install "hike[pymongo]"
+pip install "ihike[pymongo]"
 
 # Redis (key‑value store)
-pip install "hike[redis]"
+pip install "ihike[redis]"
 ```
 
 ### c) Install everything at once
 
 ```bash
-pip install "hike[all]"
+pip install "ihike[all]"
 ```
 
 ## 3. Verify the Installation

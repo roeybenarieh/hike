@@ -1,20 +1,39 @@
-"""Unit of Work example with in-memory storage.
+"""Redis provider example.
 
-Demonstrates the UnitOfWork pattern using InMemoryDBContext and
-InMemoryRepository — no external dependencies required.
+Demonstrates save, query, update, and rollback using Redis as the backing
+store via ``RedisDBContext`` and ``RedisRepository``.
+
+Write operations are queued into a MULTI/EXEC pipeline and executed
+atomically on ``commit()``.  Reads bypass the pipeline and go directly
+to the Redis client (pipeline commands return no results until executed).
+
+Start with devenv::
+
+    devenv up redis
 
 Run with::
 
-    uv run python examples/uow.py
+    uv run python examples/providers/redis_provider.py
 """
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, \
-    command, non_empty, non_negative, rule
-from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
+from redis import Redis
+from redis.client import Pipeline
+
+from hike import (
+    AggregateDoesNotExistError,
+    Field,
+    UnitOfWork,
+    UuidAggregate,
+    UuidEntity,
+    ValueObject,
+    non_empty,
+    non_negative,
+    rule,
+)
+from hike.persistence.providers.redis import RedisDBContext, RedisRepository
 
 
 # ---------------------------------------------------------------------------
@@ -50,64 +69,71 @@ class Boat(UuidAggregate):
     price: Field[Price]
     __invariants__ = [engine_price_within_boat_price]
 
-    @command(invariants=[engine_price_within_boat_price])
-    def update_engine_price(self, price: float) -> None:
-        self.engine.price = Price(price)
-
 
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
 
-context = InMemoryDBContext()
-repo = InMemoryRepository[UUID, Boat]()
-uow: UnitOfWork[dict[Any, Aggregate[Any]]] = UnitOfWork(context)
+client: Redis = Redis(host="127.0.0.1", port=6379, decode_responses=False)
+client.flushdb()    # type: ignore[reportUnknownMemberType]  # redis stubs use **kwargs: Unknown
+
+ctx = RedisDBContext(client)
+repo: RedisRepository[UUID, Boat] = RedisRepository(client, Boat, key_prefix="boats")
+uow: UnitOfWork[Pipeline] = UnitOfWork(ctx)
 
 # ---------------------------------------------------------------------------
 # Save
 # ---------------------------------------------------------------------------
-default_engine = Engine(name=EngineName("my engine"), price=Price(1_000.99))
-boat = Boat(name=BoatName("Sea Spirit"), price=Price(4_999.99), engine=default_engine)
+
+engine = Engine(name=EngineName("V8 Turbo"), price=Price(1_500.0))
+boat = Boat(name=BoatName("Sea Spirit"), price=Price(9_999.0), engine=engine)
 
 with uow(repo):
     repo.save(boat)
     uow.commit()
 
-print(f"Saved: {boat.name.value} (id={boat.id.value})")
+print(f"Saved:   {boat.name.value!r} (id={boat.id.value})")
 
 # ---------------------------------------------------------------------------
 # Query with a specification
 # ---------------------------------------------------------------------------
 
-cheap_engine = Engine(name=EngineName("tiny engine"), price=Price(49.99))
-cheap = Boat(name=BoatName("Dinghy"), price=Price(299.0), engine=cheap_engine)
+budget_engine = Engine(name=EngineName("40hp Outboard"), price=Price(400.0))
+budget_boat = Boat(name=BoatName("Dinghy"), price=Price(799.0), engine=budget_engine)
+
 with uow(repo):
-    repo.save(cheap)
+    repo.save(budget_boat)
     uow.commit()
 
 with uow(repo):
-    results = repo.get_many(Boat.engine.price > 1_000.0)
+    expensive = repo.get_many(Boat.price > 5_000.0)
 
-print(f"Boats priced above 1000: {[b.name.value for b in results]}")
+print(f"Boats over 5 000: {[b.name.value for b in expensive]}")
 
 # ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------
 
-boat.price = Price(3_999.99)
+boat.price = Price(8_499.0)
 with uow(repo):
     repo.update(boat)
     uow.commit()
 
 with uow(repo):
     fetched = repo.get_one(boat.id)
-print(f"Updated price: {fetched.price.value}")
+
+print(f"Updated price:   {fetched.price.value}")
 
 # ---------------------------------------------------------------------------
 # Rollback on error
 # ---------------------------------------------------------------------------
 
-ghost = Boat(name=BoatName("Ghost"), price=Price(10.0), engine=Engine(name=EngineName("tiny"), price=Price(1.0)))
+ghost = Boat(
+    name=BoatName("Ghost"),
+    price=Price(10.0),
+    engine=Engine(name=EngineName("tiny"), price=Price(1.0)),
+)
+
 try:
     with uow(repo):
         repo.save(ghost)

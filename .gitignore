@@ -43,3 +43,6 @@ site/
 # Tools
 .serena/
 graphify-out/
+
+# devenv local state (generated; not project code)
+.devenv/

@@ -16,7 +16,8 @@ if TYPE_CHECKING:
         OrSpecification,
     )
 
-
+# TODO: add a NoneSpecification
+# TODO: support specifications between two TerminalFieldProxy
 class ISpecification(ABC):
     def __and__(self, other: ISpecification) -> AndSpecification:
         from .specs import AndSpecification

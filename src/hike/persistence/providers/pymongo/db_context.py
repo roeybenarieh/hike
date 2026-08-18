@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pymongo import MongoClient
 from pymongo.synchronous.client_session import ClientSession
@@ -27,11 +27,25 @@ class PyMongoDBContext(DBContext[ClientSession]):
     def __init__(self, client: MongoClient[dict[str, Any]]) -> None:
         super().__init__()
         host, port = next(iter(client.topology_description.server_descriptions()))
+        # pool_options._credentials is a pymongo private attribute; cast to Any
+        # so we can forward username/password when recreating the client with
+        # directConnection=True and uuidRepresentation="standard".
+        credentials: Any = cast(Any, client.options.pool_options)._credentials
+        auth_kwargs: dict[str, Any] = (
+            {
+                "username": credentials.username,
+                "password": credentials.password,
+                "authSource": credentials.source,
+            }
+            if credentials is not None
+            else {}
+        )
         self._client: MongoClient[dict[str, Any]] = MongoClient(
             host=host,
             port=port,
             directConnection=True,
             uuidRepresentation="standard",
+            **auth_kwargs,
         )
 
     @property
