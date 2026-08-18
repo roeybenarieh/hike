@@ -3,7 +3,7 @@ default:
 
 # Install all dependencies (including optional extras)
 sync:
-    uv sync --all-extras
+    uv sync --all-extras --all-groups
 
 # Type-check the source
 typecheck:
@@ -42,7 +42,7 @@ ci: check test
 
 # run mkdocs
 docs:
-  uv run mkdocs serve
+  uv run --group docs mkdocs serve
 
 
 # get a nix shell with all dependencies
