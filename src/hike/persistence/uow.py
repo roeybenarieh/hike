@@ -10,7 +10,12 @@ from hike.persistence.repository import IRepository
 
 
 class DBContext[TSession](ABC):
-    """Database session management object."""
+    """Database session management object.
+
+    Not thread-safe — never run parallel operations on the same instance.
+    Designed for a short, scoped lifetime: one request in a web app, one unit
+    of work in a desktop app.
+    """
 
     _session: TSession | None = None
 

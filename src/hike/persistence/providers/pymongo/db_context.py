@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
+from bson.binary import UuidRepresentation
 from pymongo import MongoClient
 from pymongo.synchronous.client_session import ClientSession
 
@@ -14,9 +15,20 @@ class PyMongoDBContext(DBContext[ClientSession]):
     Requires a replica set or mongos — standalone MongoDB does not support
     multi-document transactions.
 
+    The ``client`` must be configured with:
+
+    - ``directConnection=True`` — required for multi-document transaction
+      routing to a specific replica-set primary.
+    - ``uuidRepresentation="standard"`` — required for correct UUID
+      serialisation.
+
     Usage::
 
-        client = MongoClient("mongodb://localhost:27017")
+        client = MongoClient(
+            "mongodb://localhost:27017",
+            directConnection=True,
+            uuidRepresentation="standard",
+        )
         ctx = PyMongoDBContext(client)
         uow = UnitOfWork(ctx)
         with uow(repo):
@@ -26,27 +38,17 @@ class PyMongoDBContext(DBContext[ClientSession]):
 
     def __init__(self, client: MongoClient[dict[str, Any]]) -> None:
         super().__init__()
-        host, port = next(iter(client.topology_description.server_descriptions()))
-        # pool_options._credentials is a pymongo private attribute; cast to Any
-        # so we can forward username/password when recreating the client with
-        # directConnection=True and uuidRepresentation="standard".
-        credentials: Any = cast(Any, client.options.pool_options)._credentials
-        auth_kwargs: dict[str, Any] = (
-            {
-                "username": credentials.username,
-                "password": credentials.password,
-                "authSource": credentials.source,
-            }
-            if credentials is not None
-            else {}
-        )
-        self._client: MongoClient[dict[str, Any]] = MongoClient(
-            host=host,
-            port=port,
-            directConnection=True,
-            uuidRepresentation="standard",
-            **auth_kwargs,
-        )
+        if not client.options.direct_connection:
+            raise ValueError(
+                "PyMongoDBContext requires directConnection=True on the MongoClient. "
+                "Pass directConnection=True to MongoClient(...)."
+            )
+        if client.codec_options.uuid_representation != UuidRepresentation.STANDARD:
+            raise ValueError(
+                "PyMongoDBContext requires uuidRepresentation='standard' on the MongoClient. "
+                "Pass uuidRepresentation='standard' to MongoClient(...)."
+            )
+        self._client = client
 
     @property
     def client(self) -> MongoClient[dict[str, Any]]:

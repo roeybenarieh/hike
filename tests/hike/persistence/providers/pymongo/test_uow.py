@@ -67,7 +67,9 @@ def mongo_client() -> MongoClient[dict[str, Any]]:  # type: ignore[misc]
         init_client.close()
 
         # Fresh client — its connections see the replica-set HELLO with session support.
-        client: MongoClient[dict[str, Any]] = MongoClient(host=host, port=port, directConnection=True)
+        client: MongoClient[dict[str, Any]] = MongoClient(
+            host=host, port=port, directConnection=True, uuidRepresentation="standard"
+        )
         yield client  # type: ignore[misc]
         client.close()
 

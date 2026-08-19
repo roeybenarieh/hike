@@ -92,7 +92,11 @@ from hike import UnitOfWork
 from hike.persistence.providers.pymongo import PyMongoDBContext, PyMongoRepository
 
 # 1. Connect
-client     = MongoClient("mongodb://localhost:27017")
+client = MongoClient(
+    "mongodb://localhost:27017",
+    directConnection=True,
+    uuidRepresentation="standard",
+)
 collection = client["mydb"]["orders"]
 
 # 2. Wire up

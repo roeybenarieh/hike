@@ -9,7 +9,8 @@ When working with databases, developers often mix database queries directly into
 A **Repository** acts like an in-memory collection of your Aggregates (like a python list or dictionary), hiding all the messy SQL or MongoDB code behind a clean interface.
 
 ### Why use it?
-- Your business code doesn't need to know *how* data is saved (Postgres, MongoDB, Redis, or simple memory).
+
+- Your business code doesn't need to know _how_ data is saved (Postgres, MongoDB, Redis, or simple memory).
 - It makes unit-testing super easy because you can swap out the database repository for a fake in-memory one in seconds.
 
 ```python
@@ -24,20 +25,21 @@ class OrderRepository(IRepository[UUID, Order, Any]):
 ```
 
 ### 🔒 Optimistic Concurrency Control (Safe Updates)
+
 Hike repositories automatically track aggregate versions. If two users try to edit the same order at the same time, Hike raises an `OptimisticLockError` to prevent one user's changes from silently overwriting the other's!
 
 ---
 
 ## 2. What is a Unit of Work (UoW)?
 
-When you perform multiple operations (e.g., *create an order, deduct payment, update stock*), you want **all** of them to succeed, or **none** of them to happen. This is called a transaction.
+When you perform multiple operations (e.g., _create an order, deduct payment, update stock_), you want **all** of them to succeed, or **none** of them to happen. This is called a transaction.
 
-The **Unit of Work** pattern manages this transaction boundary. You create a `UnitOfWork` once (with just the database context), then pass the repositories you want to use each time you open a transaction:
+The **Unit of Work** pattern manages this transaction boundary. You create a `UnitOfWork` once, then pass the repositories you want to use each time you open a transaction:
 
 ```python
 from hike.persistence.uow import UnitOfWork
 
-uow = UnitOfWork(context)   # created once, reused across transactions
+uow = UnitOfWork(...)   # created once, reused across transactions
 
 with uow(repo):             # pass repos when opening the transaction
     repo.save(order)
@@ -71,12 +73,12 @@ with uow(repo, auto_commit=True):
 
 Hike defines `IRepository[TId, TAggregate, TSession]` as the standard contract every repository must satisfy. Your code depends only on this interface — the underlying storage technology is swapped by changing a single constructor call in your setup code.
 
-| Provider | When to use |
-| :--- | :--- |
-| `InMemoryRepository` 🧪 | Tests and prototyping — no database required |
+| Provider                  | When to use                                         |
+| :------------------------ | :-------------------------------------------------- |
+| `InMemoryRepository` 🧪   | Tests and prototyping — no database required        |
 | `SQLAlchemyRepository` 🏛️ | Relational databases (PostgreSQL, SQLite, MySQL, …) |
-| `PyMongoRepository` 🍃 | MongoDB |
-| `RedisRepository` ⚡ | Redis |
+| `PyMongoRepository` 🍃    | MongoDB                                             |
+| `RedisRepository` ⚡      | Redis                                               |
 
 Every provider implements the same methods (`save`, `get_one`, `update`, `delete`, `get_many`, `count`, `upsert`) so switching backends requires no changes to the code that uses the repository.
 
