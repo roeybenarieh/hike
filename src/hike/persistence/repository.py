@@ -69,6 +69,7 @@ class IRepository(Generic[TId, TAggregate, TSession], ABC):
     def __init__(self) -> None:
         self._pending_events: list[DomainEvent] = []
 
+    # TODO: why do I need both _collect_events and drain_events?
     def _collect_events(self, aggregate: TAggregate) -> None:
         """Transfer aggregate's raised events into pending queue and clear the aggregate."""
         self._pending_events.extend(aggregate.get_events())

@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Any, Self
 
-from hike.domain_event import DomainEvent, EventBus
-from hike.persistence.outbox import IOutboxRepository
+from hike.domain_event import DomainEvent
+from hike.events.interfaces import IEventPublisher
 from hike.persistence.repository import IRepository
 
 
@@ -44,24 +44,19 @@ class DBContext[TSession](ABC):
 
 class UnitOfWork[TSessions]:
 
-    def __init__(self, context: DBContext[TSessions]) -> None:
+    def __init__(self, context: DBContext[TSessions], event_producer: IEventPublisher[DomainEvent] | None = None) -> None:
         self._context = context
         self._repos: tuple[IRepository[Any, Any, TSessions], ...] = ()
         self._auto_commit: bool = False
-        self._bus: EventBus | None = None
-        self._outbox: IOutboxRepository | None = None
+        self.event_producer = event_producer
 
     def __call__(
             self,
             *repos: IRepository[Any, Any, TSessions],
             auto_commit: bool = False,
-            bus: EventBus | None = None,
-            outbox: IOutboxRepository | None = None,
     ) -> Self:
         self._repos = repos
         self._auto_commit = auto_commit
-        self._bus = bus
-        self._outbox = outbox
         return self
 
     def __enter__(self) -> Self:
@@ -70,8 +65,6 @@ class UnitOfWork[TSessions]:
         self._context.begin()
         for repo in self._repos:
             repo.session = self._context.session
-        if self._outbox is not None:
-            self._outbox.session = self._context.session
         return self
 
     def __exit__(
@@ -84,8 +77,6 @@ class UnitOfWork[TSessions]:
         if exc_type:
             self._repos = ()
             self._auto_commit = False
-            self._bus = None
-            self._outbox = None
             self._context.rollback()
             return
         if auto_commit:
@@ -94,13 +85,9 @@ class UnitOfWork[TSessions]:
                 self.commit()
             finally:
                 self._repos = ()
-                self._bus = None
-                self._outbox = None
             return
         self._repos = ()
         self._auto_commit = False
-        self._bus = None
-        self._outbox = None
         self._context.close()
 
     def _collect_all_events(self) -> list[DomainEvent]:
@@ -111,8 +98,6 @@ class UnitOfWork[TSessions]:
 
     def commit(self) -> None:
         events = self._collect_all_events()
-        if self._bus is not None:
-            self._bus.publish_all(events)   # handlers run first; error here aborts the commit
-        if self._outbox is not None:
-            self._outbox.save_all(events)
+        if self.event_producer is not None:
+            self.event_producer.publish(events)
         self._context.commit()
