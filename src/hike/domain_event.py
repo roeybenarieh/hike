@@ -4,6 +4,7 @@ import json
 from .common import DomainObject
 
 
+# TODO: create proper serialize/deserialize functionality
 class DomainEvent(DomainObject): ...
 
 
