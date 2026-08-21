@@ -1,55 +1,64 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, List, Iterator, final
+from types import TracebackType
+from typing import Iterable, Self
 
-from hike import DomainEvent
+from hike.domain_event import DomainEvent
 
 
-class _StartCloseContext(ABC):
+class IEventHandler[TDomainEvent: DomainEvent](ABC):
+
     @abstractmethod
-    def close(self) -> None:
-        """Must be none blocking"""
+    def handle(self, event: TDomainEvent) -> None: ...
+
+    def __call__(self, event: TDomainEvent) -> None:
+        self.handle(event)
+
+
+class IReversibleEventHandler[TDomainEvent: DomainEvent](IEventHandler[TDomainEvent], ABC):
+
+    @abstractmethod
+    def compensate(self) -> None: ...
+
+
+class IEventSubscriber[TDomainEvent: DomainEvent](ABC):
+
+    @abstractmethod
+    def subscribe(self, event_handler: IEventHandler[TDomainEvent]) -> None:
+        """multiple calls to this method is supported"""
+
+
+class IBlockingEventSubscriber(IEventSubscriber[DomainEvent], ABC):
+
+    @abstractmethod
+    def close(self) -> None: ...
 
     @abstractmethod
     def start(self) -> None:
-        """Must be none blocking"""
+        """blocking method"""
 
-    def __enter__(self):
-        self.start()
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            _exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
-        if exc_type is not None:
+        if exc_val is not None:
             raise exc_val
 
 
-EventHandler = Callable[[DomainEvent], None]
-
-
-class EventConsumer(_StartCloseContext):
-    """Other synonyms: event handler"""
-
-    def __init__(self, callbacks: List[EventHandler] | None = None):
-        if callbacks is None:
-            callbacks = []
-
-        self._callbacks: List[EventHandler] = callbacks
-
-    @final
-    def register(self, callback: EventHandler):
-        self._callbacks.append(callback)
+class IEventPublisher[TDomainEvent: DomainEvent](ABC):
+    """Other synonyms: event dispatcher/producer"""
 
     @abstractmethod
-    def consume(self) -> Iterator[DomainEvent]:
-        raise NotImplementedError("consume() is not implemented")
+    def publish(self, events: Iterable[TDomainEvent]) -> None: ...
 
 
-class EventProducer(_StartCloseContext):
-    """Other synonyms: event dispatcher"""
-
-    @abstractmethod
-    def produce(self, event: DomainEvent) -> None:
-        raise NotImplementedError("produce() is not implemented")
+class IEventBus(IEventPublisher[DomainEvent], IEventSubscriber[DomainEvent], ABC):
+    ...
