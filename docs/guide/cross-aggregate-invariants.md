@@ -34,7 +34,6 @@ Neither is universally better. The right choice depends on how bad a temporary v
 | [`DomainService`](#2-domainservice-orchestrating-the-check) 🎯 | strong | You need to **orchestrate** a read-then-write across two aggregates |
 | [`@authority`](#3-authority-designating-the-owning-aggregate) 👑 | strong | One aggregate is the clear **owner** of the invariant |
 | [`EventBus` / `InMemoryEventBus`](#4-eventbus-publishing-domain-events) 📡 | eventual | You want **decoupled** reactions within the same bounded context |
-| [`CrossAggregateInvariantHandler`](domain-events.md#crossaggregateinvarianthandler--enforcing-rules-across-aggregates) 🔗 | eventual | A handler needs the **repo + UoW** of the other aggregate to react |
 | [`ProcessManager`](#5-processmanager-long-running-workflows) 🔄 | eventual | You need to **coordinate** a multi-step workflow across aggregates |
 
 ---
@@ -304,7 +303,6 @@ from hike import (
     EventBus,                        # publish/subscribe interface
     EventHandler,                    # abstract handler object base class
     InMemoryEventBus,                # synchronous in-memory bus (great for tests)
-    CrossAggregateInvariantHandler,  # handler with repo+uow for the other aggregate
     ProcessManager,                  # coordinate a multi-step workflow
     RuleBrokenError,                 # raised when any rule (single or cross-aggregate) fires
 )

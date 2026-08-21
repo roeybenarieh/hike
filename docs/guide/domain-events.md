@@ -260,14 +260,19 @@ def sync_search_index(event: OrderPlaced) -> None:
 
 #### Compensation — rolling back previously-succeeded handlers
 
-When multiple handlers subscribe to the same event (or a batch of events), the bus dispatches them in order. If handler B fails after handler A has already succeeded, handler A's side effects are **not automatically reversed** by the database rollback — they may have committed their own transaction (e.g. a `CrossAggregateInvariantHandler` that updated another aggregate).
+When multiple handlers subscribe to the same event (or a batch of events), the bus dispatches them in order. If handler B fails after handler A has already succeeded, handler A's side effects are **not automatically reversed** by the database rollback — they may have committed their own transaction.
 
 For this, `EventHandler` objects support a `compensate()` method. When any handler fails during `publish_all()`, the bus calls `compensate()` on every previously-succeeded handler object, in **reverse order**, before re-raising the original exception.
 
 ```python
-from hike import EventHandler, CrossAggregateInvariantHandler
+from hike import EventHandler
 
-class IncrementHarborDockCount(CrossAggregateInvariantHandler[ShipLaunched]):
+class IncrementHarborDockCount(EventHandler[ShipLaunched]):
+    def __init__(self, harbor_id, repo, uow) -> None:
+        self._harbor_id = harbor_id
+        self._repo = repo
+        self._uow = uow
+
     def handle(self, event: ShipLaunched) -> None:
         with self._uow(self._repo):
             harbor = self._repo.get_one(self._harbor_id)
@@ -336,82 +341,6 @@ with uow(repo, bus=bus, auto_commit=True):
 - Reactions live in the same Python process (same service, same thread).
 - You want handler failures to prevent the domain change from being committed.
 - You want simplicity — no extra database tables or background threads.
-
----
-
-## `CrossAggregateInvariantHandler` — enforcing rules across aggregates
-
-When a domain event triggers a check or update on a **second, different aggregate**, use `CrossAggregateInvariantHandler`. It is a handler object that receives the repository and unit-of-work for the *other* aggregate at construction time, so `handle()` can load, check, and update it in its own transaction.
-
-```python
-from hike import CrossAggregateInvariantHandler, UnitOfWork, IRepository
-
-class IncrementHarborDockCount(CrossAggregateInvariantHandler[ShipLaunched]):
-    """On ShipLaunched, update the Harbor aggregate that owns the berth."""
-
-    def __init__(
-        self,
-        harbor_id: HarborID,
-        repo: IRepository,
-        uow: UnitOfWork,
-    ) -> None:
-        super().__init__(repo, uow)        # stores as self._repo / self._uow
-        self._harbor_id = harbor_id
-
-    def handle(self, event: ShipLaunched) -> None:
-        with self._uow(self._repo):
-            harbor = self._repo.get_one(self._harbor_id)
-            CapacityRule().check(HarborCtx(harbor=harbor))   # optional invariant check
-            harbor.receive_ship()
-            self._repo.update(harbor)
-            self._uow.commit()
-
-    def compensate(self, event: ShipLaunched) -> None:
-        # Called automatically if a later handler fails in the same publish_all()
-        with self._uow(self._repo):
-            harbor = self._repo.get_one(self._harbor_id)
-            harbor.release_ship()          # undo the dock_count increment
-            self._repo.update(harbor)
-            self._uow.commit()
-```
-
-Subscribing and wiring:
-
-```python
-harbor_repo = ...   # IRepository for Harbor
-harbor_uow  = UnitOfWork(harbor_db_context)
-
-handler = IncrementHarborDockCount(harbor.id, harbor_repo, harbor_uow)
-ship_bus.subscribe(ShipLaunched, handler)
-
-# When a ship is launched:
-with ship_uow(ship_repo, bus=ship_bus):
-    ship.launch()
-    ship_repo.save(ship)
-    ship_uow.commit()
-    # ① ship_bus dispatches ShipLaunched
-    # ② handler opens its own harbor_uow transaction
-    # ③ handler loads Harbor, checks CapacityRule, increments dock count, commits
-    # ④ ship_uow commits the ship write (if no error in ②–③)
-```
-
-### Transaction model
-
-`CrossAggregateInvariantHandler` opens its **own** `UnitOfWork` transaction — separate from the one that raised the event. This means:
-
-| Scenario | What happens |
-| :--- | :--- |
-| Handler's transaction succeeds | Both the ship write and the harbor update commit |
-| Handler's transaction fails (exception) | Handler exception propagates; ship write is **rolled back** (pre-commit dispatch) |
-| Ship write fails (exception in `uow.commit()`) | Harbor update already committed; ship write rolls back — brief inconsistency |
-
-For guaranteed atomicity across both aggregates in a single transaction, use a `DomainService` instead (see [Cross-Aggregate Invariants](cross-aggregate-invariants.md)).
-
-### When to use `CrossAggregateInvariantHandler`
-
-- An event from one aggregate must trigger a **write** on another aggregate.
-- The invariant is enforced **reactively** (eventual consistency is acceptable).
-- You want the handler to be composable, testable, and named explicitly.
 
 ---
 
@@ -689,7 +618,6 @@ from hike import (
     EventBus,                         # abstract pub/sub interface
     EventHandler,                     # abstract handler object base class
     InMemoryEventBus,                 # synchronous, in-process bus
-    CrossAggregateInvariantHandler,   # handler with repo+uow for the other aggregate
     IOutboxRepository,                # abstract outbox — extend for custom backends
     OutboxRecord,                     # infrastructure Aggregate for one hike_outbox row
     OutboxRelay,                      # polls outbox → publishes → deletes

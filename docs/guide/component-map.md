@@ -23,6 +23,11 @@ body[data-md-color-scheme="default"] {
 }
 /* hide native browser clear button */
 #hike-cmap-search::-webkit-search-cancel-button { display: none; }
+/* fullscreen */
+#hike-cmap-wrap:-webkit-full-screen,
+#hike-cmap-wrap:fullscreen { background: var(--cmap-bg); padding: 1rem; overflow: auto; }
+#hike-cmap-wrap:-webkit-full-screen #hike-cmap,
+#hike-cmap-wrap:fullscreen #hike-cmap { height: calc(100vh - 130px) !important; }
 </style>
 
 <div id="hike-cmap-wrap" style="position:relative;margin:1.5rem -1.1rem;width:calc(100% + 2.2rem);font-family:inherit;">
@@ -37,13 +42,25 @@ body[data-md-color-scheme="default"] {
   </div>
   <div style="position:relative;">
     <div id="hike-cmap" style="width:100%;height:900px;background:var(--cmap-bg);border-radius:10px;border:1px solid var(--cmap-border);"></div>
-    <button id="hike-cmap-reset" aria-label="Reset view" title="Reset view"
-      style="display:none;position:absolute;bottom:12px;right:12px;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/>
-        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-      </svg>
-    </button>
+    <div style="position:absolute;bottom:12px;right:12px;display:flex;flex-direction:column;gap:12px;align-items:center;">
+      <button id="hike-cmap-reset" aria-label="Reset view" title="Reset view"
+        style="display:none;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
+        <svg width="30" height="30" viewBox="-17 -17 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="0" cy="0" r="4"/>
+          <line x1="0" y1="-17" x2="0" y2="-10"/>
+          <line x1="0" y1="10" x2="0" y2="17"/>
+          <line x1="-17" y1="0" x2="-10" y2="0"/>
+          <line x1="10" y1="0" x2="17" y2="0"/>
+        </svg>
+      </button>
+      <button id="hike-cmap-fullscreen" aria-label="Full screen" title="Full screen"
+        style="display:flex;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
+        <svg id="hike-cmap-fs-icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+    </div>
   </div>
   <div id="hike-cmap-info" style="display:none;margin-top:8px;padding:12px 18px;background:var(--cmap-bg);border-radius:8px;border:1px solid var(--cmap-border);font-size:0.82rem;font-family:monospace;color:var(--cmap-text);">
     <span id="hike-cmap-info-name" style="font-weight:700;margin-right:10px;"></span>
@@ -74,8 +91,7 @@ body[data-md-color-scheme="default"] {
     { data: { id: 'EntityID',        l: 'EntityID',              s: 'hike.entity',                     cat: 'core',        imp: 'from hike import EntityID' } },
     { data: { id: 'Entity',          l: 'Entity',                s: 'hike.entity',                     cat: 'core',        imp: 'from hike import Entity' } },
     { data: { id: 'Aggregate',       l: 'Aggregate',             s: 'hike.aggregate',                  cat: 'core',        imp: 'from hike import Aggregate' } },
-    { data: { id: 'UuidAggregate',   l: 'UuidAggregate',         s: 'hike.aggregate',                  cat: 'core',        imp: 'from hike import UuidAggregate' } },
-    { data: { id: 'DomainEvent',     l: 'DomainEvent',           s: 'hike.domain_event',               cat: 'core',        imp: 'from hike import DomainEvent' } },
+    { data: { id: 'DomainEvent',     l: 'DomainEvent',           s: 'hike.domain_event',               cat: 'events',      imp: 'from hike import DomainEvent' } },
     /* Rules */
     { data: { id: 'Rule',            l: 'Rule',                  s: 'hike.rules',                      cat: 'rules',       imp: 'from hike import Rule' } },
     { data: { id: 'SpecRule',        l: 'SpecificationRule',     s: 'hike.rules',                      cat: 'rules',       imp: 'from hike import SpecificationRule' } },
@@ -84,38 +100,32 @@ body[data-md-color-scheme="default"] {
     /* Persistence */
     { data: { id: 'IRepository',     l: 'IRepository',           s: 'hike.persistence.repository',     cat: 'persistence', imp: 'from hike import IRepository' } },
     { data: { id: 'UnitOfWork',      l: 'UnitOfWork',            s: 'hike.persistence.uow',            cat: 'persistence', imp: 'from hike import UnitOfWork' } },
-    { data: { id: 'DBContext',       l: 'DBContext',             s: 'hike.persistence.uow',            cat: 'persistence', imp: 'from hike import DBContext' } },
     /* Events */
-    { data: { id: 'EventBus',        l: 'EventBus',              s: 'hike.domain_event',               cat: 'events',      imp: 'from hike import EventBus\n# concrete: from hike import InMemoryEventBus' } },
-    { data: { id: 'EventHandler',    l: 'EventHandler',          s: 'hike.domain_event',               cat: 'events',      imp: 'from hike import EventHandler' } },
-    { data: { id: 'ProcessManager',  l: 'ProcessManager',        s: 'hike.process_manager',            cat: 'events',      imp: 'from hike import ProcessManager' } },
-    { data: { id: 'DomainService',   l: 'DomainService',         s: 'hike.domain_service',             cat: 'events',      imp: 'from hike import DomainService' } },
-    { data: { id: 'CAInvHandler',    l: 'CrossAggregateInvariant\nHandler', s: 'hike.handlers', cat: 'events',     imp: 'from hike import CrossAggregateInvariantHandler' } },
+    { data: { id: 'IEventHandler',    l: 'IEventHandler',    s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventHandler' } },
+    { data: { id: 'IEventPublisher',  l: 'IEventPublisher',  s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventPublisher' } },
+    { data: { id: 'IEventSubscriber', l: 'IEventSubscriber', s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventSubscriber' } },
+    { data: { id: 'InMemoryEventBus', l: 'InMemoryEventBus', s: 'hike.events.event_bus',  cat: 'events', imp: 'from hike.events.event_bus import InMemoryEventBus' } },
   ];
 
   var EDGES = [
     /* ── Inheritance / implements (solid) ──────────────────────── */
-    { data: { source: 'ValueObject',   target: 'EntityID',       etype: 'inh' } },
-    { data: { source: 'Entity',        target: 'EntityID',       etype: 'use', label: 'identifier' } },
-    { data: { source: 'Entity',        target: 'Aggregate',      etype: 'inh' } },
-    { data: { source: 'Aggregate',     target: 'UuidAggregate',  etype: 'inh' } },
-    { data: { source: 'Rule',          target: 'SpecRule',       etype: 'inh' } },
-    { data: { source: 'EventHandler',  target: 'CAInvHandler',   etype: 'inh', label: 'extends' } },
+    { data: { source: 'ValueObject',      target: 'EntityID',        etype: 'inh' } },
+    { data: { source: 'Entity',           target: 'Aggregate',       etype: 'inh' } },
+    { data: { source: 'Rule',             target: 'SpecRule',        etype: 'inh' } },
+    { data: { source: 'IEventPublisher',  target: 'InMemoryEventBus', etype: 'inh' } },
+    { data: { source: 'IEventSubscriber', target: 'InMemoryEventBus', etype: 'inh' } },
     /* ── Usage / dependency (dashed) ───────────────────────────── */
-    { data: { source: 'Aggregate',     target: 'DomainEvent',    etype: 'use', label: 'raises' } },
-    { data: { source: 'Rule',          target: 'Entity',         etype: 'use', label: 'validates' } },
-    { data: { source: 'Rule',          target: 'ValueObject',    etype: 'use', label: 'validates' } },
-    { data: { source: 'SpecRule',      target: 'ISpec',          etype: 'use', label: 'delegates to' } },
-    { data: { source: 'IRepository',   target: 'ISpec',          etype: 'use', label: 'filter with' } },
-    { data: { source: 'UnitOfWork',    target: 'DBContext',      etype: 'use', label: 'manage transactions with' } },
-    { data: { source: 'UnitOfWork',    target: 'IRepository',    etype: 'use', label: 'scopes session' } },
-    { data: { source: 'UnitOfWork',    target: 'EventBus',       etype: 'use', label: 'publishes on commit' } },
-    { data: { source: 'EventBus',      target: 'EventHandler',   etype: 'use', label: 'dispatches to' } },
-    { data: { source: 'ProcessManager',target: 'EventBus',       etype: 'use', label: 'subscribes' } },
-    { data: { source: 'DomainService', target: 'IRepository',    etype: 'use', label: 'uses' } },
-    { data: { source: 'DomainService', target: 'UnitOfWork',     etype: 'use', label: 'uses' } },
-    { data: { source: 'CAInvHandler',  target: 'IRepository',    etype: 'use', label: 'uses' } },
-    { data: { source: 'CAInvHandler',  target: 'UnitOfWork',     etype: 'use', label: 'uses' } },
+    { data: { source: 'Entity',           target: 'EntityID',        etype: 'use', label: 'identifier' } },
+    { data: { source: 'Aggregate',        target: 'DomainEvent',     etype: 'use', label: 'raises' } },
+    { data: { source: 'Rule',             target: 'Entity',          etype: 'use', label: 'validates' } },
+    { data: { source: 'Rule',             target: 'ValueObject',     etype: 'use', label: 'validates' } },
+    { data: { source: 'SpecRule',         target: 'ISpec',           etype: 'use', label: 'delegates to' } },
+    { data: { source: 'IRepository',      target: 'ISpec',           etype: 'use', label: 'filter with' } },
+    { data: { source: 'UnitOfWork',       target: 'IRepository',     etype: 'use', label: 'scopes session' } },
+    { data: { source: 'UnitOfWork',       target: 'IEventPublisher', etype: 'use', label: 'publishes before commit' } },
+    { data: { source: 'IEventPublisher',  target: 'DomainEvent',     etype: 'use', label: 'publishes' } },
+    { data: { source: 'IEventSubscriber', target: 'IEventHandler',   etype: 'use', label: 'delegate handling to' } },
+    { data: { source: 'IEventSubscriber', target: 'DomainEvent',     etype: 'use', label: 'subscribes to' } },
   ];
 
   var PALETTES = {
@@ -255,7 +265,11 @@ body[data-md-color-scheme="default"] {
       componentSpacing: 60,
       nodeRepulsion: function () { return 4500000; },
       nodeOverlap: 20,
-      idealEdgeLength: function () { return 320; },
+      idealEdgeLength: function (edge) {
+        var label = edge.data('label') || '';
+        /* font-size is 21 graph-units; avg char width ≈ 60% of that = ~12.6 units */
+        return Math.max(320, label.length * 12.6 + 84);
+      },
       edgeElasticity: function () { return 60; },
       nestingFactor: 1.0,
       gravity: 6,
@@ -289,20 +303,75 @@ body[data-md-color-scheme="default"] {
       var p = n.position();
       n.position({ x: p.x * bc - p.y * bs, y: p.x * bs + p.y * bc });
     });
+    /* hard-enforce minimum edge length so labels are never clipped by nodes.
+       Edge labels use font-size 21 (graph units); char width ~14 units for system-ui.
+       Node dims in graph units: min-width 140, h-padding 20 each side. */
+    function nodeHalfDiag(node) {
+      var lbl = node.data('l') + '\n' + node.data('s');
+      var maxCh = Math.max.apply(null, lbl.split('\n').map(function (l) { return l.length; }));
+      var w = Math.max(140, maxCh * 7.2) + 40;
+      return Math.sqrt(w * w + 80 * 80) / 2;
+    }
+    for (var pass = 0; pass < 3; pass++) {
+      cy.edges('[label]').forEach(function (edge) {
+        /* 14 units/char for 21px system-ui, 40 units margin each end */
+        var labelW = edge.data('label').length * 14 + 80;
+        var needed = labelW + nodeHalfDiag(edge.source()) + nodeHalfDiag(edge.target());
+        var s = edge.source().position(), t = edge.target().position();
+        var dx = t.x - s.x, dy = t.y - s.y;
+        var len = Math.sqrt(dx * dx + dy * dy);
+        if (len < needed) {
+          var scale = needed / len;
+          var mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+          edge.source().position({ x: mx - dx * scale / 2, y: my - dy * scale / 2 });
+          edge.target().position({ x: mx + dx * scale / 2, y: my + dy * scale / 2 });
+        }
+      });
+    }
+
     cy.fit(cy.elements(), 20);
-    var initZoom = cy.zoom(), initPan = cy.pan();
+    var initZoom = cy.zoom(), initPan = { x: cy.pan().x, y: cy.pan().y };
+
+    function resetView(duration) {
+      cy.animate({ zoom: initZoom, pan: { x: initPan.x, y: initPan.y } }, { duration: duration != null ? duration : 300 });
+    }
 
     var resetBtn = document.getElementById('hike-cmap-reset');
     if (resetBtn) {
-      resetBtn.addEventListener('click', function () {
-        cy.animate({ fit: { eles: cy.elements(), padding: 20 } }, { duration: 300 });
-      });
+      resetBtn.addEventListener('click', function () { resetView(300); });
       cy.on('viewport', function () {
         var atInit = Math.abs(cy.zoom() - initZoom) < 0.005 &&
                      Math.abs(cy.pan().x - initPan.x) < 3 &&
                      Math.abs(cy.pan().y - initPan.y) < 3;
-        resetBtn.style.display = atInit ? 'none' : 'block';
+        resetBtn.style.display = atInit ? 'none' : 'flex';
       });
+    }
+
+    var fsBtn = document.getElementById('hike-cmap-fullscreen');
+    if (fsBtn) {
+      var FS_ICON_EXPAND   = '<polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
+      var FS_ICON_COMPRESS = '<line x1="21" y1="3" x2="14" y2="10"/><polyline points="20,10 14,10 14,4"/><line x1="3" y1="21" x2="10" y2="14"/><polyline points="4,14 10,14 10,20"/>';
+
+      fsBtn.addEventListener('click', function () {
+        var wrap = document.getElementById('hike-cmap-wrap');
+        if (!document.fullscreenElement) {
+          (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
+        } else {
+          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        }
+      });
+
+      function onFsChange() {
+        var fsIcon = document.getElementById('hike-cmap-fs-icon');
+        if (fsIcon) fsIcon.innerHTML = document.fullscreenElement ? FS_ICON_COMPRESS : FS_ICON_EXPAND;
+        cy.resize();
+        cy.fit(cy.elements(), 20);
+        initZoom = cy.zoom();
+        initPan = { x: cy.pan().x, y: cy.pan().y };
+        if (resetBtn) resetBtn.style.display = 'none';
+      }
+      document.addEventListener('fullscreenchange', onFsChange);
+      document.addEventListener('webkitfullscreenchange', onFsChange);
     }
 
     var infoBox  = document.getElementById('hike-cmap-info');
@@ -315,7 +384,7 @@ body[data-md-color-scheme="default"] {
       if (lastTapped === d.id) {
         lastTapped = null;
         infoBox.style.display = 'none';
-        cy.animate({ fit: { eles: cy.elements(), padding: 20 } }, { duration: 300 });
+        resetView(300);
         return;
       }
       lastTapped = d.id;
@@ -362,7 +431,7 @@ body[data-md-color-scheme="default"] {
         if (!q) {
           cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
           if (countEl) countEl.textContent = '';
-          cy.animate({ fit: { eles: cy.elements(), padding: 50 } }, { duration: 250 });
+          resetView(250);
           return;
         }
         var matches = cy.nodes().filter(function (n) {
@@ -377,7 +446,7 @@ body[data-md-color-scheme="default"] {
         matches.connectedEdges().removeClass('cmap-faded');
         if (countEl) countEl.textContent = matches.length + ' found';
         if (matches.length) cy.animate({ fit: { eles: matches, padding: 80 } }, { duration: 250 });
-        else cy.animate({ fit: { eles: cy.elements(), padding: 50 } }, { duration: 250 });
+        else resetView(250);
         }, 500);
       });
     }
@@ -392,7 +461,7 @@ body[data-md-color-scheme="default"] {
           document.querySelectorAll('[data-cat]').forEach(function (e) { e.style.opacity = ''; });
           cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
           if (countEl) countEl.textContent = '';
-          cy.animate({ fit: { eles: cy.elements(), padding: 50 } }, { duration: 250 });
+          resetView(250);
           return;
         }
         activeCat = cat;
@@ -409,7 +478,7 @@ body[data-md-color-scheme="default"] {
         matches.connectedEdges().removeClass('cmap-faded');
         if (countEl) countEl.textContent = matches.length + ' found';
         if (matches.length) cy.animate({ fit: { eles: matches, padding: 80 } }, { duration: 250 });
-        else cy.animate({ fit: { eles: cy.elements(), padding: 50 } }, { duration: 250 });
+        else resetView(250);
       });
     });
 

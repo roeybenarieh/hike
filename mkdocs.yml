@@ -47,6 +47,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: guide/getting-started.md
+  - Component Map: guide/component-map.md
   - DDD Primitives:
       - Value Objects: guide/value-objects.md
       - Entities & Aggregates: guide/entities-aggregates.md
