@@ -43,6 +43,16 @@ body[data-md-color-scheme="default"] {
   <div style="position:relative;">
     <div id="hike-cmap" style="width:100%;height:900px;background:var(--cmap-bg);border-radius:10px;border:1px solid var(--cmap-border);"></div>
     <div style="position:absolute;bottom:12px;right:12px;display:flex;flex-direction:column;gap:12px;align-items:center;">
+      <button id="hike-cmap-reset-pos" aria-label="Reset node positions" title="Reset node positions"
+        style="display:none;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="5" r="2"/>
+          <circle cx="5" cy="19" r="2"/>
+          <circle cx="19" cy="19" r="2"/>
+          <line x1="12" y1="7" x2="6.5" y2="17"/>
+          <line x1="12" y1="7" x2="17.5" y2="17"/>
+        </svg>
+      </button>
       <button id="hike-cmap-reset" aria-label="Reset view" title="Reset view"
         style="display:none;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
         <svg width="30" height="30" viewBox="-17 -17 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -67,16 +77,36 @@ body[data-md-color-scheme="default"] {
     <code id="hike-cmap-info-imp" style="color:var(--cmap-code);white-space:pre;"></code>
   </div>
   <div style="margin-top:8px;padding:10px 16px;background:var(--cmap-bg);border-radius:8px;border:1px solid var(--cmap-border);display:flex;flex-direction:column;gap:8px;font-size:0.75rem;color:var(--cmap-muted);">
-    <div style="display:flex;gap:18px;align-items:center;">
-      <span>&#9135;&#9135; extends / implements</span>
-      <span style="letter-spacing:1px;">- - - uses / depends on</span>
+    <div style="display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <span>extends / implements</span>
+        <div style="display:inline-flex;align-items:center;">
+          <span>A</span>
+          <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
+            <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3"/>
+            <polygon points="86,2 108,10 86,18" fill="currentColor"/>
+          </svg>
+          <span>B</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <span>uses / depends on</span>
+        <div style="display:inline-flex;align-items:center;">
+          <span>A</span>
+          <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
+            <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3" stroke-dasharray="6,3"/>
+            <polygon points="86,2 108,10 86,18" fill="currentColor"/>
+          </svg>
+          <span>B</span>
+        </div>
+      </div>
     </div>
     <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
-      <span data-cat="core"        style="cursor:pointer;transition:opacity .15s;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2e1065;border:1.5px solid #7c3aed;margin-right:4px;vertical-align:middle;"></span>Core DDD</span>
-      <span data-cat="rules"       style="cursor:pointer;transition:opacity .15s;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f2457;border:1.5px solid #3b82f6;margin-right:4px;vertical-align:middle;"></span>Rules</span>
-      <span data-cat="specs"       style="cursor:pointer;transition:opacity .15s;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#021b1a;border:1.5px solid #0d9488;margin-right:4px;vertical-align:middle;"></span>Specifications</span>
-      <span data-cat="persistence" style="cursor:pointer;transition:opacity .15s;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1c0e04;border:1.5px solid #b45309;margin-right:4px;vertical-align:middle;"></span>Persistence</span>
-      <span data-cat="events"      style="cursor:pointer;transition:opacity .15s;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1f0010;border:1.5px solid #e11d48;margin-right:4px;vertical-align:middle;"></span>Events</span>
+      <span data-cat="core"        style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2e1065;border:1.5px solid #7c3aed;margin-right:4px;"></span>Core DDD</span>
+      <span data-cat="rules"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f2457;border:1.5px solid #3b82f6;margin-right:4px;"></span>Rules</span>
+      <span data-cat="specs"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#021b1a;border:1.5px solid #0d9488;margin-right:4px;"></span>Specifications</span>
+      <span data-cat="persistence" style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1c0e04;border:1.5px solid #b45309;margin-right:4px;"></span>Persistence</span>
+      <span data-cat="events"      style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1f0010;border:1.5px solid #e11d48;margin-right:4px;"></span>Events</span>
     </div>
   </div>
 </div>
@@ -331,6 +361,8 @@ body[data-md-color-scheme="default"] {
 
     cy.fit(cy.elements(), 20);
     var initZoom = cy.zoom(), initPan = { x: cy.pan().x, y: cy.pan().y };
+    var initNodePositions = {};
+    cy.nodes().forEach(function (n) { initNodePositions[n.id()] = { x: n.position().x, y: n.position().y }; });
 
     function resetView(duration) {
       cy.animate({ zoom: initZoom, pan: { x: initPan.x, y: initPan.y } }, { duration: duration != null ? duration : 300 });
@@ -338,12 +370,29 @@ body[data-md-color-scheme="default"] {
 
     var resetBtn = document.getElementById('hike-cmap-reset');
     if (resetBtn) {
-      resetBtn.addEventListener('click', function () { resetView(300); });
+      resetBtn.addEventListener('click', function () {
+        activeCat = null;
+        document.querySelectorAll('[data-cat]').forEach(function (e) { e.style.opacity = ''; });
+        cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
+        if (countEl) countEl.textContent = '';
+        resetView(300);
+      });
       cy.on('viewport', function () {
         var atInit = Math.abs(cy.zoom() - initZoom) < 0.005 &&
                      Math.abs(cy.pan().x - initPan.x) < 3 &&
                      Math.abs(cy.pan().y - initPan.y) < 3;
         resetBtn.style.display = atInit ? 'none' : 'flex';
+      });
+    }
+
+    var resetPosBtn = document.getElementById('hike-cmap-reset-pos');
+    if (resetPosBtn) {
+      resetPosBtn.addEventListener('click', function () {
+        cy.nodes().forEach(function (n) { n.position(initNodePositions[n.id()]); });
+        resetPosBtn.style.display = 'none';
+      });
+      cy.on('dragfree', 'node', function () {
+        resetPosBtn.style.display = 'flex';
       });
     }
 
