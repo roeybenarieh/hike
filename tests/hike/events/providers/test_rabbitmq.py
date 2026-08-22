@@ -15,11 +15,42 @@ from dataclasses import dataclass
 import pika
 import pytest
 from pika.adapters.blocking_connection import BlockingChannel
-from testcontainers.community.rabbitmq import RabbitMqContainer  # pyright: ignore[reportMissingTypeStubs]
+from testcontainers.core.container import DockerContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IEventHandler
+from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.rabbitmq import RabbitMQEventPublisher, RabbitMQEventSubscriber
+from tests.hike.events.providers.parity_suite import EventProviderParitySuite
+
+
+class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeStubs]
+    """RabbitMQ container using connection-based readiness polling instead of the
+    deprecated @wait_container_is_ready decorator."""
+
+    _PORT = 5672
+
+    def __init__(self, image: str = "rabbitmq:3.13-alpine") -> None:
+        super().__init__(image=image)  # pyright: ignore[reportUnknownMemberType]
+        self.with_exposed_ports(self._PORT)  # pyright: ignore[reportUnknownMemberType]
+
+    def get_connection_params(self) -> pika.ConnectionParameters:
+        return pika.ConnectionParameters(
+            host=self.get_container_host_ip(),  # pyright: ignore[reportUnknownMemberType]
+            port=int(self.get_exposed_port(self._PORT)),  # pyright: ignore[reportUnknownMemberType]
+        )
+
+    def start(self) -> "_RabbitMqContainer":
+        super().start()  # pyright: ignore[reportUnknownMemberType]
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                conn = pika.BlockingConnection(self.get_connection_params())
+                if conn.is_open:
+                    conn.close()
+                    return self
+            except Exception:
+                time.sleep(0.5)
+        raise RuntimeError("RabbitMQ did not become ready within 30 s")
 
 
 @register_event
@@ -36,9 +67,8 @@ class ParcelShipped(DomainEvent):
 
 @pytest.fixture(scope="session")
 def rabbitmq_params() -> Iterator[pika.ConnectionParameters]:
-    with RabbitMqContainer("rabbitmq:3.13-alpine") as rmq:  # pyright: ignore[reportUnknownMemberType]
-        params: pika.ConnectionParameters = rmq.get_connection_params()  # pyright: ignore[reportUnknownVariableType]
-        yield params
+    with _RabbitMqContainer("rabbitmq:3.13-alpine") as rmq:
+        yield rmq.get_connection_params()
 
 
 @pytest.fixture
@@ -52,19 +82,27 @@ def queue() -> str:
 
 
 @pytest.fixture
-def pub_channel(rabbitmq_params: pika.ConnectionParameters) -> BlockingChannel:
+def pub_channel(rabbitmq_params: pika.ConnectionParameters) -> Iterator[BlockingChannel]:
     conn = pika.BlockingConnection(rabbitmq_params)
     ch = conn.channel()
     assert isinstance(ch, BlockingChannel)
-    return ch
+    yield ch
+    try:
+        conn.close()
+    except Exception:
+        pass
 
 
 @pytest.fixture
-def sub_channel(rabbitmq_params: pika.ConnectionParameters) -> BlockingChannel:
+def sub_channel(rabbitmq_params: pika.ConnectionParameters) -> Iterator[BlockingChannel]:
     conn = pika.BlockingConnection(rabbitmq_params)
     ch = conn.channel()
     assert isinstance(ch, BlockingChannel)
-    return ch
+    yield ch
+    try:
+        conn.close()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -114,35 +152,6 @@ class TestRabbitMQEventPublisher:
 
 
 class TestRabbitMQEventSubscriber:
-    def test_subscriber_dispatches_to_handler(
-        self,
-        pub_channel: BlockingChannel,
-        sub_channel: BlockingChannel,
-        exchange: str,
-        queue: str,
-    ) -> None:
-        subscriber = RabbitMQEventSubscriber(sub_channel, exchange=exchange, queue=queue)
-        received: list[ParcelShipped] = []
-
-        class _Handler(IEventHandler[ParcelShipped]):
-            def handle(self, event: ParcelShipped) -> None:
-                received.append(event)
-                subscriber.close()
-
-        subscriber.subscribe(_Handler())
-
-        publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
-        publisher.publish([ParcelShipped(tracking_id="T1", recipient="Alice")])
-
-        t = threading.Thread(target=subscriber.start, daemon=True)
-        t.start()
-        t.join(timeout=30)
-
-        assert not t.is_alive(), "subscriber did not stop — no message received within 30 s"
-        assert len(received) == 1
-        assert received[0].tracking_id == "T1"
-        assert received[0].recipient == "Alice"
-
     def test_handler_exception_nacks_and_requeues_message(
         self,
         rabbitmq_params: pika.ConnectionParameters,
@@ -157,29 +166,35 @@ class TestRabbitMQEventSubscriber:
         redelivered without restarting the consumer.
         """
         conn = pika.BlockingConnection(rabbitmq_params)
-        sub_ch = conn.channel()
-        assert isinstance(sub_ch, BlockingChannel)
-        subscriber = RabbitMQEventSubscriber(sub_ch, exchange=exchange, queue=queue)
-        received: list[ParcelShipped] = []
-        attempts = 0
+        try:
+            sub_ch = conn.channel()
+            assert isinstance(sub_ch, BlockingChannel)
+            subscriber = RabbitMQEventSubscriber(sub_ch, exchange=exchange, queue=queue)
+            received: list[ParcelShipped] = []
+            attempts = 0
 
-        class _FlakyHandler(IEventHandler[ParcelShipped]):
-            def handle(self, event: ParcelShipped) -> None:
-                nonlocal attempts
-                attempts += 1
-                if attempts == 1:
-                    raise RuntimeError("first attempt fails — should be nacked and requeued")
-                received.append(event)
-                subscriber.close()
+            class _FlakyHandler(IEventHandler[ParcelShipped]):
+                def handle(self, event: ParcelShipped) -> None:
+                    nonlocal attempts
+                    attempts += 1
+                    if attempts == 1:
+                        raise RuntimeError("first attempt fails — should be nacked and requeued")
+                    received.append(event)
+                    subscriber.close()
 
-        subscriber.subscribe(_FlakyHandler())
+            subscriber.subscribe(_FlakyHandler())
 
-        publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
-        publisher.publish([ParcelShipped(tracking_id="T1", recipient="Bob")])
+            publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
+            publisher.publish([ParcelShipped(tracking_id="T1", recipient="Bob")])
 
-        t = threading.Thread(target=subscriber.start, daemon=True)
-        t.start()
-        t.join(timeout=30)
+            t = threading.Thread(target=subscriber.start, daemon=True)
+            t.start()
+            t.join(timeout=30)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
         assert not t.is_alive(), "subscriber did not stop within 30 s"
         assert attempts == 2, f"expected 2 delivery attempts, got {attempts}"
@@ -195,38 +210,63 @@ class TestRabbitMQEventSubscriber:
     ) -> None:
         """Consumer keeps running after a nack — subsequent messages are still processed."""
         conn = pika.BlockingConnection(rabbitmq_params)
-        sub_ch = conn.channel()
-        assert isinstance(sub_ch, BlockingChannel)
-        subscriber = RabbitMQEventSubscriber(sub_ch, exchange=exchange, queue=queue)
-        received: list[ParcelShipped] = []
+        try:
+            sub_ch = conn.channel()
+            assert isinstance(sub_ch, BlockingChannel)
+            subscriber = RabbitMQEventSubscriber(sub_ch, exchange=exchange, queue=queue)
+            received: list[ParcelShipped] = []
 
-        class _Handler(IEventHandler[ParcelShipped]):
-            def __init__(self) -> None:
-                self._count = 0
+            class _Handler(IEventHandler[ParcelShipped]):
+                def __init__(self) -> None:
+                    self._count = 0
 
-            def handle(self, event: ParcelShipped) -> None:
-                self._count += 1
-                # Fail on first delivery of T1; succeed on T2 and on T1's redelivery.
-                if event.tracking_id == "T1" and self._count == 1:
-                    raise RuntimeError("fail T1 first time")
-                received.append(event)
-                if len(received) == 2:
-                    subscriber.close()
+                def handle(self, event: ParcelShipped) -> None:
+                    self._count += 1
+                    # Fail on first delivery of T1; succeed on T2 and on T1's redelivery.
+                    if event.tracking_id == "T1" and self._count == 1:
+                        raise RuntimeError("fail T1 first time")
+                    received.append(event)
+                    if len(received) == 2:
+                        subscriber.close()
 
-        subscriber.subscribe(_Handler())
+            subscriber.subscribe(_Handler())
 
-        publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
-        # Publish two messages; T1 will be nacked and requeued, T2 will be acked.
-        publisher.publish([
-            ParcelShipped(tracking_id="T1", recipient="Carol"),
-            ParcelShipped(tracking_id="T2", recipient="Dave"),
-        ])
+            publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
+            # Publish two messages; T1 will be nacked and requeued, T2 will be acked.
+            publisher.publish([
+                ParcelShipped(tracking_id="T1", recipient="Carol"),
+                ParcelShipped(tracking_id="T2", recipient="Dave"),
+            ])
 
-        t = threading.Thread(target=subscriber.start, daemon=True)
-        t.start()
-        t.join(timeout=30)
+            t = threading.Thread(target=subscriber.start, daemon=True)
+            t.start()
+            t.join(timeout=30)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
         assert not t.is_alive(), "subscriber did not stop within 30 s"
         assert len(received) == 2
         tracking_ids = {e.tracking_id for e in received}
         assert tracking_ids == {"T1", "T2"}
+
+
+# ---------------------------------------------------------------------------
+# Parity tests (IEventPublisher + IBlockingEventSubscriber interface)
+# ---------------------------------------------------------------------------
+
+
+class TestRabbitMQEventProviderParity(EventProviderParitySuite):
+    @pytest.fixture
+    def publisher(
+        self, pub_channel: BlockingChannel, exchange: str
+    ) -> IEventPublisher[DomainEvent]:
+        return RabbitMQEventPublisher(pub_channel, exchange=exchange)
+
+    @pytest.fixture
+    def subscriber(
+        self, sub_channel: BlockingChannel, exchange: str, queue: str
+    ) -> IBlockingEventSubscriber:
+        return RabbitMQEventSubscriber(sub_channel, exchange=exchange, queue=queue)

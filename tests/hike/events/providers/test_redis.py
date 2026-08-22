@@ -11,16 +11,16 @@ import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from redis import Redis
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
-from typing import Any
 
 from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IEventHandler
+from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.redis import RedisEventPublisher, RedisEventSubscriber
-
+from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
 @register_event
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class PackageArrived(DomainEvent):
 
 @pytest.fixture(scope="session")
 def redis_client() -> Iterator[Redis]:  # type: ignore[type-arg]
-    with RedisContainer("redis:7-alpine") as container:  # pyright: ignore[reportUnknownMemberType]
+    with RedisContainer("redis:7") as container:  # pyright: ignore[reportUnknownMemberType]
         client: Redis = container.get_client()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         yield client
 
@@ -91,29 +91,6 @@ class TestRedisEventPublisher:
 
 
 class TestRedisEventSubscriber:
-    def test_subscriber_dispatches_to_handler(
-        self, redis_client: Redis, channel_prefix: str  # type: ignore[type-arg]
-    ) -> None:
-        subscriber = RedisEventSubscriber(redis_client, channel_prefix=channel_prefix)
-        received: list[PackageArrived] = []
-
-        class _Handler(IEventHandler[PackageArrived]):
-            def handle(self, event: PackageArrived) -> None:
-                received.append(event)
-                subscriber.close()
-
-        subscriber.subscribe(_Handler())
-        t = _start_subscriber(subscriber)
-
-        publisher = RedisEventPublisher(redis_client, channel_prefix=channel_prefix)
-        publisher.publish([PackageArrived(package_id="P1", location="Paris")])
-
-        t.join(timeout=10)
-        assert not t.is_alive(), "subscriber did not stop — no message received within 10 s"
-        assert len(received) == 1
-        assert received[0].package_id == "P1"
-        assert received[0].location == "Paris"
-
     def test_handler_exception_does_not_stop_subscriber(
         self, redis_client: Redis, channel_prefix: str  # type: ignore[type-arg]
     ) -> None:
@@ -150,44 +127,21 @@ class TestRedisEventSubscriber:
         assert len(received) == 1
         assert received[0].package_id == "P2"
 
-    def test_multiple_handlers_all_called(
+
+# ---------------------------------------------------------------------------
+# Parity tests (IEventPublisher + IBlockingEventSubscriber interface)
+# ---------------------------------------------------------------------------
+
+
+class TestRedisEventProviderParity(EventProviderParitySuite):
+    @pytest.fixture
+    def publisher(
         self, redis_client: Redis, channel_prefix: str  # type: ignore[type-arg]
-    ) -> None:
-        subscriber = RedisEventSubscriber(redis_client, channel_prefix=channel_prefix)
-        calls: list[str] = []
+    ) -> IEventPublisher[DomainEvent]:
+        return RedisEventPublisher(redis_client, channel_prefix=channel_prefix)
 
-        class _H1(IEventHandler[PackageArrived]):
-            def handle(self, event: PackageArrived) -> None:
-                calls.append("h1")
-
-        class _H2(IEventHandler[PackageArrived]):
-            def handle(self, event: PackageArrived) -> None:
-                calls.append("h2")
-                subscriber.close()
-
-        subscriber.subscribe(_H1())
-        subscriber.subscribe(_H2())
-        t = _start_subscriber(subscriber)
-
-        publisher = RedisEventPublisher(redis_client, channel_prefix=channel_prefix)
-        publisher.publish([PackageArrived(package_id="P1", location="Berlin")])
-
-        t.join(timeout=10)
-        assert not t.is_alive()
-        assert calls == ["h1", "h2"]
-
-    def test_close_stops_subscriber(
+    @pytest.fixture
+    def subscriber(
         self, redis_client: Redis, channel_prefix: str  # type: ignore[type-arg]
-    ) -> None:
-        subscriber = RedisEventSubscriber(redis_client, channel_prefix=channel_prefix)
-
-        class _H(IEventHandler[PackageArrived]):
-            def handle(self, event: PackageArrived) -> None:
-                pass
-
-        subscriber.subscribe(_H())
-        t = _start_subscriber(subscriber)
-
-        subscriber.close()
-        t.join(timeout=5)
-        assert not t.is_alive()
+    ) -> IBlockingEventSubscriber:
+        return RedisEventSubscriber(redis_client, channel_prefix=channel_prefix)

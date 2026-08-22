@@ -29,7 +29,11 @@ class IEventSubscriber[TDomainEvent: DomainEvent](ABC):
         """multiple calls to this method is supported"""
 
 
-class IBlockingEventSubscriber(IEventSubscriber[DomainEvent], ABC):
+class IBlockingEventSubscriber(ABC):
+
+    @abstractmethod
+    def subscribe[TEvent: DomainEvent](self, event_handler: IEventHandler[TEvent]) -> None:
+        """multiple calls to this method is supported"""
 
     @abstractmethod
     def close(self) -> None: ...

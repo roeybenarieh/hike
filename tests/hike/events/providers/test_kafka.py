@@ -16,9 +16,9 @@ from confluent_kafka import Consumer, Producer  # pyright: ignore[reportMissingM
 from testcontainers.community.kafka import KafkaContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IEventHandler
+from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.kafka import KafkaEventPublisher, KafkaEventSubscriber
-
+from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
 @register_event
 @dataclass(frozen=True)
@@ -120,33 +120,6 @@ class TestKafkaEventPublisher:
 
 
 class TestKafkaEventSubscriber:
-    def test_subscriber_dispatches_to_handler(
-        self, producer: Producer, kafka_bootstrap: str, topic_prefix: str
-    ) -> None:
-        publisher = KafkaEventPublisher(producer, topic_prefix=topic_prefix)
-        # Publish before subscriber starts; auto.offset.reset=earliest guarantees delivery.
-        publisher.publish([VesselSailed(vessel_id="v1", destination="Lisbon")])
-
-        consumer = _make_consumer(kafka_bootstrap)
-        subscriber = KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
-        received: list[VesselSailed] = []
-
-        class _Handler(IEventHandler[VesselSailed]):
-            def handle(self, event: VesselSailed) -> None:
-                received.append(event)
-                subscriber.close()
-
-        subscriber.subscribe(_Handler())
-
-        t = threading.Thread(target=subscriber.start, daemon=True)
-        t.start()
-        t.join(timeout=30)
-
-        assert not t.is_alive(), "subscriber did not stop — no message received within 30 s"
-        assert len(received) == 1
-        assert received[0].vessel_id == "v1"
-        assert received[0].destination == "Lisbon"
-
     def test_handler_exception_leaves_offset_uncommitted_for_redelivery(
         self, producer: Producer, kafka_bootstrap: str, topic_prefix: str
     ) -> None:
@@ -223,3 +196,19 @@ class TestKafkaEventSubscriber:
         assert not t.is_alive(), "subscriber did not stop within 30 s"
         assert len(received) == 1
         assert received[0].vessel_id == "v2"
+
+
+# ---------------------------------------------------------------------------
+# Parity tests (IEventPublisher + IBlockingEventSubscriber interface)
+# ---------------------------------------------------------------------------
+
+
+class TestKafkaEventProviderParity(EventProviderParitySuite):
+    @pytest.fixture
+    def publisher(self, producer: Producer, topic_prefix: str) -> IEventPublisher[DomainEvent]:
+        return KafkaEventPublisher(producer, topic_prefix=topic_prefix)
+
+    @pytest.fixture
+    def subscriber(self, kafka_bootstrap: str, topic_prefix: str) -> IBlockingEventSubscriber:
+        consumer = _make_consumer(kafka_bootstrap)
+        return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)

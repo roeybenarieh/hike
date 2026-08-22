@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException
 from confluent_kafka._types import HeadersType
 
 from hike.domain_event import DomainEvent, deserialize_event
@@ -56,8 +56,12 @@ class KafkaEventSubscriber(IBlockingEventSubscriber):
                 msg = self._consumer.poll(timeout=1.0)
                 if msg is None:
                     continue
-                if msg.error():
-                    raise KafkaException(msg.error())
+                error = msg.error()
+                if error:
+                    if error.code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        _log.debug("Topic not yet available, retrying: %s", error)
+                        continue
+                    raise KafkaException(error)
                 raw_value = msg.value()
                 if raw_value is None:
                     continue

@@ -4,6 +4,7 @@ import logging
 
 import pika.spec
 from pika.adapters.blocking_connection import BlockingChannel
+from pika.exceptions import StreamLostError
 
 from hike.domain_event import DomainEvent, deserialize_event
 from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler
@@ -71,7 +72,13 @@ class RabbitMQEventSubscriber(IBlockingEventSubscriber):
 
         self._channel.basic_qos(prefetch_count=1)
         self._channel.basic_consume(queue=self._queue, on_message_callback=_on_message)
-        self._channel.start_consuming()
+        try:
+            self._channel.start_consuming()
+        except StreamLostError:
+            pass
 
     def close(self) -> None:
-        self._channel.stop_consuming()
+        try:
+            self._channel.stop_consuming()
+        except Exception:
+            pass
