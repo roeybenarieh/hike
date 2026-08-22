@@ -11,6 +11,7 @@
   --cmap-text: #e2e8f0;
   --cmap-muted: #64748b;
   --cmap-code: #94a3b8;
+  --cmap-search-panel-bg: rgba(13,13,26,0.65);
 }
 /* Light override */
 body[data-md-color-scheme="default"] {
@@ -20,28 +21,81 @@ body[data-md-color-scheme="default"] {
   --cmap-text: #1e293b;
   --cmap-muted: #475569;
   --cmap-code: #64748b;
+  --cmap-search-panel-bg: rgba(241,245,249,0.65);
 }
 /* hide native browser clear button */
 #hike-cmap-search::-webkit-search-cancel-button { display: none; }
 /* fullscreen */
 #hike-cmap-wrap:-webkit-full-screen,
-#hike-cmap-wrap:fullscreen { background: var(--cmap-bg); padding: 1rem; overflow: auto; }
+#hike-cmap-wrap:fullscreen { background: var(--cmap-bg); padding: 0; overflow: hidden; }
 #hike-cmap-wrap:-webkit-full-screen #hike-cmap,
-#hike-cmap-wrap:fullscreen #hike-cmap { height: calc(100vh - 130px) !important; }
+#hike-cmap-wrap:fullscreen #hike-cmap { height: 100vh !important; border-radius: 0 !important; border: none !important; }
 </style>
 
-<div id="hike-cmap-wrap" style="position:relative;margin:1.5rem -1.1rem;width:calc(100% + 2.2rem);font-family:inherit;">
-  <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">
-    <div style="position:relative;flex:1;">
-      <input id="hike-cmap-search" type="search" placeholder="Search objects…" autocomplete="off" spellcheck="false"
-        style="width:100%;box-sizing:border-box;padding:8px 32px 8px 14px;background:var(--cmap-bg);border:1px solid var(--cmap-search-border);border-radius:6px;color:var(--cmap-text);font-size:0.85rem;font-family:monospace;outline:none;transition:border-color .15s;" />
-      <button id="hike-cmap-clear" aria-label="Clear search"
-        style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--cmap-muted);font-size:1.1rem;line-height:1;padding:2px 4px;">&#10005;</button>
-    </div>
-    <span id="hike-cmap-search-count" style="color:var(--cmap-muted);font-size:0.78rem;min-width:70px;text-align:right;"></span>
-  </div>
+<div id="hike-cmap-wrap" style="position:relative;z-index:2;margin:1.5rem -1.1rem;width:calc(100% + 2.2rem);font-family:inherit;">
   <div style="position:relative;">
     <div id="hike-cmap" style="width:100%;height:900px;background:var(--cmap-bg);border-radius:10px;border:1px solid var(--cmap-border);"></div>
+    <div style="position:absolute;top:12px;left:12px;display:flex;flex-direction:row;align-items:flex-start;gap:8px;z-index:10;">
+      <button id="hike-cmap-search-btn" aria-label="Search" title="Search"
+        style="display:flex;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <div id="hike-cmap-search-panel" style="display:none;flex-direction:column;background:var(--cmap-search-panel-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--cmap-search-border);border-radius:8px;overflow:hidden;">
+        <div style="display:flex;flex-direction:row;align-items:center;padding:8px 10px;">
+          <input id="hike-cmap-search" type="search" placeholder="Search objects" autocomplete="off" spellcheck="false"
+            style="width:190px;flex-shrink:0;padding:7px 6px 7px 16px;background:transparent;border:none;color:var(--cmap-text);font-size:0.85rem;font-family:monospace;outline:none;" />
+          <button id="hike-cmap-clear" aria-label="Clear search"
+            style="visibility:hidden;background:none;border:none;cursor:pointer;color:var(--cmap-muted);font-size:1.1rem;line-height:1;padding:2px 4px;flex-shrink:0;">&#10005;</button>
+          <span id="hike-cmap-search-count" style="color:var(--cmap-muted);font-size:0.78rem;white-space:nowrap;padding-left:4px;flex-shrink:0;"></span>
+        </div>
+        <div id="hike-cmap-ac" style="display:none;flex-direction:column;border-top:1px solid var(--cmap-search-border);max-height:180px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:12px;left:12px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;z-index:10;">
+      <div id="hike-cmap-legend-panel" style="display:none;flex-direction:column;gap:8px;background:var(--cmap-search-panel-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--cmap-search-border);border-radius:8px;padding:10px 12px;font-size:0.75rem;color:var(--cmap-muted);">
+        <div style="display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <span>extends / implements</span>
+            <div style="display:inline-flex;align-items:center;">
+              <span>A</span>
+              <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
+                <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3"/>
+                <polygon points="86,2 108,10 86,18" fill="currentColor"/>
+              </svg>
+              <span>B</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <span>uses / depends on</span>
+            <div style="display:inline-flex;align-items:center;">
+              <span>A</span>
+              <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
+                <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3" stroke-dasharray="6,3"/>
+                <polygon points="86,2 108,10 86,18" fill="currentColor"/>
+              </svg>
+              <span>B</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+          <span data-cat="core"        style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2e1065;border:1.5px solid #7c3aed;margin-right:4px;"></span>Core DDD</span>
+          <span data-cat="rules"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f2457;border:1.5px solid #3b82f6;margin-right:4px;"></span>Rules</span>
+          <span data-cat="specs"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#021b1a;border:1.5px solid #0d9488;margin-right:4px;"></span>Specifications</span>
+          <span data-cat="persistence" style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1c0e04;border:1.5px solid #b45309;margin-right:4px;"></span>Persistence</span>
+          <span data-cat="events"      style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1f0010;border:1.5px solid #e11d48;margin-right:4px;"></span>Events</span>
+        </div>
+      </div>
+      <button id="hike-cmap-legend-btn" aria-label="Legend" title="Legend"
+        style="display:flex;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="5" height="5" rx="1"/><line x1="11" y1="5.5" x2="21" y2="5.5"/>
+          <rect x="3" y="10" width="5" height="5" rx="1"/><line x1="11" y1="12.5" x2="21" y2="12.5"/>
+          <rect x="3" y="17" width="5" height="5" rx="1"/><line x1="11" y1="19.5" x2="21" y2="19.5"/>
+        </svg>
+      </button>
+    </div>
     <div style="position:absolute;bottom:12px;right:12px;display:flex;flex-direction:column;gap:12px;align-items:center;">
       <button id="hike-cmap-reset-pos" aria-label="Reset node positions" title="Reset node positions"
         style="display:none;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
@@ -75,39 +129,6 @@ body[data-md-color-scheme="default"] {
   <div id="hike-cmap-info" style="display:none;margin-top:8px;padding:12px 18px;background:var(--cmap-bg);border-radius:8px;border:1px solid var(--cmap-border);font-size:0.82rem;font-family:monospace;color:var(--cmap-text);">
     <span id="hike-cmap-info-name" style="font-weight:700;margin-right:10px;"></span>
     <code id="hike-cmap-info-imp" style="color:var(--cmap-code);white-space:pre;"></code>
-  </div>
-  <div style="margin-top:8px;padding:10px 16px;background:var(--cmap-bg);border-radius:8px;border:1px solid var(--cmap-border);display:flex;flex-direction:column;gap:8px;font-size:0.75rem;color:var(--cmap-muted);">
-    <div style="display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap;">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-        <span>extends / implements</span>
-        <div style="display:inline-flex;align-items:center;">
-          <span>A</span>
-          <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
-            <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3"/>
-            <polygon points="86,2 108,10 86,18" fill="currentColor"/>
-          </svg>
-          <span>B</span>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-        <span>uses / depends on</span>
-        <div style="display:inline-flex;align-items:center;">
-          <span>A</span>
-          <svg width="110" height="20" viewBox="0 0 110 20" style="display:block;margin:0 4px;">
-            <line x1="0" y1="10" x2="86" y2="10" stroke="currentColor" stroke-width="3" stroke-dasharray="6,3"/>
-            <polygon points="86,2 108,10 86,18" fill="currentColor"/>
-          </svg>
-          <span>B</span>
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
-      <span data-cat="core"        style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2e1065;border:1.5px solid #7c3aed;margin-right:4px;"></span>Core DDD</span>
-      <span data-cat="rules"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f2457;border:1.5px solid #3b82f6;margin-right:4px;"></span>Rules</span>
-      <span data-cat="specs"       style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#021b1a;border:1.5px solid #0d9488;margin-right:4px;"></span>Specifications</span>
-      <span data-cat="persistence" style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1c0e04;border:1.5px solid #b45309;margin-right:4px;"></span>Persistence</span>
-      <span data-cat="events"      style="cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1f0010;border:1.5px solid #e11d48;margin-right:4px;"></span>Events</span>
-    </div>
   </div>
 </div>
 
@@ -463,40 +484,145 @@ body[data-md-color-scheme="default"] {
 
     function clearSearch() {
       searchEl.value = '';
-      if (clearBtn) clearBtn.style.display = 'none';
+      if (clearBtn) clearBtn.style.visibility = 'hidden';
       cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
       if (countEl) countEl.textContent = '';
+      hideAC();
     }
 
     if (clearBtn) clearBtn.addEventListener('click', clearSearch);
 
+    var searchBtn2 = document.getElementById('hike-cmap-search-btn');
+    var searchPanel = document.getElementById('hike-cmap-search-panel');
+    if (searchBtn2 && searchPanel) {
+      searchBtn2.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (searchPanel.style.display === 'none') {
+          searchPanel.style.display = 'flex';
+          if (searchEl) searchEl.focus();
+        } else {
+          searchPanel.style.display = 'none';
+          hideAC();
+        }
+      });
+      /* close panel when tapping the canvas background */
+      cy.on('tap', function (evt) {
+        if (evt.target === cy && searchPanel.style.display !== 'none') {
+          searchPanel.style.display = 'none';
+          hideAC();
+        }
+      });
+    }
+
+    var legendBtn = document.getElementById('hike-cmap-legend-btn');
+    var legendPanel = document.getElementById('hike-cmap-legend-panel');
+    if (legendBtn && legendPanel) {
+      legendBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        legendPanel.style.display = legendPanel.style.display === 'none' ? 'flex' : 'none';
+      });
+      cy.on('tap', function (evt) {
+        if (evt.target === cy && legendPanel.style.display !== 'none') {
+          legendPanel.style.display = 'none';
+        }
+      });
+    }
+
+    function runSearch(q) {
+      if (!q) {
+        cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
+        if (countEl) countEl.textContent = '';
+        resetView(250);
+        return;
+      }
+      var matches = cy.nodes().filter(function (n) {
+        return fuzzy(q, n.data('l').toLowerCase()) ||
+               fuzzy(q, n.data('s').toLowerCase());
+      });
+      var neighbors = matches.neighborhood('node').not(matches);
+      cy.nodes().not(matches).not(neighbors).addClass('cmap-faded').removeClass('cmap-match cmap-neighbor');
+      neighbors.removeClass('cmap-faded cmap-match').addClass('cmap-neighbor');
+      matches.removeClass('cmap-faded cmap-neighbor').addClass('cmap-match');
+      cy.edges().addClass('cmap-faded');
+      matches.connectedEdges().removeClass('cmap-faded');
+      if (countEl) countEl.textContent = matches.length + ' found';
+      if (matches.length) cy.animate({ fit: { eles: matches, padding: 80 } }, { duration: 250 });
+      else resetView(250);
+    }
+
+    var acEl = document.getElementById('hike-cmap-ac');
+    var acActive = -1;
+
+    function hideAC() {
+      if (acEl) { acEl.style.display = 'none'; acEl.innerHTML = ''; }
+      acActive = -1;
+    }
+
+    function setACActive(idx) {
+      if (!acEl) return;
+      Array.prototype.forEach.call(acEl.children, function (item, i) {
+        item.style.background = i === idx ? 'rgba(127,127,127,0.15)' : '';
+      });
+      acActive = idx;
+      if (idx >= 0 && acEl.children[idx]) acEl.children[idx].scrollIntoView({ block: 'nearest' });
+    }
+
+    function showAC(q) {
+      if (!acEl || !q) { hideAC(); return; }
+      var results = cy.nodes().toArray().filter(function (n) {
+        return fuzzy(q, n.data('l').toLowerCase()) || fuzzy(q, n.data('s').toLowerCase());
+      }).slice(0, 8);
+      if (!results.length) { hideAC(); return; }
+      acEl.innerHTML = '';
+      acActive = -1;
+      results.forEach(function (n) {
+        var item = document.createElement('div');
+        item.style.cssText = 'padding:6px 16px;cursor:pointer;display:flex;flex-direction:column;gap:1px;';
+        var nameEl = document.createElement('span');
+        nameEl.style.cssText = 'font-size:0.82rem;font-family:monospace;color:var(--cmap-text);';
+        nameEl.textContent = n.data('l');
+        var srcEl = document.createElement('span');
+        srcEl.style.cssText = 'font-size:0.72rem;font-family:monospace;color:var(--cmap-muted);';
+        srcEl.textContent = n.data('s');
+        item.appendChild(nameEl);
+        item.appendChild(srcEl);
+        item.addEventListener('mouseenter', function () {
+          setACActive(Array.prototype.indexOf.call(acEl.children, item));
+        });
+        item.addEventListener('mouseleave', function () { item.style.background = ''; });
+        item.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          if (searchEl) {
+            searchEl.value = n.data('l');
+            if (clearBtn) clearBtn.style.visibility = 'visible';
+          }
+          runSearch(n.data('l').toLowerCase());
+          hideAC();
+        });
+        acEl.appendChild(item);
+      });
+      acEl.style.display = 'flex';
+    }
+
     if (searchEl) {
       var searchTimer = null;
-      searchEl.addEventListener('input', function () {
-        if (clearBtn) clearBtn.style.display = searchEl.value ? 'block' : 'none';
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(function () {
-        var q = searchEl.value.trim().toLowerCase();
-        if (!q) {
-          cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
-          if (countEl) countEl.textContent = '';
-          resetView(250);
-          return;
+      searchEl.addEventListener('keydown', function (e) {
+        var acOpen = acEl && acEl.style.display !== 'none';
+        var items = acOpen ? acEl.children : [];
+        if (acOpen) {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setACActive(Math.min(acActive + 1, items.length - 1)); return; }
+          if (e.key === 'ArrowUp')   { e.preventDefault(); setACActive(Math.max(acActive - 1, 0));              return; }
+          if (e.key === 'Escape')    { hideAC(); return; }
+          if (e.key === 'Enter' && acActive >= 0) { e.preventDefault(); items[acActive].dispatchEvent(new MouseEvent('mousedown')); return; }
         }
-        var matches = cy.nodes().filter(function (n) {
-          return fuzzy(q, n.data('l').toLowerCase()) ||
-                 fuzzy(q, n.data('s').toLowerCase());
-        });
-        var neighbors = matches.neighborhood('node').not(matches);
-        cy.nodes().not(matches).not(neighbors).addClass('cmap-faded').removeClass('cmap-match cmap-neighbor');
-        neighbors.removeClass('cmap-faded cmap-match').addClass('cmap-neighbor');
-        matches.removeClass('cmap-faded cmap-neighbor').addClass('cmap-match');
-        cy.edges().addClass('cmap-faded');
-        matches.connectedEdges().removeClass('cmap-faded');
-        if (countEl) countEl.textContent = matches.length + ' found';
-        if (matches.length) cy.animate({ fit: { eles: matches, padding: 80 } }, { duration: 250 });
-        else resetView(250);
-        }, 500);
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); runSearch(searchEl.value.trim().toLowerCase()); hideAC(); }
+      });
+      searchEl.addEventListener('input', function () {
+        if (clearBtn) clearBtn.style.visibility = searchEl.value ? 'visible' : 'hidden';
+        var q = searchEl.value.trim().toLowerCase();
+        showAC(q);
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { runSearch(searchEl.value.trim().toLowerCase()); }, 500);
       });
     }
 
