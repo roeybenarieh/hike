@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import MISSING as _DC_MISSING, dataclass, field as _dc_field, fields
 from functools import wraps
-from typing import Any, ClassVar, Generic, Literal, TypeVar, dataclass_transform, get_origin, get_type_hints, overload, cast
-
+from typing import Any, ClassVar, Generic, Literal, Self, TypeVar, dataclass_transform, get_origin, get_type_hints, \
+    overload, cast
 from uuid import UUID, uuid4
 
 from .common import DomainObject
+from .persistence.persistable import Persistable
 from .rules import Rule
 from .specifications.specs import (
     EqualSpecification,
@@ -48,11 +49,11 @@ class TerminalFieldProxy:
     """
 
     def __init__(
-        self,
-        field_name: str,
-        field_type: type,
-        entity_class: type,
-        parent: FieldProxy | None = None,
+            self,
+            field_name: str,
+            field_type: type,
+            entity_class: type,
+            parent: FieldProxy | None = None,
     ) -> None:
         self.field_name = field_name
         self.field_type = field_type
@@ -329,15 +330,14 @@ class _FieldDescriptor(Generic[_T]):
             raise TypeError(f"Expected {ft.__name__}, got {type(value).__name__}")
 
 
-
 def field(
-    *,
-    default: Any = _DC_MISSING,
-    default_factory: Any = _DC_MISSING,
-    init: bool = True,
-    repr: bool = True,
-    metadata: Mapping[str, Any] | None = None,
-    **kwargs: Any,
+        *,
+        default: Any = _DC_MISSING,
+        default_factory: Any = _DC_MISSING,
+        init: bool = True,
+        repr: bool = True,
+        metadata: Mapping[str, Any] | None = None,
+        **kwargs: Any,
 ) -> Field[Any]:
     """Drop-in for ``dataclasses.field`` that returns ``Field[T]``.
 
@@ -359,7 +359,7 @@ def field(
 
 
 @dataclass_transform(kw_only_default=True, field_specifiers=(field,))
-class Entity[TId: Hashable](DomainObject):
+class Entity[TId: Hashable](DomainObject, Persistable[TId]):
     """Base class for DDD entities, generic over the raw ID type ``TId``.
 
     An entity has *identity*: two Entity objects are equal if and only if they
@@ -419,6 +419,20 @@ class Entity[TId: Hashable](DomainObject):
     __invariants__: ClassVar[list[Rule[Any]]] = []
     __allow_plain_fields__: ClassVar[bool] = False
 
+    def get_id(self) -> TId:
+        return self.id.value
+
+    def to_dict(self) -> dict[str, Any]:
+        return to_dict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        return from_dict(cls, data)  # type: ignore[return-value]
+
+    @classmethod
+    def get_init_field_names(cls) -> tuple[str, ...]:
+        return tuple(f.name for f in fields(cast(Any, cls)) if f.init)
+
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -457,7 +471,8 @@ class Entity[TId: Hashable](DomainObject):
                 _list_args: tuple[Any, ...] = getattr(ann_type, "__args__", ())
                 elem = _list_args[0] if _list_args else None
                 elem_cls = elem if isinstance(elem, type) else get_origin(elem)
-                if not (get_origin(ann_type) is list and isinstance(elem_cls, type) and issubclass(elem_cls, DomainObject)):
+                if not (get_origin(ann_type) is list and isinstance(elem_cls, type) and issubclass(elem_cls,
+                                                                                                   DomainObject)):
                     if not getattr(cls, '__allow_plain_fields__', False):
                         raise TypeError(
                             f"{cls.__name__}.{name}: Entity fields must be declared as "
@@ -467,7 +482,8 @@ class Entity[TId: Hashable](DomainObject):
                 continue
             inner = unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
-                desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
+                desc: _FieldDescriptor[Any] = _FieldDescriptor(name,
+                                                               inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
                 desc.__set_name__(cls, name)
 
@@ -489,24 +505,16 @@ class Entity[TId: Hashable](DomainObject):
 
         cls.__init__ = _init_with_invariants
 
-    def __eq__(self, other: object) -> bool:
-        if type(self) is not type(other):
-            return False
-        return self.id == cast(Entity[Any], other).id
-
-    def __hash__(self) -> int:
-        return hash(self.id)
-
 
 ##### Command decorator ####
 
 def _make_command_wrapper(
-    fn: Callable[..., Any],
-    invariants: list[Rule[Any]] | Literal['all'],
+        fn: Callable[..., Any],
+        invariants: list[Rule[Any]] | Literal['all'],
 ) -> Callable[..., Any]:
     @wraps(fn)
     def wrapper(self_: Entity[Any], *args: Any, **kwargs: Any) -> Any:
-        self_.__dict__[_COMMAND_FLAG] = True
+        vars(self_)[_COMMAND_FLAG] = True
         try:
             result = fn(self_, *args, **kwargs)
             if invariants == 'all':
@@ -518,7 +526,8 @@ def _make_command_wrapper(
                     r.raise_on_broken_rule(self_)
             return result
         finally:
-            self_.__dict__[_COMMAND_FLAG] = False
+            vars(self_)[_COMMAND_FLAG] = False
+
     return wrapper  # pyright: ignore[reportReturnType]
 
 
@@ -528,16 +537,16 @@ def command(fn: Callable[..., Any]) -> Callable[..., Any]: ...
 
 @overload
 def command(
-    *, invariants: list[Rule[Any]] | Literal['all']
+        *, invariants: list[Rule[Any]] | Literal['all']
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]: ...
 
 
 # TODO: implement history for aggregates commands(via Memento design pattern)
 # TODO: implements domain/integration events that check for invariants between the same/other domain(domain bus, inbox/outbox, saga...)
 def command(
-    fn: Callable[..., Any] | None = None,
-    *,
-    invariants: list[Rule[Any]] | Literal['all'] | None = None,
+        fn: Callable[..., Any] | None = None,
+        *,
+        invariants: list[Rule[Any]] | Literal['all'] | None = None,
 ) -> Any:
     """Mark a method as a mutation command on any ``Entity`` or ``Aggregate``.
 
@@ -568,14 +577,16 @@ def command(
     _invariants: list[Rule[Any]] | Literal['all'] = invariants if invariants is not None else []
     if fn is not None:
         return _make_command_wrapper(fn, _invariants)
+
     def decorator(method: Callable[..., Any]) -> Callable[..., Any]:
         return _make_command_wrapper(method, _invariants)
+
     return decorator
 
 
 ##### Entity utility functions ####
 
-def to_dict(entity: Entity[Any]) -> dict[str, Any]:
+def to_dict(entity: Persistable[Any]) -> dict[str, Any]:
     """Serialize *entity* to a plain dict.
 
     ValueObject fields are flattened to their raw ``.value``.
@@ -583,26 +594,24 @@ def to_dict(entity: Entity[Any]) -> dict[str, Any]:
     recursively serialized via ``to_dict``.
     """
     result: dict[str, Any] = {}
-    for f in get_fields(entity):
-        if not f.init:
-            continue
-        val: Any = getattr(cast(Any, entity), f.name)
+    for name in entity.get_init_field_names():
+        val: Any = getattr(cast(Any, entity), name)
         if isinstance(val, ValueObject):
-            result[f.name] = cast(Any, val).value
+            result[name] = cast(Any, val).value
         elif isinstance(val, ReadOnlyView):
             inner: Entity[Any] = object.__getattribute__(cast(ReadOnlyView[Any], val), '_entity')
-            result[f.name] = to_dict(inner)
+            result[name] = to_dict(inner)
         elif isinstance(val, Entity):
-            result[f.name] = to_dict(cast(Entity[Any], val))
+            result[name] = to_dict(cast(Entity[Any], val))
         elif isinstance(val, list):
-            result[f.name] = [
+            result[name] = [
                 cast(Any, v).value if isinstance(v, ValueObject)
                 else to_dict(cast(Entity[Any], v)) if isinstance(v, Entity)
                 else v
                 for v in cast(list[Any], val)
             ]
         else:
-            result[f.name] = val
+            result[name] = val
     return result
 
 
@@ -629,26 +638,21 @@ def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
             # Field[Entity] — single nested entity serialised as a dict
             inner_cls = unwrap_annotation(ann)
             if (
-                inner_cls is not None
-                and issubclass(inner_cls, Entity)
-                and not issubclass(inner_cls, ValueObject)
-                and isinstance(val, dict)
+                    inner_cls is not None
+                    and issubclass(inner_cls, Entity)
+                    and isinstance(val, dict)
             ):
                 kwargs[name] = from_dict(cast(type[Any], inner_cls), cast(dict[str, Any], val))
                 continue
             # list[Entity]
             if get_origin(ann) is list:
                 list_args: tuple[Any, ...] = getattr(ann, "__args__", ())
-                elem_cls = list_args[0] if list_args else None
+                elem_cls = list_args[0]
                 if isinstance(elem_cls, type) and issubclass(elem_cls, Entity):
                     kwargs[name] = [from_dict(cast(type[Any], elem_cls), item) for item in cast(list[Any], val)]
                     continue
         kwargs[name] = val
     return cast(Any, entity_class)(**kwargs)
-
-
-def get_fields(entity: Entity[Any] | type[Entity[Any]]):
-    return fields(cast(Any, entity))
 
 
 ##### Base Entity implementations ####

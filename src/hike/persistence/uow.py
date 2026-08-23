@@ -6,7 +6,7 @@ from typing import Any, Self
 
 from hike.domain_event import DomainEvent
 from hike.events.interfaces import IEventPublisher
-from hike.persistence.repository import IRepository
+from hike.persistence.repository import IAggregateRepository, IRepository
 
 
 class DBContext[TSession](ABC):
@@ -44,7 +44,8 @@ class DBContext[TSession](ABC):
 
 class UnitOfWork[TSessions]:
 
-    def __init__(self, context: DBContext[TSessions], event_producer: IEventPublisher[DomainEvent] | None = None) -> None:
+    def __init__(self, context: DBContext[TSessions],
+                 event_producer: IEventPublisher[DomainEvent] | None = None) -> None:
         self._context = context
         self._repos: tuple[IRepository[Any, Any, TSessions], ...] = ()
         self._auto_commit: bool = False
@@ -77,7 +78,7 @@ class UnitOfWork[TSessions]:
         if exc_type:
             self._repos = ()
             self._auto_commit = False
-            self._context.rollback()
+            self.rollback()
             return
         if auto_commit:
             self._auto_commit = False
@@ -93,7 +94,8 @@ class UnitOfWork[TSessions]:
     def _collect_all_events(self) -> list[DomainEvent]:
         events: list[DomainEvent] = []
         for repo in self._repos:
-            events.extend(repo.drain_events())
+            if isinstance(repo, IAggregateRepository):
+                events.extend(repo.drain_events())
         return events
 
     def commit(self) -> None:
@@ -101,3 +103,7 @@ class UnitOfWork[TSessions]:
         if self.event_producer is not None:
             self.event_producer.publish(events)
         self._context.commit()
+
+    def rollback(self) -> None:
+        """Rollback a transaction. abort any uncommited changes"""
+        self._context.rollback()

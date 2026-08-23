@@ -7,7 +7,6 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.collection import Collection
 from pymongo.synchronous.client_session import ClientSession
 
-from hike.entity import EntityID, from_dict, to_dict
 from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import (
     OffsetPagination,
@@ -18,15 +17,15 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
-    AggregateAlreadyExistError,
-    AggregateDoesNotExistError,
+    ResourceAlreadyExistError,
+    ResourceDoesNotExistError,
+    IAggregateRepository,
     IRepository,
     OptimisticLockError,
     TAggregate,
     TId,
+    TPersistable,
     UnknownError,
-    get_version,
-    set_version,
 )
 from hike.specifications import ISpecification
 
@@ -76,22 +75,17 @@ def _get_doc_value(doc: dict[str, Any], path: list[str]) -> Any:
     return val
 
 
-class PyMongoRepository(IRepository[TId, TAggregate, ClientSession]):
-    """Generic MongoDB repository with optimistic concurrency control.
+class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]):
+    """Generic MongoDB repository for any ``Persistable`` object.
 
     Serialization (``to_dict``) flattens ValueObject fields to their raw
     ``.value``, so the stored document looks like::
 
         {"id": UUID("…"), "name": "Sea Spirit", "price": 4999.99, "__hike_version": 0}
 
-    Deserialization filters the MongoDB document to the aggregate's
+    Deserialization filters the MongoDB document to the object's
     ``__init__``-eligible fields and unpacks them.  ``_FieldDescriptor.__set__``
     re-wraps raw values into the correct ValueObject type automatically.
-
-    Each ``update`` includes the current ``aggregate.version`` in the filter.
-    If the stored version has advanced (another writer committed), MongoDB
-    matches nothing and ``OptimisticLockError`` is raised.  On success,
-    ``aggregate.version`` is incremented to match the newly stored value.
 
     Install with: ``pip install hike[pymongo]``
     """
@@ -99,46 +93,46 @@ class PyMongoRepository(IRepository[TId, TAggregate, ClientSession]):
     def __init__(
             self,
             collection: Collection[dict[str, Any]],
-            aggregate_class: type[TAggregate],
+            aggregate_class: type[TPersistable],
     ) -> None:
         super().__init__()
         self._collection = collection
         self._aggregate_class = aggregate_class
 
-    def _from_doc(self, document: dict[str, Any]) -> TAggregate:
-        """Reconstruct an aggregate from a MongoDB document."""
-        aggregate: TAggregate = from_dict(self._aggregate_class, document)
-        set_version(aggregate, document.get("__hike_version", 0))
-        return aggregate
+    def _from_doc(self, document: dict[str, Any]) -> TPersistable:
+        """Reconstruct an object from a MongoDB document."""
+        obj: TPersistable = self._aggregate_class.from_dict(document)  # type: ignore[return-value]
+        obj.set_version(document.get("__hike_version", 0))
+        return obj
 
     @staticmethod
-    def _id_filter(aggregate: TAggregate) -> dict[str, Any]:
-        return {"id": aggregate.id.value}
+    def _id_filter(obj: TPersistable) -> dict[str, Any]:
+        return {"id": obj.get_id()}
 
-    def save(self, aggregate: TAggregate) -> TId:
-        doc = {**to_dict(aggregate), "__hike_version": 0}
+    def save(self, obj: TPersistable) -> TId:
+        doc = {**obj.to_dict(), "__hike_version": 0}
         try:
             result = self._collection.insert_one(doc, session=self._session)
         except Exception as exc:
-            raise AggregateAlreadyExistError(aggregate) from exc
+            raise ResourceAlreadyExistError(obj) from exc
         if not result.acknowledged:
             raise UnknownError("insert_one not acknowledged")
-        set_version(aggregate, 0)
-        self._collect_events(aggregate)
-        return aggregate.id  # pyright: ignore[reportReturnType]
+        obj.set_version(0)
+        self._after_mutate(obj)
+        return obj.get_id()  # pyright: ignore[reportReturnType]
 
-    def _delete(self, identifier: EntityID[TId]) -> None:
+    def _delete(self, identifier: TId) -> None:
         result = self._collection.delete_one(
-            {"id": identifier.value},
+            {"id": identifier},
             session=self._session,
         )
         if result.deleted_count == 0:
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
 
-    def get_one(self, identifier: EntityID[TId]) -> TAggregate:
-        document = self._collection.find_one({"id": identifier.value}, session=self._session)
+    def get_one(self, identifier: TId) -> TPersistable:
+        document = self._collection.find_one({"id": identifier}, session=self._session)
         if document is None:
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
         return self._from_doc(document)
 
     def _get_many(
@@ -147,7 +141,7 @@ class PyMongoRepository(IRepository[TId, TAggregate, ClientSession]):
         *,
         ordering: Sequence[OrderBy] | None = None,
         pagination: Pagination | None = None,
-    ) -> list[TAggregate] | Page[TAggregate]:
+    ) -> list[TPersistable] | Page[TPersistable]:
         visitor = MongoDBEvaluationSpecificationVisitor()
         specification.accept(visitor)
         base_filter = visitor.filters
@@ -217,34 +211,44 @@ class PyMongoRepository(IRepository[TId, TAggregate, ClientSession]):
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
-    def update(self, aggregate: TAggregate) -> None:
-        v = get_version(aggregate)
-        new_doc = {**to_dict(aggregate), "__hike_version": v + 1}
+    def update(self, obj: TPersistable) -> None:
+        v = obj.get_version()
+        new_doc = {**obj.to_dict(), "__hike_version": v + 1}
         result = self._collection.replace_one(
-            {"id": aggregate.id.value, "__hike_version": v},
+            {"id": obj.get_id(), "__hike_version": v},
             new_doc,
             session=self._session,
         )
         if result.matched_count == 0:
-            if self._collection.find_one({"id": aggregate.id.value}, session=self._session) is None:
-                raise AggregateDoesNotExistError(aggregate)
-            raise OptimisticLockError(aggregate)
-        set_version(aggregate, v + 1)
-        self._collect_events(aggregate)
+            if self._collection.find_one({"id": obj.get_id()}, session=self._session) is None:
+                raise ResourceDoesNotExistError(obj)
+            raise OptimisticLockError(obj)
+        obj.set_version(v + 1)
+        self._after_mutate(obj)
 
     def count(self, specification: ISpecification) -> int:
         visitor = MongoDBEvaluationSpecificationVisitor()
         specification.accept(visitor)
         return self._collection.count_documents(visitor.filters, session=self._session)
 
-    def upsert(self, aggregate: TAggregate) -> None:
-        existing = self._collection.find_one({"id": aggregate.id.value}, session=self._session)
+    def upsert(self, obj: TPersistable) -> None:
+        existing = self._collection.find_one({"id": obj.get_id()}, session=self._session)
         new_version = (existing["__hike_version"] + 1) if existing is not None else 0
-        new_doc = {**to_dict(aggregate), "__hike_version": new_version}
+        new_doc = {**obj.to_dict(), "__hike_version": new_version}
         self._collection.replace_one(
-            {"id": aggregate.id.value},
+            {"id": obj.get_id()},
             new_doc,
             upsert=True,
             session=self._session,
         )
-        self._collect_events(aggregate)
+        self._after_mutate(obj)
+
+
+class PyMongoRepository(
+    IAggregateRepository[TId, TAggregate, ClientSession],
+    PyMongoPersistableRepository[TId, TAggregate],
+):
+    """``IAggregateRepository`` backed by MongoDB.
+
+    Extends ``PyMongoPersistableRepository`` with domain-event collection.
+    """

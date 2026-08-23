@@ -15,7 +15,7 @@ from sqlalchemy.engine import Engine as SAEngine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, relationship
 
 from hike.aggregate import Aggregate
-from hike.entity import Entity, get_fields, unwrap_annotation, unwrap_field
+from hike.entity import Entity, unwrap_annotation, unwrap_field
 from hike.value_object import ValueObject
 
 from ..visitor import ISQLAlchemyMapper
@@ -101,10 +101,10 @@ class DictAutoSQLAlchemyMapper(ISQLAlchemyMapper):
 
             s: dict[str, type[Any]] = {}
             l: dict[str, type[Any]] = {}
-            for f in get_fields(cls):
-                if not f.init or f.name == "id":
+            for name in cls.get_init_field_names():
+                if name == "id":
                     continue
-                ann = hints.get(f.name)
+                ann = hints.get(name)
                 if ann is None:
                     continue
 
@@ -116,7 +116,7 @@ class DictAutoSQLAlchemyMapper(ISQLAlchemyMapper):
                     and not issubclass(inner, ValueObject)
                 ):
                     inner_cls = cast(type[Any], inner)
-                    s[f.name] = inner_cls
+                    s[name] = inner_cls
                     if inner_cls not in visited:
                         visited.add(inner_cls)
                         q.append(inner_cls)
@@ -131,7 +131,7 @@ class DictAutoSQLAlchemyMapper(ISQLAlchemyMapper):
                         and not issubclass(elem, ValueObject)
                     ):
                         elem_cls = cast(type[Any], elem)
-                        l[f.name] = elem_cls
+                        l[name] = elem_cls
                         if elem_cls not in visited:
                             visited.add(elem_cls)
                             q.append(elem_cls)
@@ -180,31 +180,31 @@ class DictAutoSQLAlchemyMapper(ISQLAlchemyMapper):
                 "id": Column(pk_sa_type(cls), primary_key=True),
             }
 
-            for f in get_fields(cls):
-                if not f.init or f.name == "id":
+            for name in cls.get_init_field_names():
+                if name == "id":
                     continue
-                ann = hints.get(f.name)
+                ann = hints.get(name)
                 if ann is None:
                     continue
 
                 bare_ann, nullable = strip_optional(ann)
 
-                if f.name in single_refs[cls]:
-                    child_cls = single_refs[cls][f.name]
+                if name in single_refs[cls]:
+                    child_cls = single_refs[cls][name]
                     child_model = self._mapping[child_cls]
                     child_table = table_name(child_cls)
-                    attrs[f"{f.name}_id"] = Column(pk_sa_type(child_cls), ForeignKey(f"{child_table}.id"), nullable=nullable)
-                    attrs[f.name] = relationship(child_model)
+                    attrs[f"{name}_id"] = Column(pk_sa_type(child_cls), ForeignKey(f"{child_table}.id"), nullable=nullable)
+                    attrs[name] = relationship(child_model)
                     continue
 
-                if f.name in list_refs[cls]:
-                    child_model = self._mapping[list_refs[cls][f.name]]
-                    attrs[f.name] = relationship(child_model, cascade="all, delete-orphan", lazy="joined")
+                if name in list_refs[cls]:
+                    child_model = self._mapping[list_refs[cls][name]]
+                    attrs[name] = relationship(child_model, cascade="all, delete-orphan", lazy="joined")
                     continue
 
                 vo_cls = unwrap_field(bare_ann)
                 if vo_cls is not None:
-                    attrs[f.name] = Column(sa_col_type(vo_cls), nullable=nullable)
+                    attrs[name] = Column(sa_col_type(vo_cls), nullable=nullable)
 
             for fk_col, parent_table, parent_cls in child_fks.get(cls, []):
                 attrs[fk_col] = Column(pk_sa_type(parent_cls), ForeignKey(f"{parent_table}.id"), nullable=False)
@@ -243,19 +243,17 @@ def _collect_flat_cols(
     except Exception:  # noqa: BLE001
         hints = {}
 
-    for f in get_fields(entity_cls):
-        if not f.init:
-            continue
-        if skip_id and f.name == "id":
+    for name in entity_cls.get_init_field_names():
+        if skip_id and name == "id":
             continue
 
-        col_name = f"{prefix}{sep}{f.name}" if prefix else f.name
+        col_name = f"{prefix}{sep}{name}" if prefix else name
 
-        if f.name == "id":
+        if name == "id":
             attrs[col_name] = Column(pk_sa_type(entity_cls), nullable=parent_nullable)
             continue
 
-        ann = hints.get(f.name)
+        ann = hints.get(name)
         if ann is None:
             continue
 

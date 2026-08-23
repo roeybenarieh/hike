@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from hike.aggregate import Aggregate
+from hike.persistence.persistable import Persistable
 from hike.persistence.uow import DBContext
 
 
-class InMemoryDBContext(DBContext[dict[Any, Aggregate[Any]]]):
+class InMemoryDBContext(DBContext[dict[Any, Persistable[Any]]]):
     """In-memory DBContext for testing and prototyping.
 
     Supports rollback by snapshotting committed state on ``begin()``.
     """
 
     def __init__(self) -> None:
-        self._committed: dict[Any, Aggregate[Any]] = {}
+        self._committed: dict[Any, Persistable[Any]] = {}
 
     def begin(self) -> None:
         self._session = dict(self._committed)

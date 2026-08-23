@@ -16,9 +16,10 @@ except ImportError as _exc:
     ) from _exc
 
 from hike.persistence.providers.redis.db_context import RedisDBContext
-from hike.persistence.providers.redis.repository import RedisRepository
+from hike.persistence.providers.redis.repository import RedisPersistableRepository, RedisRepository
 
 __all__ = [
     "RedisDBContext",
+    "RedisPersistableRepository",
     "RedisRepository",
 ]

@@ -6,7 +6,7 @@ from typing import Any, cast, get_origin, get_type_hints
 from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from hike.entity import Entity, EntityID, Field, from_dict, get_fields, to_dict
+from hike.entity import Entity, Field
 from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import (
     OffsetPagination,
@@ -17,14 +17,14 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
-    AggregateAlreadyExistError,
-    AggregateDoesNotExistError,
+    ResourceAlreadyExistError,
+    ResourceDoesNotExistError,
+    IAggregateRepository,
     IRepository,
     OptimisticLockError,
     TAggregate,
     TId,
-    get_version,
-    set_version,
+    TPersistable,
 )
 from hike.specifications import ISpecification
 
@@ -65,13 +65,13 @@ def _build_sa_keyset_filter(
     return or_(*clauses)
 
 
-class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
-    """Generic SQLAlchemy ORM repository with optimistic concurrency control.
+class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
+    """Generic SQLAlchemy ORM repository for any ``Persistable`` object.
 
-    ``aggregate_class`` is the domain aggregate root class.  ``mapper`` bridges
+    ``aggregate_class`` is the domain class to persist.  ``mapper`` bridges
     domain entities and SQLAlchemy ORM models.  When omitted, a
     ``DictAutoSQLAlchemyMapper`` is created automatically — Hike infers the full
-    ORM schema from the aggregate's field annotations.
+    ORM schema from the class's field annotations.
 
     Four concrete mapper implementations are available:
     - ``DictAutoSQLAlchemyMapper`` (default): relational schema inferred from annotations.
@@ -79,7 +79,7 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
     - ``DictSQLAlchemyMapper``: relational, one ORM model per entity class.
     - ``FlatSQLAlchemyMapper``: embedded, all fields on a single root model.
 
-    Supported aggregate shapes:
+    Supported object shapes:
     - Flat: all ``Field[ValueObject]`` fields map to columns on the root ORM model.
     - ``list[Entity]``: child entities stored in a related table (cascade) or a JSON
       column (embedded mapper).
@@ -90,15 +90,15 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
 
     def __init__(
         self,
-        aggregate_class: type[TAggregate],
+        aggregate_class: type[TPersistable],
         mapper: ISQLAlchemyMapper | None = None,
     ) -> None:
         super().__init__()
         self._aggregate_class = aggregate_class
         if mapper is None:
-            mapper = DictAutoSQLAlchemyMapper(aggregate_class)
+            mapper = DictAutoSQLAlchemyMapper(aggregate_class)  # type: ignore[arg-type]
         self._mapper = mapper
-        self._model_class = mapper.get_model(aggregate_class)
+        self._model_class = mapper.get_model(aggregate_class)  # type: ignore[arg-type]
 
     def _hints(self) -> dict[str, Any]:
         try:
@@ -139,7 +139,7 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
             hints = {}
         sub_single = self._single_entity_fields(hints)
         model_cls = self._mapper.get_model(entity_cls)
-        entity_dict = to_dict(entity)
+        entity_dict: dict[str, Any] = entity.to_dict()
 
         for sub_name, sub_cls in sub_single.items():
             sub_entity: Any = getattr(entity, sub_name, None)
@@ -161,7 +161,7 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
         except Exception:
             hints = {}
         sub_single = self._single_entity_fields(hints)
-        init_names = {f.name for f in get_fields(cast(type[Entity[Any]], entity_cls)) if f.init}
+        init_names = set(cast(type[Entity[Any]], entity_cls).get_init_field_names())
         result: dict[str, Any] = {}
         for k in init_names:
             if not hasattr(orm_obj, k):
@@ -169,29 +169,24 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
             v: Any = getattr(orm_obj, k)
             if k in sub_single and v is not None:
                 sub_dict = self._mapper.collect_nested(orm_obj, sub_single[k], k)
-                result[k] = from_dict(
-                    sub_single[k],
+                result[k] = cast(type[Entity[Any]], sub_single[k]).from_dict(
                     sub_dict if sub_dict is not None else self._reconstruct_entity_dict(v, sub_single[k]),
                 )
             else:
                 result[k] = v
         return result
 
-    def _to_model_dict(self, aggregate: TAggregate) -> dict[str, Any]:
-        """Serialize *aggregate* to a dict suitable for constructing an ORM model.
-
-        - ``list[Entity]`` fields: mapper override (JSON) or relational ORM models.
-        - ``Field[Entity]`` fields: mapper override (embedded) or ``session.merge()`` (relational).
-        """
+    def _to_model_dict(self, obj: TPersistable) -> dict[str, Any]:
+        """Serialize *obj* to a dict suitable for constructing an ORM model."""
         hints = self._hints()
         list_fields = self._list_entity_fields(hints)
         single_fields = self._single_entity_fields(hints)
-        flat = to_dict(aggregate)
+        flat = obj.to_dict()
 
         for name, elem_cls in list_fields.items():
             if name not in flat:
                 continue
-            entities: list[Any] = cast(list[Any], getattr(aggregate, name))
+            entities: list[Any] = getattr(obj, name)
             expanded = self._mapper.expand_list_nested(entities, elem_cls, name)
             if expanded is not None:
                 flat.update(expanded)
@@ -200,7 +195,7 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
                 flat[name] = [nested_model_cls(**item) for item in cast(list[Any], flat[name])]
 
         for name, entity_cls in single_fields.items():
-            nested_entity: Any = getattr(aggregate, name, None)
+            nested_entity: Any = getattr(obj, name, None)
             if nested_entity is None:
                 continue
             expanded = self._mapper.expand_nested(nested_entity, entity_cls, name)
@@ -212,61 +207,61 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
 
         return flat
 
-    def _from_model(self, model: Any) -> TAggregate:
+    def _from_model(self, model: Any) -> TPersistable:
         hints = self._hints()
         list_fields = self._list_entity_fields(hints)
         single_fields = self._single_entity_fields(hints)
-        init_names = {f.name for f in get_fields(self._aggregate_class) if f.init}
+        init_names = set(self._aggregate_class.get_init_field_names())
         data: dict[str, Any] = {}
         for name in init_names:
             if name in list_fields:
                 elem_cls = list_fields[name]
                 json_list = self._mapper.collect_list_nested(model, elem_cls, name)
                 if json_list is not None:
-                    data[name] = [from_dict(elem_cls, item) for item in json_list]
+                    data[name] = [cast(type[Entity[Any]], elem_cls).from_dict(item) for item in json_list]
                 elif hasattr(model, name):
                     val: Any = getattr(model, name)
-                    elem_init_names = {f.name for f in get_fields(cast(type[Entity[Any]], elem_cls)) if f.init}
+                    elem_init_names = set(cast(type[Entity[Any]], elem_cls).get_init_field_names())
                     data[name] = [
-                        from_dict(elem_cls, {k: getattr(item, k) for k in elem_init_names if hasattr(item, k)})
+                        cast(type[Entity[Any]], elem_cls).from_dict({k: getattr(item, k) for k in elem_init_names if hasattr(item, k)})
                         for item in cast(list[Any], val)
                     ]
             elif name in single_fields:
                 entity_cls = single_fields[name]
                 raw = self._mapper.collect_nested(model, entity_cls, name)
                 if raw is not None:
-                    data[name] = from_dict(entity_cls, raw)
+                    data[name] = cast(type[Entity[Any]], entity_cls).from_dict(raw)
                 elif hasattr(model, name):
                     val = getattr(model, name)
                     if val is not None:
-                        data[name] = from_dict(entity_cls, self._reconstruct_entity_dict(val, entity_cls))
+                        data[name] = cast(type[Entity[Any]], entity_cls).from_dict(self._reconstruct_entity_dict(val, entity_cls))
             elif hasattr(model, name):
                 data[name] = getattr(model, name)
-        aggregate = self._aggregate_class(**data)
-        set_version(aggregate, getattr(model, VERSION_ATTR))
-        return aggregate
+        obj = self._aggregate_class(**data)
+        obj.set_version(getattr(model, VERSION_ATTR))
+        return obj
 
-    def save(self, aggregate: TAggregate) -> TId:
-        model = self._model_class(**self._to_model_dict(aggregate))
+    def save(self, obj: TPersistable) -> TId:
+        model = self._model_class(**self._to_model_dict(obj))
         try:
             self.session.add(model)
             self.session.flush()
         except Exception as exc:
-            raise AggregateAlreadyExistError(aggregate) from exc
-        set_version(aggregate, getattr(model, VERSION_ATTR))
-        self._collect_events(aggregate)
-        return aggregate.id  # pyright: ignore[reportReturnType]
+            raise ResourceAlreadyExistError(obj) from exc
+        obj.set_version(getattr(model, VERSION_ATTR))
+        self._after_mutate(obj)
+        return obj.get_id()  # pyright: ignore[reportReturnType]
 
-    def _delete(self, identifier: EntityID[TId]) -> None:
-        model = self.session.get(self._model_class, identifier.value)
+    def _delete(self, identifier: TId) -> None:
+        model = self.session.get(self._model_class, identifier)
         if model is None:
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
         self.session.delete(model)
 
-    def get_one(self, identifier: EntityID[TId]) -> TAggregate:
-        model = self.session.get(self._model_class, identifier.value)
+    def get_one(self, identifier: TId) -> TPersistable:
+        model = self.session.get(self._model_class, identifier)
         if model is None:
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
         return self._from_model(model)
 
     def _get_many(
@@ -275,8 +270,8 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
         *,
         ordering: Sequence[OrderBy] | None = None,
         pagination: Pagination | None = None,
-    ) -> list[TAggregate] | Page[TAggregate]:
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
+    ) -> list[TPersistable] | Page[TPersistable]:
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)  # type: ignore[arg-type]
         specification.accept(visitor)
 
         ordering_list = list(ordering) if ordering else []
@@ -337,30 +332,40 @@ class SQLAlchemyRepository(IRepository[TId, TAggregate, Session]):
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
     def count(self, specification: ISpecification) -> int:
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)  # type: ignore[arg-type]
         specification.accept(visitor)
         stmt = visitor.result()
         count_stmt = select(func.count()).select_from(stmt.subquery())
         return self.session.scalar(count_stmt) or 0
 
-    def update(self, aggregate: TAggregate) -> None:
-        model = self.session.get(self._model_class, aggregate.id.value)
+    def update(self, obj: TPersistable) -> None:
+        model = self.session.get(self._model_class, obj.get_id())
         if model is None:
-            raise AggregateDoesNotExistError(aggregate)
-        if getattr(model, VERSION_ATTR) != get_version(aggregate):
-            raise OptimisticLockError(aggregate)
-        for key, val in self._to_model_dict(aggregate).items():
+            raise ResourceDoesNotExistError(obj)
+        if getattr(model, VERSION_ATTR) != obj.get_version():
+            raise OptimisticLockError(obj)
+        for key, val in self._to_model_dict(obj).items():
             setattr(model, key, val)
         setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
-        set_version(aggregate, get_version(aggregate) + 1)
-        self._collect_events(aggregate)
+        obj.set_version(obj.get_version() + 1)
+        self._after_mutate(obj)
 
-    def upsert(self, aggregate: TAggregate) -> None:
-        model = self.session.get(self._model_class, aggregate.id.value)
+    def upsert(self, obj: TPersistable) -> None:
+        model = self.session.get(self._model_class, obj.get_id())
         if model is None:
-            self.session.add(self._model_class(**self._to_model_dict(aggregate)))
+            self.session.add(self._model_class(**self._to_model_dict(obj)))
         else:
-            for key, val in self._to_model_dict(aggregate).items():
+            for key, val in self._to_model_dict(obj).items():
                 setattr(model, key, val)
             setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
-        self._collect_events(aggregate)
+        self._after_mutate(obj)
+
+
+class SQLAlchemyRepository(
+    IAggregateRepository[TId, TAggregate, Session],
+    SQLAlchemyPersistableRepository[TId, TAggregate],
+):
+    """``IAggregateRepository`` backed by SQLAlchemy ORM.
+
+    Extends ``SQLAlchemyPersistableRepository`` with domain-event collection.
+    """

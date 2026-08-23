@@ -26,17 +26,17 @@ from hike.domain_event import (
     deserialize_event,
 )
 from hike.domain_service import DomainService
+from hike.persistence.persistable import Persistable
 from hike.persistence.repository import (
     IRepository,
+    IAggregateRepository,
     RepositoryError,
     DBConnectionError,
     UnknownError,
-    AggregateError,
-    AggregateDoesNotExistError,
-    AggregateAlreadyExistError,
+    ResourceError,
+    ResourceDoesNotExistError,
+    ResourceAlreadyExistError,
     OptimisticLockError,
-    get_version,
-    set_version,
 )
 from hike.persistence.uow import DBContext, UnitOfWork
 from hike.persistence.ordering import OrderBy, asc, desc
@@ -99,16 +99,17 @@ __all__ = [
     "serialize_event",
     "deserialize_event",
     "DomainService",
+    "Persistable",
     "IRepository",
+    "IAggregateRepository",
     "RepositoryError",
     "DBConnectionError",
     "UnknownError",
-    "AggregateError",
-    "AggregateDoesNotExistError",
-    "AggregateAlreadyExistError",
+    "ResourceError",
+    "ResourceDoesNotExistError",
+    "ResourceAlreadyExistError",
     "OptimisticLockError",
-    "get_version",
-    "set_version",
+
     "DBContext",
     "UnitOfWork",
     "CursorPagination",

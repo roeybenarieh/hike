@@ -2,35 +2,17 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Generic, TypeVar, overload, final
 
-from hike.aggregate import Aggregate
+from hike import Aggregate
 from hike.common import DomainError
-from hike.domain_event import DomainEvent
-from hike.entity import EntityID
 from hike.persistence.ordering import OrderBy
 from hike.persistence.pagination import Page, Pagination
+from hike.persistence.persistable import Persistable
 from hike.specifications import ISpecification
 
+TPersistable = TypeVar("TPersistable", bound=Persistable[Any])
+TAggregate = TypeVar("TAggregate", bound=Aggregate[Any])
 TId = TypeVar("TId")
 TSession = TypeVar("TSession")
-TAggregate = TypeVar("TAggregate", bound=Aggregate[Any])
-
-_HIKE_VERSION = "__hike_version__"
-
-
-def get_version(aggregate: Aggregate[Any]) -> int:
-    """Return the optimistic-concurrency version tracked by the repository for *aggregate*.
-
-    Returns 0 if the aggregate has never been persisted.
-    """
-    return aggregate.__dict__.get(_HIKE_VERSION, 0)
-
-
-def set_version(aggregate: Aggregate[Any], version: int) -> None:
-    """Set the repository-managed optimistic-concurrency version on *aggregate*.
-
-    Called exclusively by repository implementations — not intended for domain code.
-    """
-    aggregate.__dict__[_HIKE_VERSION] = version
 
 
 class RepositoryError(DomainError): ...
@@ -42,44 +24,34 @@ class DBConnectionError(RepositoryError): ...
 class UnknownError(RepositoryError): ...
 
 
-class AggregateError(RepositoryError):
-    def __init__(self, aggregate: object) -> None:
-        self.aggregate = aggregate
+class ResourceError(RepositoryError):
+    def __init__(self, resource: Any) -> None:
+        self.resource = resource
 
 
-class AggregateDoesNotExistError(AggregateError): ...
+class ResourceDoesNotExistError(ResourceError): ...
 
 
-class AggregateAlreadyExistError(AggregateError): ...
+class ResourceAlreadyExistError(ResourceError): ...
 
 
-class OptimisticLockError(AggregateError):
-    """Raised when an aggregate has been modified by another writer since it was read.
+class OptimisticLockError(ResourceError):
+    """Raised when an object has been modified by another writer since it was read.
 
-    Callers should re-fetch the aggregate and retry their operation.
+    Callers should re-fetch the object and retry their operation.
     """
 
 
 # HACK: Python has no higher-kinded types, so we cannot statically enforce that
-# TId is TAggregate's ID type, nor that TAggregate is parameterized by TId.
+# TId is TPersistable's ID type, nor that TPersistable is parameterized by TId.
 # Subclasses must keep them consistent by convention.
-class IRepository(Generic[TId, TAggregate, TSession], ABC):
-    _session: TSession | None = None
+class IRepository(Generic[TId, TPersistable, TSession], ABC):
 
-    def __init__(self) -> None:
-        self._pending_events: list[DomainEvent] = []
+    def _after_mutate(self, obj: TPersistable) -> None:
+        """Hook called after every save/update/upsert. Default: no-op.
 
-    # TODO: why do I need both _collect_events and drain_events?
-    def _collect_events(self, aggregate: TAggregate) -> None:
-        """Transfer aggregate's raised events into pending queue and clear the aggregate."""
-        self._pending_events.extend(aggregate.get_events())
-        aggregate.clear_events()
-
-    def drain_events(self) -> list[DomainEvent]:
-        """Return and clear all pending events. Called by UnitOfWork on commit."""
-        events = list(self._pending_events)
-        self._pending_events.clear()
-        return events
+        ``IAggregateRepository`` overrides this to drain domain events.
+        """
 
     @property
     def session(self) -> TSession:
@@ -91,89 +63,96 @@ class IRepository(Generic[TId, TAggregate, TSession], ABC):
     def session(self, value: TSession) -> None:
         self._session = value
 
-    @abstractmethod
-    def save(self, aggregate: TAggregate) -> TId:
-        """Save a new aggregate.
+    _session: TSession | None = None
 
-        :param aggregate: The aggregate to save.
-        :raise AggregateAlreadyExistError: if the aggregate already exists.
+    @abstractmethod
+    def save(self, obj: TPersistable) -> TId:
+        """Save a new object.
+
+        :param obj: The object to save.
+        :raise ResourceAlreadyExistError: if an object with the same id already exists.
         """
 
     @overload
-    def delete(self, identifier: EntityID[TId], /) -> None: ...
+    def delete(self, identifier: TId, /) -> None:
+        ...
 
     @overload
-    def delete(self, aggregate: TAggregate, /) -> None: ...
+    def delete(self, obj: TPersistable, /) -> None:
+        ...
 
     @final
-    def delete(self, id_or_aggregate: EntityID[TId] | TAggregate, /) -> None:
-        """Delete an aggregate.
+    def delete(self, id_or_obj: TId | TPersistable, /) -> None:
+        """Delete an object.
 
-        :param id_or_aggregate: The aggregate or its identifier.
-        :raise AggregateDoesNotExistError: if the aggregate does not exist.
-        :raise OptimisticLockError: if the aggregate was modified since it was read.
+        :param id_or_obj: The object or its identifier.
+        :raise ResourceDoesNotExistError: if the object does not exist.
+        :raise OptimisticLockError: if the object was modified since it was read.
         """
-        if isinstance(id_or_aggregate, Aggregate):
-            self._delete(id_or_aggregate.id)
+        if isinstance(id_or_obj, Persistable):
+            self._delete(id_or_obj.get_id())  # type: ignore[arg-type]
         else:
-            self._delete(id_or_aggregate)
+            self._delete(getattr(id_or_obj, "value", id_or_obj))  # type: ignore[arg-type]
 
     @abstractmethod
-    def _delete(self, identifier: EntityID[TId]) -> None:
-        """Delete an aggregate by its identifier.
+    def _delete(self, identifier: TId) -> None:
+        """Delete an object by its identifier.
 
-        :param identifier: The identifier of the aggregate to delete.
-        :raise AggregateDoesNotExistError: if the aggregate does not exist.
-        :raise OptimisticLockError: if the aggregate was modified since it was read.
+        :param identifier: The identifier of the object to delete.
+        :raise ResourceDoesNotExistError: if the object does not exist.
+        :raise OptimisticLockError: if the object was modified since it was read.
         """
 
     @abstractmethod
-    def get_one(self, identifier: EntityID[TId]) -> TAggregate:
-        """Get one aggregate by id.
+    def get_one(self, identifier: TId) -> TPersistable:
+        """Get one object by id.
 
-        :param identifier: The identifier of the aggregate.
-        :raise AggregateDoesNotExistError: if the aggregate does not exist.
+        :param identifier: The identifier of the object.
+        :raise ResourceDoesNotExistError: if the object does not exist.
         """
 
     @overload
     def get_many(
-        self,
-        specification: ISpecification,
-    ) -> list[TAggregate]: ...
+            self,
+            specification: ISpecification,
+    ) -> list[TPersistable]:
+        ...
 
     @overload
     def get_many(
-        self,
-        specification: ISpecification,
-        *,
-        ordering: OrderBy | Sequence[OrderBy],
-    ) -> list[TAggregate]: ...
+            self,
+            specification: ISpecification,
+            *,
+            ordering: OrderBy | Sequence[OrderBy],
+    ) -> list[TPersistable]:
+        ...
 
     @overload
     def get_many(
-        self,
-        specification: ISpecification,
-        *,
-        pagination: Pagination,
-        ordering: OrderBy | Sequence[OrderBy] | None = ...,
-    ) -> Page[TAggregate]: ...
+            self,
+            specification: ISpecification,
+            *,
+            pagination: Pagination,
+            ordering: OrderBy | Sequence[OrderBy] | None = ...,
+    ) -> Page[TPersistable]:
+        ...
 
     @final
     def get_many(
-        self,
-        specification: ISpecification,
-        *,
-        ordering: OrderBy | Sequence[OrderBy] | None = None,
-        pagination: Pagination | None = None,
-    ) -> list[TAggregate] | Page[TAggregate]:
-        """Get multiple aggregates matching *specification*.
+            self,
+            specification: ISpecification,
+            *,
+            ordering: OrderBy | Sequence[OrderBy] | None = None,
+            pagination: Pagination | None = None,
+    ) -> list[TPersistable] | Page[TPersistable]:
+        """Get multiple objects matching *specification*.
 
-        Without *pagination* returns a ``list[TAggregate]``, optionally sorted
-        by *ordering*.  With *pagination* returns a ``Page[TAggregate]``
+        Without *pagination* returns a ``list[TPersistable]``, optionally sorted
+        by *ordering*.  With *pagination* returns a ``Page[TPersistable]``
         containing the items, a total count (``None`` for cursor pagination),
         and next-cursor metadata.
 
-        :param specification: Criteria dictating which aggregates to return.
+        :param specification: Criteria dictating which objects to return.
         :param ordering: Optional ordering — a single ``OrderBy`` or a sequence
             of them.
         :param pagination: Optional pagination — ``OffsetPagination``,
@@ -188,42 +167,64 @@ class IRepository(Generic[TId, TAggregate, TSession], ABC):
 
     @abstractmethod
     def _get_many(
-        self,
-        specification: ISpecification,
-        *,
-        ordering: Sequence[OrderBy] | None = None,
-        pagination: Pagination | None = None,
-    ) -> list[TAggregate] | Page[TAggregate]:
+            self,
+            specification: ISpecification,
+            *,
+            ordering: Sequence[OrderBy] | None = None,
+            pagination: Pagination | None = None,
+    ) -> list[TPersistable] | Page[TPersistable]:
         """Implement ``get_many``.  Override this in concrete repository subclasses."""
 
     @abstractmethod
-    def update(self, aggregate: TAggregate) -> None:
-        """Update a given aggregate.
+    def update(self, obj: TPersistable) -> None:
+        """Update a given object.
 
         Uses optimistic concurrency control: compares the stored version against
-        ``get_version(aggregate)`` and raises if they differ.  On success,
+        ``get_version(obj)`` and raises if they differ.  On success,
         increments the tracked version via ``set_version``.
 
-        :param aggregate: The aggregate to update.
-        :raise AggregateDoesNotExistError: if the aggregate does not exist.
-        :raise OptimisticLockError: if the aggregate was modified since it was read.
+        :param obj: The object to update.
+        :raise ResourceDoesNotExistError: if the object does not exist.
+        :raise OptimisticLockError: if the object was modified since it was read.
         """
 
     @abstractmethod
     def count(self, specification: ISpecification) -> int:
-        """Count aggregates matching *specification*.
+        """Count objects matching *specification*.
 
-        :param specification: criteria dictating which aggregates to count.
+        :param specification: criteria dictating which objects to count.
         """
 
     @abstractmethod
-    def upsert(self, aggregate: TAggregate) -> None:
-        """Update a given aggregate; create it if it does not exist.
+    def upsert(self, obj: TPersistable) -> None:
+        """Update a given object; create it if it does not exist.
 
         No version check is performed — this is a last-write-wins operation.
         The stored version is incremented unconditionally on update (or set to 0
-        on insert); the aggregate's tracked version is intentionally *not* synced back.
+        on insert); the object's tracked version is intentionally *not* synced back.
         Re-fetch with ``get_one`` before any subsequent version-sensitive writes.
 
-        :param aggregate: The aggregate to update/create.
+        :param obj: The object to update/create.
         """
+
+
+class IAggregateRepository(IRepository[TId, TAggregate, TSession], ABC):
+    """``IRepository`` extended with domain-event collection for ``Aggregate``-backed repos."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._pending_events: list[Any] = []
+
+    def get_one(self, identifier: TId) -> TAggregate:
+        return super().get_one(getattr(identifier, "value", identifier))  # type: ignore[arg-type]
+
+    def _after_mutate(self, obj: TAggregate) -> None:  # type: ignore[override]
+        """Transfer aggregate's raised events into the pending queue and clear the aggregate."""
+        self._pending_events.extend(obj.get_events())
+        obj.clear_events()
+
+    def drain_events(self) -> list[Any]:
+        """Return and clear all pending events. Called by ``UnitOfWork`` on commit."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events

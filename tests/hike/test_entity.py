@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import assert_type
 from uuid import UUID
 
-from hike.entity import from_dict, get_fields, to_dict
+from hike.entity import from_dict, to_dict
 from hike.specifications import (
     AndSpecification,
     EqualSpecification,
@@ -205,10 +205,9 @@ class TestToDict:
         b = Boat(name=Name("My Boat"), price=Price(100.0))
         assert set(to_dict(b).keys()) == {"id", "name", "price"}
 
-    def test_get_fields_returns_dataclass_fields(self) -> None:
-        # Engine (UuidEntity) has no non-init fields, so the set is exact.
+    def test_get_init_field_names_returns_init_fields(self) -> None:
         e = Engine(name=Name("V8"), horsepower=Horsepower(200))
-        assert {f.name for f in get_fields(e)} == {"id", "name", "horsepower"}
+        assert set(e.get_init_field_names()) == {"id", "name", "horsepower"}
 
 
 class TestToDictFromDictNestedEntity:

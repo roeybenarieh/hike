@@ -22,7 +22,7 @@ from hike.persistence.providers.sqlalchemy.mappers import (
     FlatAutoSQLAlchemyMapper,
     FlatSQLAlchemyMapper,
 )
-from hike.persistence.providers.sqlalchemy.repository import SQLAlchemyRepository
+from hike.persistence.providers.sqlalchemy.repository import SQLAlchemyPersistableRepository, SQLAlchemyRepository
 from hike.persistence.providers.sqlalchemy.visitor import ISQLAlchemyMapper
 
 __all__ = [
@@ -32,5 +32,6 @@ __all__ = [
     "FlatSQLAlchemyMapper",
     "ISQLAlchemyMapper",
     "SQLAlchemyDBContext",
+    "SQLAlchemyPersistableRepository",
     "SQLAlchemyRepository",
 ]

@@ -22,11 +22,10 @@ from hike.entity import EntityID
 from hike.persistence.ordering import asc, desc
 from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.persistence.repository import (
-    AggregateAlreadyExistError,
-    AggregateDoesNotExistError,
+    ResourceAlreadyExistError,
+    ResourceDoesNotExistError,
     IRepository,
     OptimisticLockError,
-    get_version,
 )
 from hike.persistence.uow import UnitOfWork
 
@@ -127,7 +126,7 @@ class RepositoryParitySuite:
             repo.delete(boat)
             uow.commit()
         with uow(repo):
-            with pytest.raises(AggregateDoesNotExistError):
+            with pytest.raises(ResourceDoesNotExistError):
                 repo.get_one(boat.id)
 
     # ------------------------------------------------------------------
@@ -139,20 +138,20 @@ class RepositoryParitySuite:
         with uow(repo):
             repo.save(boat)
             uow.commit()
-        with pytest.raises(AggregateAlreadyExistError):
+        with pytest.raises(ResourceAlreadyExistError):
             with uow(repo):
                 repo.save(boat)
                 uow.commit()
 
     def test_get_one_missing_raises(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
         with uow(repo):
-            with pytest.raises(AggregateDoesNotExistError):
+            with pytest.raises(ResourceDoesNotExistError):
                 repo.get_one(EntityID(uuid4()))
 
     def test_delete_missing_raises(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
         ghost = Boat(name=Name("Never Saved"), price=Price(1.0))
         with uow(repo):
-            with pytest.raises(AggregateDoesNotExistError):
+            with pytest.raises(ResourceDoesNotExistError):
                 repo.delete(ghost)
 
     def test_rollback_on_exception(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
@@ -162,7 +161,7 @@ class RepositoryParitySuite:
                 repo.save(boat)
                 raise ValueError("simulated failure")
         with uow(repo):
-            with pytest.raises(AggregateDoesNotExistError):
+            with pytest.raises(ResourceDoesNotExistError):
                 repo.get_one(boat.id)
 
     def test_optimistic_lock_conflict(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
@@ -174,13 +173,13 @@ class RepositoryParitySuite:
             copy_a = repo.get_one(boat.id)
         with uow(repo):
             copy_b = repo.get_one(boat.id)
-        assert get_version(copy_a) == 0
-        assert get_version(copy_b) == 0
+        assert copy_a.get_version() == 0
+        assert copy_b.get_version() == 0
         copy_a.price = Price(200.0)
         with uow(repo):
             repo.update(copy_a)
             uow.commit()
-        assert get_version(copy_a) == 1
+        assert copy_a.get_version() == 1
         copy_b.price = Price(300.0)
         with pytest.raises(OptimisticLockError):
             with uow(repo):

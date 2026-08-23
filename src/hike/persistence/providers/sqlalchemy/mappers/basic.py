@@ -34,7 +34,7 @@ from sqlalchemy import (
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import InstrumentedAttribute, column_property
 
-from hike.entity import Entity, get_fields, to_dict, unwrap_annotation
+from hike.entity import Entity, to_dict, unwrap_annotation
 from hike.value_object import ValueObject
 
 from ..visitor import ISQLAlchemyMapper
@@ -211,11 +211,9 @@ class FlatMapperBase(ISQLAlchemyMapper):
 
     def _flatten(self, entity: Any, prefix: str) -> dict[str, Any]:
         result: dict[str, Any] = {}
-        for f in get_fields(entity):
-            if not f.init:
-                continue
-            val: Any = getattr(entity, f.name)
-            col = f"{prefix}{self._sep}{f.name}"
+        for name in entity.get_init_field_names():
+            val: Any = getattr(entity, name)
+            col = f"{prefix}{self._sep}{name}"
             if isinstance(val, ValueObject):
                 result[col] = cast(Any, val).value
             elif isinstance(val, Entity):
@@ -235,14 +233,12 @@ class FlatMapperBase(ISQLAlchemyMapper):
         except Exception:  # noqa: BLE001
             hints = {}
         data: dict[str, Any] = {}
-        for f in get_fields(cast(type[Entity[Any]], entity_cls)):
-            if not f.init:
-                continue
-            col = f"{prefix}{self._sep}{f.name}"
-            ann = hints.get(f.name)
+        for name in cast(type[Entity[Any]], entity_cls).get_init_field_names():
+            col = f"{prefix}{self._sep}{name}"
+            ann = hints.get(name)
             inner = unwrap_annotation(ann) if ann else None
             if isinstance(inner, type) and issubclass(inner, Entity):
-                data[f.name] = self._collect(orm_obj, cast(type, inner), col)
+                data[name] = self._collect(orm_obj, cast(type, inner), col)
             else:
-                data[f.name] = getattr(orm_obj, col, None)
+                data[name] = getattr(orm_obj, col, None)
         return data

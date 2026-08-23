@@ -8,7 +8,6 @@ from typing import Any, cast
 from redis import Redis
 from redis.client import Pipeline
 
-from hike.entity import EntityID, from_dict, to_dict
 from hike.persistence.ordering import OrderBy, apply_ordering_in_memory, get_field_value
 from hike.persistence.pagination import (
     OffsetPagination,
@@ -20,14 +19,14 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
-    AggregateAlreadyExistError,
-    AggregateDoesNotExistError,
+    ResourceAlreadyExistError,
+    ResourceDoesNotExistError,
+    IAggregateRepository,
     IRepository,
     OptimisticLockError,
     TAggregate,
     TId,
-    get_version,
-    set_version,
+    TPersistable,
 )
 from hike.specifications import ISpecification
 
@@ -47,10 +46,10 @@ def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
     return obj
 
 
-class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
-    """Generic Redis repository with optimistic concurrency control.
+class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
+    """Generic Redis repository for any ``Persistable`` object.
 
-    Aggregates are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.
+    Objects are stored as JSON strings under keys ``<key_prefix>:<raw_id>``.
     Write operations (save, delete, update, upsert) are queued into the
     pipeline session so they execute atomically on commit.  Read operations
     (get_one, get_many) bypass the pipeline and go directly to the raw client
@@ -58,12 +57,8 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
 
     **Optimistic locking** — each stored document includes a ``_version``
     integer field.  ``update`` reads the current version directly from Redis,
-    compares it against ``aggregate.version``, and raises ``OptimisticLockError``
-    on mismatch.  On success the new document is queued to the pipeline with
-    ``_version + 1`` and ``aggregate.version`` is incremented accordingly.
-    Note: there is a TOCTOU window between the version check (direct read) and
-    the pipeline execution (commit); this is consistent with how ``save`` and
-    ``delete`` check existence before queuing.
+    compares it against ``obj.get_version()``, and raises ``OptimisticLockError``
+    on mismatch.
 
     **UUID serialization** — ``uuid.UUID`` values survive JSON round-trips
     via a ``{"__uuid__": "…"}`` envelope.
@@ -74,7 +69,7 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
     def __init__(
             self,
             client: Redis,  # redis-py stubs pre-parameterize Redis
-            aggregate_class: type[TAggregate],
+            aggregate_class: type[TPersistable],
             key_prefix: str,
     ) -> None:
         super().__init__()
@@ -85,50 +80,50 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
     def _key(self, raw_id: Any) -> str:
         return f"{self._key_prefix}:{raw_id}"
 
-    def _serialize(self, aggregate: TAggregate, *, version: int) -> str:
-        data = to_dict(aggregate)
+    def _serialize(self, obj: TPersistable, *, version: int) -> str:
+        data = obj.to_dict()
         data["__hike_version"] = version
         return json.dumps(data, cls=_AggregateEncoder)
 
-    def _deserialize(self, raw: bytes | str) -> TAggregate:
+    def _deserialize(self, raw: bytes | str) -> TPersistable:
         data: dict[str, Any] = json.loads(raw, object_hook=_aggregate_object_hook)
         version: int = data.pop("__hike_version", 0)
-        aggregate: TAggregate = from_dict(self._aggregate_class, data)
-        set_version(aggregate, version)
-        return aggregate
+        obj: TPersistable = self._aggregate_class.from_dict(data)  # type: ignore[return-value]
+        obj.set_version(version)
+        return obj
 
-    def save(self, aggregate: TAggregate) -> TId:
-        key = self._key(aggregate.id.value)
+    def save(self, obj: TPersistable) -> TId:
+        key = self._key(obj.get_id())
         if self._client.exists(key):
-            raise AggregateAlreadyExistError(aggregate)
-        self.session.set(key, self._serialize(aggregate, version=0))
-        set_version(aggregate, 0)
-        self._collect_events(aggregate)
-        return aggregate.id  # pyright: ignore[reportReturnType]
+            raise ResourceAlreadyExistError(obj)
+        self.session.set(key, self._serialize(obj, version=0))
+        obj.set_version(0)
+        self._after_mutate(obj)
+        return obj.get_id()  # pyright: ignore[reportReturnType]
 
-    def _delete(self, identifier: EntityID[TId]) -> None:
-        key = self._key(identifier.value)
+    def _delete(self, identifier: TId) -> None:
+        key = self._key(identifier)
         if not self._client.exists(key):
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
         self.session.delete(key)
 
-    def get_one(self, identifier: EntityID[TId]) -> TAggregate:
-        key = self._key(identifier.value)
+    def get_one(self, identifier: TId) -> TPersistable:
+        key = self._key(identifier)
         raw = cast(bytes | None, self._client.get(key))
         if raw is None:
-            raise AggregateDoesNotExistError(identifier)
+            raise ResourceDoesNotExistError(identifier)
         return self._deserialize(raw)
 
-    def _fetch_matching(self, specification: ISpecification) -> list[TAggregate]:
-        """Scan all keys and return aggregates matching *specification*."""
-        result: list[TAggregate] = []
+    def _fetch_matching(self, specification: ISpecification) -> list[TPersistable]:
+        """Scan all keys and return objects matching *specification*."""
+        result: list[TPersistable] = []
         for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
             raw = cast(bytes | None, self._client.get(key))
             if raw is None:
                 continue
-            aggregate = self._deserialize(raw)
-            if specification.is_satisfied(aggregate):
-                result.append(aggregate)
+            obj = self._deserialize(raw)
+            if specification.is_satisfied(obj):
+                result.append(obj)
         return result
 
     def _get_many(
@@ -137,7 +132,7 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
         *,
         ordering: Sequence[OrderBy] | None = None,
         pagination: Pagination | None = None,
-    ) -> list[TAggregate] | Page[TAggregate]:
+    ) -> list[TPersistable] | Page[TPersistable]:
         matched = self._fetch_matching(specification)
 
         ordering_list = list(ordering) if ordering else []
@@ -182,22 +177,22 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
                 ".".join(ob.field.path): get_field_value(last, ob.field.path)
                 for ob in ordering_list
             }
-            next_cursor = encode_cursor(field_values, last.id.value)
+            next_cursor = encode_cursor(field_values, last.get_id())
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
-    def update(self, aggregate: TAggregate) -> None:
-        key = self._key(aggregate.id.value)
+    def update(self, obj: TPersistable) -> None:
+        key = self._key(obj.get_id())
         raw = cast(bytes | None, self._client.get(key))
         if raw is None:
-            raise AggregateDoesNotExistError(aggregate)
+            raise ResourceDoesNotExistError(obj)
         current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("__hike_version", 0)
-        v = get_version(aggregate)
+        v = obj.get_version()
         if current_version != v:
-            raise OptimisticLockError(aggregate)
-        self.session.set(key, self._serialize(aggregate, version=v + 1))
-        set_version(aggregate, v + 1)
-        self._collect_events(aggregate)
+            raise OptimisticLockError(obj)
+        self.session.set(key, self._serialize(obj, version=v + 1))
+        obj.set_version(v + 1)
+        self._after_mutate(obj)
 
     def count(self, specification: ISpecification) -> int:
         total = 0
@@ -207,13 +202,23 @@ class RedisRepository(IRepository[TId, TAggregate, Pipeline]):
                 total += 1
         return total
 
-    def upsert(self, aggregate: TAggregate) -> None:
-        key = self._key(aggregate.id.value)
+    def upsert(self, obj: TPersistable) -> None:
+        key = self._key(obj.get_id())
         raw = cast(bytes | None, self._client.get(key))
         if raw is not None:
             current_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("__hike_version", 0)
             new_version = current_version + 1
         else:
             new_version = 0
-        self.session.set(key, self._serialize(aggregate, version=new_version))
-        self._collect_events(aggregate)
+        self.session.set(key, self._serialize(obj, version=new_version))
+        self._after_mutate(obj)
+
+
+class RedisRepository(
+    IAggregateRepository[TId, TAggregate, Pipeline],
+    RedisPersistableRepository[TId, TAggregate],
+):
+    """``IAggregateRepository`` backed by Redis.
+
+    Extends ``RedisPersistableRepository`` with domain-event collection.
+    """

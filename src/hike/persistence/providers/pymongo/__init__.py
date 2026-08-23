@@ -16,9 +16,10 @@ except ImportError as _exc:
     ) from _exc
 
 from hike.persistence.providers.pymongo.db_context import PyMongoDBContext
-from hike.persistence.providers.pymongo.repository import PyMongoRepository
+from hike.persistence.providers.pymongo.repository import PyMongoPersistableRepository, PyMongoRepository
 
 __all__ = [
     "PyMongoDBContext",
+    "PyMongoPersistableRepository",
     "PyMongoRepository",
 ]
