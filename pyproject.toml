@@ -33,7 +33,7 @@ omit = ["*/__init__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 60
+fail_under = 80
 
 [dependency-groups]
 dev = [
