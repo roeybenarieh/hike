@@ -1,31 +1,31 @@
 from __future__ import annotations
 
-from typing import Iterable, Union
+from typing import Iterable
 
 import pika
-import pika.channel
 from pika.adapters.blocking_connection import BlockingChannel
 
 from hike.domain_event import DomainEvent, serialize_event
 from hike.events.interfaces import IEventPublisher
-
-# pika's blocking and async channel implementations share the same interface
-# but don't share a common base class; accept either.
-_Channel = Union[pika.channel.Channel, BlockingChannel]
 
 
 class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
     """Publishes domain events to a RabbitMQ topic exchange.
 
     Each event is routed via its class name as the routing key, so consumers
-    can bind queues to specific event types.
+    can bind queues to specific event types.  Publisher confirms are enabled
+    on the channel: :meth:`publish` raises :exc:`pika.exceptions.NackError` if
+    the broker nacks a message, or :exc:`pika.exceptions.UnroutableError` if a
+    message cannot be routed (requires ``mandatory=True`` at the pika level,
+    which this publisher does not set — unroutable messages are silently dropped
+    by the broker unless a dead-letter exchange is configured).
 
     Install with: ``pip install hike[rabbitmq]``
     """
 
     def __init__(
         self,
-        channel: _Channel,
+        channel: BlockingChannel,
         exchange: str = "hike.events",
     ) -> None:
         self._channel = channel
@@ -33,6 +33,7 @@ class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
         self._channel.exchange_declare(
             exchange=exchange, exchange_type="topic", durable=True
         )
+        self._channel.confirm_delivery()
 
     def publish(self, events: Iterable[DomainEvent]) -> None:
         for event in events:

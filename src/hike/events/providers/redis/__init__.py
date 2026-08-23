@@ -1,14 +1,13 @@
-"""Redis Pub/Sub provider for hike event pub/sub.
+"""Redis Streams provider for hike event pub/sub.
 
 Requires the ``redis`` extra::
 
     pip install hike[redis]
 
-.. note::
-    Redis Pub/Sub is a **fire-and-forget** transport: messages are not persisted
-    and subscribers that are offline when an event is published will miss it.
-    ``AcknowledgementResult.NACK`` returned by handlers is noted but cannot
-    trigger redelivery — use RabbitMQ or Kafka if reliable delivery is required.
+Messages are appended to Redis Streams (``XADD``) and consumed via consumer
+groups (``XREADGROUP``/``XACK``).  A message is acknowledged only after all
+handlers succeed; failed messages remain in the consumer's Pending Entry List
+and are redelivered on the next poll iteration.
 """
 
 from __future__ import annotations

@@ -123,8 +123,6 @@ class TestRabbitMQEventPublisher:
         sub_channel.queue_declare(queue=queue, durable=True)
         sub_channel.queue_bind(exchange=exchange, queue=queue, routing_key="ParcelShipped")
 
-        # Enable publisher confirms so basic_publish blocks until broker acknowledges.
-        pub_channel.confirm_delivery()
         publisher = RabbitMQEventPublisher(pub_channel, exchange=exchange)
         publisher.publish([ParcelShipped(tracking_id="T1", recipient="Alice")])
 

@@ -10,7 +10,8 @@ from hike.domain_event import DomainEvent
 class IEventHandler[TDomainEvent: DomainEvent](ABC):
 
     @abstractmethod
-    def handle(self, event: TDomainEvent) -> None: ...
+    def handle(self, event: TDomainEvent) -> None:
+        """might raise an error indicating that couldn't handle the event"""
 
     def __call__(self, event: TDomainEvent) -> None:
         self.handle(event)
@@ -22,6 +23,7 @@ class IReversibleEventHandler[TDomainEvent: DomainEvent](IEventHandler[TDomainEv
     def compensate(self) -> None: ...
 
 
+# TODO: implement outbox/inbox publisher/subscriber
 class IEventSubscriber[TDomainEvent: DomainEvent](ABC):
 
     @abstractmethod

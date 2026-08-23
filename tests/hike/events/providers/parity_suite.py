@@ -118,3 +118,43 @@ class EventProviderParitySuite:
         subscriber.close()
         t.join(timeout=10)
         assert not t.is_alive()
+
+    def test_handler_failure_does_not_stop_subscriber(
+        self,
+        publisher: IEventPublisher[DomainEvent],
+        subscriber: IBlockingEventSubscriber,
+    ) -> None:
+        """A failing handler must not kill the subscriber; the next available message is processed.
+
+        For brokers with persistent storage (Kafka, RabbitMQ) the failed
+        message is redelivered to the same subscriber on the next delivery
+        attempt, so a single published event is sufficient.  For fire-and-forget
+        brokers (Redis) the failed event is permanently lost, so a second event
+        is published after a short delay to give the subscriber something to
+        consume.
+        """
+        received: list[_PingEvent] = []
+        attempts = 0
+
+        class _FlakyHandler(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    raise RuntimeError("deliberate first-attempt failure")
+                received.append(event)
+                subscriber.close()
+
+        subscriber.subscribe(_FlakyHandler())
+        t = self._run_subscriber(subscriber)
+        publisher.publish([_PingEvent(payload="ping")])
+        # Fire-and-forget brokers drop the failed event; publish a second so
+        # the subscriber has a message to consume on its second attempt.
+        # Brokers with redelivery (Kafka/RabbitMQ) will typically resolve
+        # before this second event arrives, which is harmless.
+        time.sleep(0.3)
+        publisher.publish([_PingEvent(payload="ping")])
+        t.join(timeout=30)
+
+        assert not t.is_alive(), "subscriber did not stop — may have crashed on handler error"
+        assert received

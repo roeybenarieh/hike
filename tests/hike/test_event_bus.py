@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from hike.domain_event import DomainEvent
-from hike.events.event_bus import InMemoryEventBus
+from hike.events.event_bus import EventBus
 from hike.events.interfaces import IEventHandler, IReversibleEventHandler
 from hike.events.utils import event_type_for
 
@@ -94,14 +94,14 @@ def testevent_type_for_raises_when_not_parameterized() -> None:
 
 
 def test_subscribe_registers_handler_under_correct_event_type() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     handler = _RecordingHandler()
     bus.subscribe(handler)
     assert handler in bus._regular[OrderPlaced]  # pyright: ignore[reportPrivateUsage]
 
 
 def test_subscribe_multiple_handlers_for_same_event() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     h1, h2 = _RecordingHandler(), _RecordingHandler()
     bus.subscribe(h1)
     bus.subscribe(h2)
@@ -112,7 +112,7 @@ def test_subscribe_different_event_types_are_independent() -> None:
     class _ShipHandler(IEventHandler[OrderShipped]):
         def handle(self, event: OrderShipped) -> None: ...
 
-    bus = InMemoryEventBus()
+    bus = EventBus()
     h_placed = _RecordingHandler()
     h_shipped = _ShipHandler()
     bus.subscribe(h_placed)
@@ -128,7 +128,7 @@ def test_subscribe_different_event_types_are_independent() -> None:
 
 
 def test_produce_dispatches_matching_event() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     handler = _RecordingHandler()
     bus.subscribe(handler)
     event = OrderPlaced(order_id="1")
@@ -144,7 +144,7 @@ def test_produce_does_not_dispatch_to_wrong_event_type() -> None:
         def handle(self, event: OrderShipped) -> None:
             self.received.append(event)
 
-    bus = InMemoryEventBus()
+    bus = EventBus()
     placed = _RecordingHandler()
     shipped = _ShipHandler()
     bus.subscribe(placed)
@@ -157,7 +157,7 @@ def test_produce_does_not_dispatch_to_wrong_event_type() -> None:
 
 
 def test_produce_dispatches_each_event_independently() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     handler = _RecordingHandler()
     bus.subscribe(handler)
     events = [OrderPlaced(order_id="1"), OrderPlaced(order_id="2")]
@@ -166,12 +166,12 @@ def test_produce_dispatches_each_event_independently() -> None:
 
 
 def test_produce_with_no_subscription_is_noop() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     bus.publish([OrderPlaced(order_id="x")])  # must not raise
 
 
 def test_produce_calls_all_subscribed_handlers() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     h1, h2 = _RecordingHandler(), _RecordingHandler()
     bus.subscribe(h1)
     bus.subscribe(h2)
@@ -200,7 +200,7 @@ def test_reversible_handlers_run_before_regular_handlers() -> None:
         def handle(self, event: OrderPlaced) -> None:
             call_order.append("regular")
 
-    bus = InMemoryEventBus()
+    bus = EventBus()
     bus.subscribe(_Reg())   # subscribed first — but should run second
     bus.subscribe(_Rev())
     bus.publish([OrderPlaced(order_id="x")])
@@ -214,7 +214,7 @@ def test_reversible_handlers_run_before_regular_handlers() -> None:
 
 
 def test_succeeded_reversible_is_compensated_when_regular_fails() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     reversible = _RecordingReversibleHandler()
     bus.subscribe(reversible)
     bus.subscribe(_FailingHandler())
@@ -226,7 +226,7 @@ def test_succeeded_reversible_is_compensated_when_regular_fails() -> None:
 
 
 def test_original_exception_is_reraised_after_compensation() -> None:
-    bus = InMemoryEventBus()
+    bus = EventBus()
     bus.subscribe(_RecordingReversibleHandler())
     bus.subscribe(_FailingHandler())
 
@@ -245,7 +245,7 @@ def test_reversible_handler_that_fails_in_handle_is_not_compensated() -> None:
             nonlocal compensation_called
             compensation_called = True
 
-    bus = InMemoryEventBus()
+    bus = EventBus()
     bus.subscribe(_FailRev())
 
     with pytest.raises(RuntimeError):
@@ -267,7 +267,7 @@ def test_compensation_runs_in_reverse_subscription_order() -> None:
 
         return _H()
 
-    bus = InMemoryEventBus()
+    bus = EventBus()
     bus.subscribe(_make_reversible(1))
     bus.subscribe(_make_reversible(2))
     bus.subscribe(_make_reversible(3))
@@ -281,13 +281,14 @@ def test_compensation_runs_in_reverse_subscription_order() -> None:
 
 def test_regular_handlers_are_not_compensated() -> None:
     """Plain IEventHandler subclasses run normally; no compensate is attempted on them."""
-    bus = InMemoryEventBus()
+    bus = EventBus()
     regular = _RecordingHandler()
     bus.subscribe(regular)
     bus.subscribe(_FailingHandler())
 
+    event = OrderPlaced(order_id="x")
     with pytest.raises(RuntimeError):
-        bus.publish([OrderPlaced(order_id="x")])
+        bus.publish([event])
 
     # regular ran before the failing handler; assert it received the event
-    assert regular.received == [OrderPlaced(order_id="x")]
+    assert regular.received == [event]
