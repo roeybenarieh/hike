@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+echo "==> Type checking..."
+uv run pyright src/
+
+echo "==> Tests + coverage..."
+uv run pytest tests/ --cov --cov-report=term-missing -q
+
+echo "==> Pre-commit checks passed."

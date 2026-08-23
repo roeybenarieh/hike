@@ -17,6 +17,10 @@ typecheck-file file:
 test:
     uv run pytest tests/
 
+# Run tests with coverage report
+coverage:
+    uv run pytest tests/ --cov --cov-report=term-missing
+
 # Run only fast (in-memory, no containers) tests
 test-unit:
     uv run pytest tests/hike/ddd/providers/in_memory/ tests/hike/ddd/test_entity.py tests/hike/ddd/test_value_object.py tests/hike/ddd/test_aggregate.py tests/hike/ddd/specifications/
@@ -38,7 +42,12 @@ check: typecheck
     @echo "All checks passed."
 
 # Run all checks and tests
-ci: check test
+ci: check coverage
+
+# Install git hooks (run once after cloning)
+install-hooks:
+    git config core.hooksPath .githooks
+    @echo "Git hooks installed."
 
 # run mkdocs
 docs:
