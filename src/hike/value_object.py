@@ -1,3 +1,4 @@
+import ipaddress
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -20,7 +21,9 @@ class ValueObject[V](DomainObject):
     and optionally add ``__validators__`` for reusable validation functions.
     Several built-in validators are provided (``positive``, ``non_negative``,
     ``non_empty``, ``min_value``, ``max_value``, ``between``, ``min_length``,
-    ``max_length``, ``matches``):
+    ``max_length``, ``matches``, ``email``, ``http_url``, ``hostname``,
+    ``ipv4_address``, ``ipv6_address``, ``ip_address``, ``mac_address``,
+    ``uuid``, ``slug``):
 
         class Price(ValueObject[float]):
             value: float
@@ -214,3 +217,57 @@ def within_future(delta: timedelta) -> Callable[[datetime], None]:
         if not (now <= value <= now + delta):
             raise ValueError(f"Value must be within the next {delta}, got {value!r}")
     return _validate
+
+
+# ---------------------------------------------------------------------------
+# String pattern validators
+# ---------------------------------------------------------------------------
+
+# Regex-based: defined via matches() so the compiled pattern is reused.
+email = matches(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
+mac_address = matches(r'[0-9A-Fa-f]{2}(?:[:\-][0-9A-Fa-f]{2}){5}')
+uuid = matches(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+http_url = matches(
+    r'https?://'
+    r'(?:[a-zA-Z0-9\-]+\.)*[a-zA-Z0-9\-]+'
+    r'(?::\d{1,5})?'
+    r'(?:[/?#]\S*)?'
+)
+
+# IP and hostname validators use the ipaddress stdlib or a length check that
+# can't be expressed as a plain regex.
+
+_HOSTNAME_RE = re.compile(
+    r'(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*'
+    r'[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?'
+)
+
+
+def ipv4_address(value: str) -> None:
+    """String must be a valid IPv4 address (e.g. ``192.168.1.1``)."""
+    try:
+        ipaddress.IPv4Address(value)
+    except ValueError:
+        raise ValueError(f"Value {value!r} is not a valid IPv4 address")
+
+
+def ipv6_address(value: str) -> None:
+    """String must be a valid IPv6 address (e.g. ``::1`` or ``2001:db8::1``)."""
+    try:
+        ipaddress.IPv6Address(value)
+    except ValueError:
+        raise ValueError(f"Value {value!r} is not a valid IPv6 address")
+
+
+def ip_address(value: str) -> None:
+    """String must be a valid IPv4 or IPv6 address."""
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        raise ValueError(f"Value {value!r} is not a valid IP address")
+
+
+def hostname(value: str) -> None:
+    """String must be a valid hostname or domain name per RFC 1123 (e.g. ``example.com``)."""
+    if len(value) > 253 or not _HOSTNAME_RE.fullmatch(value):
+        raise ValueError(f"Value {value!r} is not a valid hostname")
