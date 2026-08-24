@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any, Generic, TypeVar, overload, final
 
 from hike import Aggregate
@@ -205,6 +205,21 @@ class IRepository(Generic[TId, TPersistable, TSession], ABC):
         Re-fetch with ``get_one`` before any subsequent version-sensitive writes.
 
         :param obj: The object to update/create.
+        """
+
+    @abstractmethod
+    def watch(self) -> Iterator[TPersistable]:
+        """Yield newly inserted persistables, blocking until each one arrives.
+
+        Blocks the calling thread efficiently (OS-level wait, not busy-poll).
+        Each call returns a fresh, infinite iterator; break out of the loop to
+        stop.  Concurrent calls are supported.
+
+        Implementations must not busy-poll: use OS-level blocking (change
+        streams, pub/sub) where available, or timed sleep with an interval of
+        at least 100 ms as a last resort.
+
+        :raise DBConnectionError: if the underlying stream/subscription drops.
         """
 
 

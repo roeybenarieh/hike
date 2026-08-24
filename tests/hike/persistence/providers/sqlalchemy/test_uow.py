@@ -8,6 +8,8 @@ Run with::
 from __future__ import annotations
 
 import json
+import multiprocessing
+from collections.abc import Callable, Iterator
 from typing import Any
 from uuid import UUID
 
@@ -35,7 +37,8 @@ from hike.persistence.repository import OptimisticLockError
 from hike.persistence.uow import UnitOfWork
 
 from tests.hike.conftest import Boat, BoatEngine, Checkpoint, Journey, MotorBoat, Name, Price
-from tests.hike.persistence.providers.parity_suite import RepositoryParitySuite
+from tests.hike.persistence.providers._subprocess_helpers import sa_insert_boat
+from tests.hike.persistence.providers.parity_suite import CrossProcessWatchParitySuite, RepositoryParitySuite
 
 def _json_dumps(obj: Any) -> str:
     return json.dumps(obj, default=str)
@@ -241,7 +244,7 @@ def make_motorboat(name: str, boat_price: float, engine_price: float) -> MotorBo
 # ---------------------------------------------------------------------------
 
 
-class TestSQLAlchemyRepositoryParity(RepositoryParitySuite):
+class TestSQLAlchemyRepositoryParity(RepositoryParitySuite, CrossProcessWatchParitySuite):
     @pytest.fixture
     def uow(self, pg_engine: SAEngine) -> UnitOfWork[Session]:
         factory = sessionmaker(pg_engine)
@@ -255,6 +258,30 @@ class TestSQLAlchemyRepositoryParity(RepositoryParitySuite):
     @pytest.fixture
     def journey_repo(self, pg_engine: SAEngine) -> SQLAlchemyRepository[UUID, Journey]:  # noqa: ARG002
         return SQLAlchemyRepository(Journey, dict_journey_mapper)
+
+    @pytest.fixture
+    def watch_repo(self, pg_engine: SAEngine) -> Iterator[SQLAlchemyRepository[UUID, Boat]]:
+        repo = SQLAlchemyRepository(Boat, dict_boat_mapper)
+        sess = sessionmaker(pg_engine)()
+        repo.session = sess
+        yield repo
+        sess.close()
+
+    @pytest.fixture
+    def cross_process_insert(self, pg_engine: SAEngine) -> Callable[[Boat], None]:
+        sa_url = pg_engine.url.render_as_string(hide_password=False)
+
+        def _insert(boat: Boat) -> None:
+            ctx = multiprocessing.get_context("spawn")
+            p = ctx.Process(
+                target=sa_insert_boat,
+                args=(sa_url, str(boat.name.value), boat.price.value),
+            )
+            p.start()
+            p.join(timeout=10)
+            assert p.exitcode == 0, f"cross-process insert failed with exit code {p.exitcode}"
+
+        return _insert
 
 
 # ---------------------------------------------------------------------------

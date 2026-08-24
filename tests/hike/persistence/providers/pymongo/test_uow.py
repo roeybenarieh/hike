@@ -7,7 +7,9 @@ Run with::
 """
 from __future__ import annotations
 
+import multiprocessing
 import time
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -22,7 +24,8 @@ from hike.persistence.providers.pymongo import PyMongoDBContext, PyMongoReposito
 from hike.persistence.uow import UnitOfWork
 
 from tests.hike.conftest import Boat, Journey
-from tests.hike.persistence.providers.parity_suite import RepositoryParitySuite
+from tests.hike.persistence.providers._subprocess_helpers import pymongo_insert_boat
+from tests.hike.persistence.providers.parity_suite import CrossProcessWatchParitySuite, RepositoryParitySuite
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -101,7 +104,7 @@ def clear_collection(
 # ---------------------------------------------------------------------------
 
 
-class TestPyMongoRepositoryParity(RepositoryParitySuite):
+class TestPyMongoRepositoryParity(RepositoryParitySuite, CrossProcessWatchParitySuite):
     @pytest.fixture
     def uow(self, mongo_context: PyMongoDBContext) -> UnitOfWork[ClientSession]:
         return UnitOfWork(mongo_context)
@@ -113,3 +116,20 @@ class TestPyMongoRepositoryParity(RepositoryParitySuite):
     @pytest.fixture
     def journey_repo(self, journeys_collection: Collection[dict[str, Any]]) -> PyMongoRepository[UUID, Journey]:
         return PyMongoRepository(journeys_collection, Journey)
+
+    @pytest.fixture
+    def cross_process_insert(self, mongo_client: MongoClient[dict[str, Any]]) -> Callable[[Boat], None]:
+        host, port = next(iter(mongo_client.nodes))
+
+        def _insert(boat: Boat) -> None:
+            ctx = multiprocessing.get_context("spawn")
+            p = ctx.Process(
+                target=pymongo_insert_boat,
+                args=(str(host), port, "test_db", "boats",
+                      str(boat.name.value), boat.price.value),
+            )
+            p.start()
+            p.join(timeout=10)
+            assert p.exitcode == 0, f"cross-process insert failed with exit code {p.exitcode}"
+
+        return _insert

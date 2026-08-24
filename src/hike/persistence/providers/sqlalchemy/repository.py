@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import time
+import uuid as _uuid
+from collections.abc import Iterator, Sequence
 from typing import Any, cast, get_origin, get_type_hints
 
-from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select
+from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select, text
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from hike.entity import Entity, Field
@@ -30,6 +32,42 @@ from hike.specifications import ISpecification
 
 from .mappers import DictAutoSQLAlchemyMapper, VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
+
+
+def _drain_notifications(raw: Any, timeout: float = 1.0) -> list[str]:
+    """Return payload strings of all pending database notifications.
+
+    Blocks up to *timeout* seconds if the queue is empty.
+    Supports psycopg3 (``connection.notifies()`` generator) and psycopg2
+    (``connection.notifies`` list, drained via ``select`` + ``poll``).
+    """
+    payloads: list[str] = []
+    if callable(getattr(raw, "notifies", None)):
+        # psycopg3: generator exits after timeout seconds with no events
+        for notification in raw.notifies(timeout=timeout):  # pyright: ignore[reportAny]
+            payloads.append(notification.payload)  # pyright: ignore[reportAny]
+    else:
+        # psycopg2: select + poll
+        import select as _select
+        _select.select([raw], [], [], timeout)
+        raw.poll()  # pyright: ignore[reportAttributeAccessIssue]
+        for notification in list(raw.notifies):  # pyright: ignore[reportAttributeAccessIssue]
+            payloads.append(notification.payload)  # pyright: ignore[reportAny]
+        raw.notifies.clear()  # pyright: ignore[reportAttributeAccessIssue]
+    return payloads
+
+
+def _coerce_pk(payload: str) -> Any:
+    """Parse a NOTIFY payload string back to a Python primary-key value (UUID, int, or str)."""
+    try:
+        return _uuid.UUID(payload)
+    except ValueError:
+        pass
+    try:
+        return int(payload)
+    except ValueError:
+        pass
+    return payload
 
 
 def _build_sa_keyset_filter(
@@ -99,6 +137,34 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
             mapper = DictAutoSQLAlchemyMapper(aggregate_class)  # type: ignore[arg-type]
         self._mapper = mapper
         self._model_class = mapper.get_model(aggregate_class)  # type: ignore[arg-type]
+        self._listen_notify_ok: bool | None = None
+
+    @property
+    def _listen_channel(self) -> str:
+        return f"hike_{self._model_class.__tablename__}_inserts"  # pyright: ignore[reportUnknownMemberType]
+
+    def _probe_listen_notify(self) -> bool:
+        """Return True if the database supports LISTEN/NOTIFY semantics.
+
+        Known dialects are resolved immediately; unknown dialects are probed once
+        with a real LISTEN/UNLISTEN call — result is cached for this instance.
+        """
+        if self._listen_notify_ok is None:
+            dialect = self.session.connection().dialect.name
+            if dialect in {"postgresql"}:
+                self._listen_notify_ok = True
+            elif dialect in {"sqlite", "mysql", "mariadb", "mssql", "oracle"}:
+                self._listen_notify_ok = False
+            else:
+                try:
+                    engine = self.session.connection().engine
+                    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as probe:
+                        probe.execute(text(f"LISTEN {self._listen_channel}"))
+                        probe.execute(text(f"UNLISTEN {self._listen_channel}"))
+                    self._listen_notify_ok = True
+                except Exception:
+                    self._listen_notify_ok = False
+        return self._listen_notify_ok
 
     def _hints(self) -> dict[str, Any]:
         try:
@@ -248,6 +314,11 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
             self.session.flush()
         except Exception as exc:
             raise ResourceAlreadyExistError(obj) from exc
+        if self._probe_listen_notify():
+            self.session.execute(
+                text("SELECT pg_notify(:ch, :pk)"),
+                {"ch": self._listen_channel, "pk": str(getattr(model, "id"))},
+            )
         obj.set_version(getattr(model, VERSION_ATTR))
         self._after_mutate(obj)
         return obj.get_id()  # pyright: ignore[reportReturnType]
@@ -359,6 +430,45 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
                 setattr(model, key, val)
             setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
         self._after_mutate(obj)
+
+    def watch(self) -> Iterator[TPersistable]:
+        if self._probe_listen_notify():
+            yield from self._watch_listen()
+        else:
+            seen_ids: set[Any] = set()
+            for m in self.session.scalars(select(self._model_class)).all():
+                seen_ids.add(getattr(m, "id"))
+            yield from self._watch_poll(seen_ids)
+
+    def _watch_poll(self, seen_ids: set[Any]) -> Iterator[TPersistable]:
+        while True:
+            time.sleep(0.2)
+            new_items: list[TPersistable] = []
+            for m in self.session.scalars(select(self._model_class)).all():
+                obj_id = getattr(m, "id")
+                if obj_id not in seen_ids:
+                    seen_ids.add(obj_id)
+                    new_items.append(self._from_model(m))
+            for item in new_items:
+                yield item
+
+    def _watch_listen(self) -> Iterator[TPersistable]:
+        """Database-native notification watch (PostgreSQL, CockroachDB, etc.).
+
+        save() embeds the inserted PK as the NOTIFY payload; the watcher fetches
+        exactly that row — no full-table scan, no deduplication state.
+        """
+        engine = self.session.connection().engine
+        channel = self._listen_channel
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as listen_conn:
+            listen_conn.execute(text(f"LISTEN {channel}"))
+            raw: Any = cast(Any, listen_conn.connection).driver_connection
+            while True:
+                for payload in _drain_notifications(raw):
+                    pk = _coerce_pk(payload)
+                    model = self.session.get(self._model_class, pk)
+                    if model is not None:
+                        yield self._from_model(model)
 
 
 class SQLAlchemyRepository(

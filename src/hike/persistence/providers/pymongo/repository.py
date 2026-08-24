@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from pymongo import ASCENDING, DESCENDING
@@ -242,6 +242,18 @@ class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]
             session=self._session,
         )
         self._after_mutate(obj)
+
+    def watch(self) -> Iterator[TPersistable]:
+        pipeline = [{"$match": {"operationType": "insert"}}]
+        with self._collection.watch(pipeline, max_await_time_ms=500) as stream:
+            while True:
+                change = stream.try_next()
+                if change is None:
+                    continue
+                doc = change.get("fullDocument")
+                if doc is None:
+                    continue
+                yield self._from_doc(doc)
 
 
 class PyMongoRepository(

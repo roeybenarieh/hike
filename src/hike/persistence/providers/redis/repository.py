@@ -76,6 +76,7 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
         self._client = client
         self._aggregate_class = aggregate_class
         self._key_prefix = key_prefix
+        self._watch_channel = f"{key_prefix}:__hike_inserts__"
 
     def _key(self, raw_id: Any) -> str:
         return f"{self._key_prefix}:{raw_id}"
@@ -96,7 +97,9 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
         key = self._key(obj.get_id())
         if self._client.exists(key):
             raise ResourceAlreadyExistError(obj)
-        self.session.set(key, self._serialize(obj, version=0))
+        serialized = self._serialize(obj, version=0)
+        self.session.set(key, serialized)
+        self.session.publish(self._watch_channel, serialized)  # pyright: ignore[reportUnknownMemberType]
         obj.set_version(0)
         self._after_mutate(obj)
         return obj.get_id()  # pyright: ignore[reportReturnType]
@@ -212,6 +215,21 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
             new_version = 0
         self.session.set(key, self._serialize(obj, version=new_version))
         self._after_mutate(obj)
+
+    def watch(self) -> Iterator[TPersistable]:
+        pubsub = self._client.pubsub()  # pyright: ignore[reportUnknownMemberType]
+        pubsub.subscribe(self._watch_channel)  # pyright: ignore[reportUnknownMemberType]
+        try:
+            while True:
+                msg = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                if msg is None:
+                    continue
+                data: bytes | str | None = cast(Any, msg).get("data")  # pyright: ignore[reportUnknownVariableType]
+                if not isinstance(data, (bytes, str)):
+                    continue
+                yield self._deserialize(data)
+        finally:
+            pubsub.unsubscribe(self._watch_channel)  # pyright: ignore[reportUnknownMemberType]
 
 
 class RedisRepository(

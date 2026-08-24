@@ -13,8 +13,11 @@ same assertions run against every provider.
 """
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
+
 
 import pytest
 
@@ -459,3 +462,84 @@ class RepositoryParitySuite:
                 break
             cursor = page.next_cursor
         assert collected == [50.0, 40.0, 30.0, 20.0, 10.0]
+
+    # ------------------------------------------------------------------
+    # watch
+    # ------------------------------------------------------------------
+
+    @pytest.fixture
+    def watch_repo(self, repo: Any) -> Any:
+        """Repository used by watch() tests. Default: same as repo.
+
+        Override in provider-specific test classes when watch() needs extra
+        setup (e.g. SQLAlchemy requires a session_factory).
+        """
+        return repo
+
+    def test_watch_yields_new_insert(
+        self,
+        uow: UnitOfWork[Any],
+        repo: IRepository[UUID, Boat, Any],
+        watch_repo: IRepository[UUID, Boat, Any],
+    ) -> None:
+        boat = Boat(name=Name("Watcher Boat"), price=Price(42.0))
+        results: list[Boat] = []
+
+        def run_watch() -> None:
+            for item in watch_repo.watch():
+                results.append(item)  # type: ignore[arg-type]
+                break
+
+        thread = threading.Thread(target=run_watch, daemon=True)
+        thread.start()
+
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+
+        thread.join(timeout=8.0)
+        assert not thread.is_alive(), "watch() did not yield an item within 8 s"
+        assert len(results) == 1
+        assert results[0].name == Name("Watcher Boat")
+        assert results[0].price == Price(42.0)
+
+
+class CrossProcessWatchParitySuite:
+    """Parity suite for the cross-process contract of ``IRepository.watch()``.
+
+    InMemory state is process-local and therefore cannot satisfy this contract,
+    so this suite is intentionally separate from ``RepositoryParitySuite``.
+    Concrete test classes for SQLAlchemy, PyMongo, and Redis inherit from
+    **both** ``RepositoryParitySuite`` and this class.
+
+    Subclasses must provide:
+
+    - ``watch_repo`` — a repository whose ``watch()`` is under test (may be
+      the same object as ``repo`` or a separate instance with its own session).
+    - ``cross_process_insert`` — a callable ``(Boat) -> None`` that inserts
+      the given boat from a freshly spawned OS process.
+    """
+
+    def test_watch_cross_process_insert(
+        self,
+        watch_repo: IRepository[UUID, Boat, Any],
+        cross_process_insert: Callable[[Boat], None],
+    ) -> None:
+        """watch() must yield inserts that originate from a separate OS process."""
+        boat = Boat(name=Name("Cross Process Boat"), price=Price(77.0))
+        results: list[Boat] = []
+
+        def run_watch() -> None:
+            for item in watch_repo.watch():
+                results.append(item)  # type: ignore[arg-type]
+                break
+
+        thread = threading.Thread(target=run_watch, daemon=True)
+        thread.start()
+        cross_process_insert(boat)
+
+        thread.join(timeout=10.0)
+        assert not thread.is_alive(), "watch() did not yield a cross-process insert within 10 s"
+        assert len(results) == 1
+        assert results[0].name == Name("Cross Process Boat")
+        assert results[0].price == Price(77.0)

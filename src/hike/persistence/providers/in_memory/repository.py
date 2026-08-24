@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+import queue
+from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from typing import Any, cast
 
@@ -25,6 +26,8 @@ from hike.persistence.repository import (
 )
 from hike.specifications import ISpecification
 
+_WATCH_POLL = 1.0  # seconds — how long each Queue.get() blocks before re-checking the deadline
+
 
 class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Persistable[Any]]]):
     """In-memory repository for any ``Persistable`` object.
@@ -36,6 +39,10 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
     Subclass and mix in ``IAggregateRepository`` to add domain-event collection
     (see ``InMemoryRepository``).
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._insert_queues: list[queue.Queue[TPersistable]] = []
 
     def _prepare_stored_copy(self, copy: TPersistable) -> None:
         """Called on the deep-copied object before it is stored in the session.
@@ -54,6 +61,10 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
         self.session[key] = copy
         obj.set_version(0)
         self._after_mutate(obj)
+        if self._insert_queues:
+            snapshot = deepcopy(obj)
+            for q in self._insert_queues:
+                q.put(snapshot)
         return obj.get_id()  # pyright: ignore[reportReturnType]
 
     def _delete(self, identifier: TId) -> None:
@@ -121,6 +132,19 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
             next_cursor = encode_cursor(field_values, last.get_id())
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
+
+    def watch(self) -> Iterator[TPersistable]:
+        q: queue.Queue[TPersistable] = queue.Queue()
+        self._insert_queues.append(q)
+        try:
+            while True:
+                try:
+                    obj = q.get(timeout=_WATCH_POLL)
+                except queue.Empty:
+                    continue
+                yield obj
+        finally:
+            self._insert_queues.remove(q)
 
     def update(self, obj: TPersistable) -> None:
         key = obj.get_id()
