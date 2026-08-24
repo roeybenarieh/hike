@@ -133,6 +133,18 @@ class RepositoryParitySuite:
     # Error cases
     # ------------------------------------------------------------------
 
+    def test_uuid_id_type_preserved_after_round_trip(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Type Check"), price=Price(1.0))
+        assert isinstance(boat.id.value, UUID), "precondition: Boat ID must be a UUID before save"
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with uow(repo):
+            fetched = repo.get_one(boat.id)
+        assert isinstance(fetched.id.value, UUID), (
+            f"Expected UUID after round-trip, got {type(fetched.id.value).__name__!r}"
+        )
+
     def test_save_duplicate_raises(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
         boat = Boat(name=Name("Twin"), price=Price(50.0))
         with uow(repo):

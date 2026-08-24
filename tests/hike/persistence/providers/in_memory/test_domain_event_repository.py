@@ -7,7 +7,6 @@ from uuid import UUID
 import pytest
 
 from hike.domain_event import DomainEvent
-from hike.entity import EntityID
 from hike.persistence.persistable import Persistable
 from hike.persistence.providers.in_memory import InMemoryPersistableRepository
 from hike.persistence.repository import (
@@ -28,13 +27,12 @@ class TestDomainEventIdAutoGeneration:
         e2 = OrderShipped(order_id="A")
         assert e1.id != e2.id
 
-    def test_id_is_entity_id_wrapping_uuid(self) -> None:
+    def test_id_is_uuid(self) -> None:
         event = OrderShipped(order_id="A")
-        assert isinstance(event.id, EntityID)
-        assert isinstance(event.id.value, UUID)
+        assert isinstance(event.id, UUID)
 
     def test_explicit_id_is_accepted(self) -> None:
-        fixed = EntityID(UUID("12345678-1234-5678-1234-567812345678"))
+        fixed = UUID("12345678-1234-5678-1234-567812345678")
         event = OrderShipped(order_id="A", id=fixed)
         assert event.id == fixed
 
@@ -44,7 +42,7 @@ class TestDomainEventPersistable:
         assert isinstance(OrderShipped(order_id="A"), Persistable)
 
     def test_equality_by_id(self) -> None:
-        fixed_id = EntityID(UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+        fixed_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         e1 = OrderShipped(order_id="X", id=fixed_id)
         e2 = OrderShipped(order_id="Y", id=fixed_id)
         assert e1 == e2
@@ -55,7 +53,7 @@ class TestDomainEventPersistable:
         assert e1 != e2
 
     def test_hashable_by_id(self) -> None:
-        fixed_id = EntityID(UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+        fixed_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
         e1 = OrderShipped(order_id="X", id=fixed_id)
         e2 = OrderShipped(order_id="Y", id=fixed_id)
         assert hash(e1) == hash(e2)

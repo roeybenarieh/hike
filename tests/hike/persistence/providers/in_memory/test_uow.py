@@ -20,8 +20,8 @@ class TestInMemoryRepositoryParity(RepositoryParitySuite):
 
     @pytest.fixture
     def repo(self) -> InMemoryRepository[UUID, Boat]:
-        return InMemoryRepository()
+        return InMemoryRepository[UUID, Boat]()
 
     @pytest.fixture
     def journey_repo(self) -> InMemoryRepository[UUID, Journey]:
-        return InMemoryRepository()
+        return InMemoryRepository[UUID, Journey]()
