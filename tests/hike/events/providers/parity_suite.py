@@ -1,53 +1,46 @@
 """
 Abstract parity test suite for IEventPublisher + IBlockingEventSubscriber.
 
-Every concrete event provider should have a test class that inherits from
-``EventProviderParitySuite`` and supplies the following pytest fixtures:
+Every concrete event provider must have a test class that inherits from
+``EventProviderParitySuite`` and provides the following pytest fixtures:
 
-- ``publisher``  — an ``IEventPublisher[DomainEvent]`` for the provider
-- ``subscriber`` — an ``IBlockingEventSubscriber`` wired to the same channel
+- ``publisher``       — an ``IEventPublisher[DomainEvent]`` wired to the broker
+- ``make_subscriber`` — a *callable* that creates a fresh ``IBlockingEventSubscriber``
+                        each time it is called, always connected to the **same**
+                        broker resource (queue / consumer-group / topic-prefix) so
+                        that multiple instances act as competing consumers.
 
-The base class does **not** declare them — pytest resolves them by name at
-collection time, so subclass fixtures may have any signature without causing
-type errors.
+The base class does **not** declare these fixtures — pytest resolves them by
+name at collection time, so subclass fixtures may accept any additional
+parameters without causing type errors.
 """
 from __future__ import annotations
 
 import threading
 import time
+import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
+from hike.domain_event import DomainEvent
+from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
 
 
-@register_event
 @dataclass(frozen=True)
 class _PingEvent(DomainEvent):
     payload: str
 
 
 class EventProviderParitySuite:
-    """
-    Parity test suite for IEventPublisher + IBlockingEventSubscriber.
-
-    Subclasses must provide ``publisher`` and ``subscriber`` as pytest fixtures
-    wired to the same channel/topic/queue.  The base class does **not** declare
-    them — pytest resolves them by name, so subclass fixtures may accept any
-    additional fixture parameters without causing type-mismatch linting errors.
-    """
 
     def _run_subscriber(
-        self, subscriber: IBlockingEventSubscriber, *, delay: float = 0.15
+        self, subscriber: IBrokerEventSubscriber, *, delay: float = 0.15
     ) -> threading.Thread:
-        """Start *subscriber* in a daemon thread and sleep *delay* seconds.
+        """Start *subscriber* in a daemon thread and return after *delay* seconds.
 
-        The delay gives the subscriber time to register its channel subscription
-        with the broker before the test publishes messages.  All three providers
-        (Redis, RabbitMQ, Kafka) are safe with 0.15 s: Redis/Kafka subscriptions
-        register almost instantly, and RabbitMQ queues are bound before ``start``
-        is even called.  Kafka message retention means late-joining consumers
-        still receive messages published before they joined.
+        The delay lets the subscriber register its broker subscription before
+        the test publishes messages.  All three providers are safe with 0.15 s.
+        Kafka retains messages so late-joining consumers still receive them.
         """
         t = threading.Thread(target=subscriber.start, daemon=True)
         t.start()
@@ -55,23 +48,24 @@ class EventProviderParitySuite:
         return t
 
     # ------------------------------------------------------------------
-    # Tests
+    # Existing smoke tests
     # ------------------------------------------------------------------
 
     def test_publish_then_receive(
         self,
         publisher: IEventPublisher[DomainEvent],
-        subscriber: IBlockingEventSubscriber,
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
     ) -> None:
+        sub = make_subscriber()
         received: list[_PingEvent] = []
 
         class _Handler(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 received.append(event)
-                subscriber.close()
+                sub.close()
 
-        subscriber.subscribe(_Handler())
-        t = self._run_subscriber(subscriber)
+        sub.subscribe(_Handler())  # type: ignore[arg-type]
+        t = self._run_subscriber(sub)
         publisher.publish([_PingEvent(payload="hello")])
         t.join(timeout=30)
 
@@ -82,22 +76,23 @@ class EventProviderParitySuite:
     def test_multiple_handlers_all_called(
         self,
         publisher: IEventPublisher[DomainEvent],
-        subscriber: IBlockingEventSubscriber,
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
     ) -> None:
+        sub = make_subscriber()
         calls: list[str] = []
 
         class _H1(IEventHandler[_PingEvent]):
-            def handle(self, event: _PingEvent) -> None:  # noqa: ARG002
+            def handle(self, event: _PingEvent) -> None:
                 calls.append("h1")
 
         class _H2(IEventHandler[_PingEvent]):
-            def handle(self, event: _PingEvent) -> None:  # noqa: ARG002
+            def handle(self, event: _PingEvent) -> None:
                 calls.append("h2")
-                subscriber.close()
+                sub.close()
 
-        subscriber.subscribe(_H1())
-        subscriber.subscribe(_H2())
-        t = self._run_subscriber(subscriber)
+        sub.subscribe(_H1())  # type: ignore[arg-type]
+        sub.subscribe(_H2())  # type: ignore[arg-type]
+        t = self._run_subscriber(sub)
         publisher.publish([_PingEvent(payload="ping")])
         t.join(timeout=30)
 
@@ -107,32 +102,27 @@ class EventProviderParitySuite:
 
     def test_close_stops_subscriber(
         self,
-        subscriber: IBlockingEventSubscriber,
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
     ) -> None:
-        class _Noop(IEventHandler[DomainEvent]):
-            def handle(self, event: DomainEvent) -> None:  # noqa: ARG002
+        sub = make_subscriber()
+
+        class _Noop(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
                 pass
 
-        subscriber.subscribe(_Noop())
-        t = self._run_subscriber(subscriber)
-        subscriber.close()
+        sub.subscribe(_Noop())  # type: ignore[arg-type]
+        t = self._run_subscriber(sub)
+        sub.close()
         t.join(timeout=10)
         assert not t.is_alive()
 
     def test_handler_failure_does_not_stop_subscriber(
         self,
         publisher: IEventPublisher[DomainEvent],
-        subscriber: IBlockingEventSubscriber,
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
     ) -> None:
-        """A failing handler must not kill the subscriber; the next available message is processed.
-
-        For brokers with persistent storage (Kafka, RabbitMQ) the failed
-        message is redelivered to the same subscriber on the next delivery
-        attempt, so a single published event is sufficient.  For fire-and-forget
-        brokers (Redis) the failed event is permanently lost, so a second event
-        is published after a short delay to give the subscriber something to
-        consume.
-        """
+        """A failing handler must not kill the subscriber loop."""
+        sub = make_subscriber()
         received: list[_PingEvent] = []
         attempts = 0
 
@@ -143,18 +133,154 @@ class EventProviderParitySuite:
                 if attempts == 1:
                     raise RuntimeError("deliberate first-attempt failure")
                 received.append(event)
-                subscriber.close()
+                sub.close()
 
-        subscriber.subscribe(_FlakyHandler())
-        t = self._run_subscriber(subscriber)
+        sub.subscribe(_FlakyHandler())  # type: ignore[arg-type]
+        t = self._run_subscriber(sub)
         publisher.publish([_PingEvent(payload="ping")])
-        # Fire-and-forget brokers drop the failed event; publish a second so
-        # the subscriber has a message to consume on its second attempt.
-        # Brokers with redelivery (Kafka/RabbitMQ) will typically resolve
-        # before this second event arrives, which is harmless.
+        # Publish a second event so the subscriber has something to consume
+        # if the broker does not redeliver the failed message in-session.
         time.sleep(0.3)
         publisher.publish([_PingEvent(payload="ping")])
         t.join(timeout=30)
 
         assert not t.is_alive(), "subscriber did not stop — may have crashed on handler error"
         assert received
+
+    # ------------------------------------------------------------------
+    # Contract 1 — Ack / nack
+    # ------------------------------------------------------------------
+
+    def test_ack_nack_contract(
+        self,
+        publisher: IEventPublisher[DomainEvent],
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
+    ) -> None:
+        """A failing handler must NOT ack the message.
+
+        The message must be held by the broker and redelivered so that a new
+        subscriber (or the same one after a restart) can retry it.  This is
+        verified by running two subscribers sequentially on the same broker
+        resource: the first fails and exits, the second processes successfully.
+        """
+        sub1 = make_subscriber()
+
+        class _FailingHandler(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                sub1.close()
+                raise RuntimeError("deliberate failure — must not ack")
+
+        sub1.subscribe(_FailingHandler())  # type: ignore[arg-type]
+        t1 = self._run_subscriber(sub1)
+        publisher.publish([_PingEvent(payload="retry")])
+        t1.join(timeout=30)
+        assert not t1.is_alive()
+
+        # Give brokers time to make the unacked message available again.
+        # For Redis this must exceed claim_idle_ms of the make_subscriber fixture.
+        time.sleep(0.5)
+
+        received: list[_PingEvent] = []
+        sub2 = make_subscriber()
+
+        class _SuccessHandler(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                received.append(event)
+                sub2.close()
+
+        sub2.subscribe(_SuccessHandler())  # type: ignore[arg-type]
+        t2 = self._run_subscriber(sub2)
+        t2.join(timeout=30)
+
+        assert not t2.is_alive(), "sub2 never received the redelivered message"
+        assert len(received) == 1
+
+    # ------------------------------------------------------------------
+    # Contract 2 — Exclusive in-flight delivery
+    # ------------------------------------------------------------------
+
+    def test_exclusive_inflight_contract(
+        self,
+        publisher: IEventPublisher[DomainEvent],
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
+    ) -> None:
+        """Two concurrent instances must not both process the same message.
+
+        Both subscribers share the same broker resource (queue / consumer
+        group).  Only one must receive the message; the other must never see
+        it, even if both are running at the same time.
+        """
+        sub1 = make_subscriber()
+        sub2 = make_subscriber()
+        processed_by: list[str] = []
+        finished = threading.Event()
+
+        class _H1(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                processed_by.append("sub1")
+                sub1.close()
+                finished.set()
+
+        class _H2(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                processed_by.append("sub2")
+                sub2.close()
+                finished.set()
+
+        sub1.subscribe(_H1())  # type: ignore[arg-type]
+        sub2.subscribe(_H2())  # type: ignore[arg-type]
+        t1 = self._run_subscriber(sub1)
+        t2 = self._run_subscriber(sub2)
+        time.sleep(0.5)  # allow competing-consumer registration to settle
+
+        publisher.publish([_PingEvent(payload="exclusive")])
+        assert finished.wait(timeout=30), "no subscriber processed the message within 30 s"
+        time.sleep(1.0)  # give the losing subscriber time to incorrectly process
+
+        sub1.close()
+        sub2.close()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert len(processed_by) == 1, (
+            f"both subscribers processed the same message: {processed_by}"
+        )
+
+    # ------------------------------------------------------------------
+    # Contract 3 — Deduplication by event id
+    # ------------------------------------------------------------------
+
+    def test_deduplication_contract(
+        self,
+        publisher: IEventPublisher[DomainEvent],
+        make_subscriber: Callable[[], IBrokerEventSubscriber],
+    ) -> None:
+        """Publishing the same event id twice must invoke the handler exactly once.
+
+        The subscriber deduplicates via its in-memory ``_seen_ids`` set.
+        The second broker delivery carries a different broker message ID but
+        the same ``event.id``; the subscriber must skip it.
+        """
+        sub = make_subscriber()
+        call_count = 0
+        first_received = threading.Event()
+
+        class _CountingHandler(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                nonlocal call_count
+                call_count += 1
+                first_received.set()
+
+        sub.subscribe(_CountingHandler())  # type: ignore[arg-type]
+        t = self._run_subscriber(sub)
+
+        shared_id = uuid.uuid4()
+        publisher.publish([_PingEvent(payload="first", id=shared_id)])
+        publisher.publish([_PingEvent(payload="second", id=shared_id)])
+
+        assert first_received.wait(timeout=15), "subscriber did not receive the event"
+        time.sleep(1.5)  # allow the duplicate to arrive and (incorrectly) be processed
+        sub.close()
+        t.join(timeout=5)
+
+        assert call_count == 1, f"expected 1 (dedup), got {call_count}"

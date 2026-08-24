@@ -8,19 +8,19 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 import pytest
 from confluent_kafka import Consumer, Producer  # pyright: ignore[reportMissingModuleSource]
 from testcontainers.community.kafka import KafkaContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
+from hike.domain_event import DomainEvent
+from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.kafka import KafkaEventPublisher, KafkaEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
-@register_event
+
 @dataclass(frozen=True)
 class VesselSailed(DomainEvent):
     vessel_id: str
@@ -34,8 +34,12 @@ class VesselSailed(DomainEvent):
 
 @pytest.fixture(scope="session")
 def kafka_bootstrap() -> Iterator[str]:
-    with KafkaContainer().with_kraft() as kafka:  # pyright: ignore[reportUnknownMemberType]
+    kafka: KafkaContainer = KafkaContainer().with_kraft()  # pyright: ignore[reportUnknownMemberType]
+    kafka.start(timeout=60)  # pyright: ignore[reportUnknownMemberType]
+    try:
         yield str(kafka.get_bootstrap_server())  # pyright: ignore[reportUnknownMemberType]
+    finally:
+        kafka.stop()  # pyright: ignore[reportUnknownMemberType]
 
 
 @pytest.fixture
@@ -123,17 +127,16 @@ class TestKafkaEventSubscriber:
     def test_handler_exception_leaves_offset_uncommitted_for_redelivery(
         self, producer: Producer, kafka_bootstrap: str, topic_prefix: str
     ) -> None:
-        """A failing handler must not commit the offset so the message is redelivered.
+        """Contract 1 (ack/nack): failing handler leaves offset uncommitted.
 
-        Consumer 1 (same group) fails to process the message — offset is not
-        committed.  Consumer 2 (same group, auto.offset.reset=earliest) starts
-        from the same uncommitted position and receives the message again.
+        Consumer 1 (same group) fails → no commit.  Consumer 2 (same group,
+        auto.offset.reset=earliest) starts from the uncommitted position and
+        receives the message again.
         """
         group_id = uuid.uuid4().hex
         publisher = KafkaEventPublisher(producer, topic_prefix=topic_prefix)
         publisher.publish([VesselSailed(vessel_id="v1", destination="Oslo")])
 
-        # Consumer 1: handler raises → no commit.
         consumer1 = _make_consumer(kafka_bootstrap, group_id=group_id)
         subscriber1 = KafkaEventSubscriber(consumer1, topic_prefix=topic_prefix)
 
@@ -142,13 +145,12 @@ class TestKafkaEventSubscriber:
                 subscriber1.close()
                 raise RuntimeError("processing failed — must not commit")
 
-        subscriber1.subscribe(_FailingHandler())
+        subscriber1.subscribe(_FailingHandler())  # type: ignore[arg-type]
         t1 = threading.Thread(target=subscriber1.start, daemon=True)
         t1.start()
         t1.join(timeout=30)
         assert not t1.is_alive()
 
-        # Consumer 2 (same group): should receive the same message again.
         consumer2 = _make_consumer(kafka_bootstrap, group_id=group_id)
         subscriber2 = KafkaEventSubscriber(consumer2, topic_prefix=topic_prefix)
         received: list[VesselSailed] = []
@@ -158,7 +160,7 @@ class TestKafkaEventSubscriber:
                 received.append(event)
                 subscriber2.close()
 
-        subscriber2.subscribe(_SuccessHandler())
+        subscriber2.subscribe(_SuccessHandler())  # type: ignore[arg-type]
         t2 = threading.Thread(target=subscriber2.start, daemon=True)
         t2.start()
         t2.join(timeout=30)
@@ -170,7 +172,7 @@ class TestKafkaEventSubscriber:
     def test_handler_exception_does_not_stop_consumer(
         self, producer: Producer, kafka_bootstrap: str, topic_prefix: str
     ) -> None:
-        """Consumer keeps running after a handler failure — subsequent messages are still processed."""
+        """Consumer keeps running after a handler failure — subsequent messages still processed."""
         publisher = KafkaEventPublisher(producer, topic_prefix=topic_prefix)
         publisher.publish([
             VesselSailed(vessel_id="v1", destination="Fail"),
@@ -188,7 +190,7 @@ class TestKafkaEventSubscriber:
                 received.append(event)
                 subscriber.close()
 
-        subscriber.subscribe(_Handler())
+        subscriber.subscribe(_Handler())  # type: ignore[arg-type]
         t = threading.Thread(target=subscriber.start, daemon=True)
         t.start()
         t.join(timeout=30)
@@ -199,7 +201,7 @@ class TestKafkaEventSubscriber:
 
 
 # ---------------------------------------------------------------------------
-# Parity tests (IEventPublisher + IBlockingEventSubscriber interface)
+# Parity tests (three contracts + smoke tests)
 # ---------------------------------------------------------------------------
 
 
@@ -209,6 +211,14 @@ class TestKafkaEventProviderParity(EventProviderParitySuite):
         return KafkaEventPublisher(producer, topic_prefix=topic_prefix)
 
     @pytest.fixture
-    def subscriber(self, kafka_bootstrap: str, topic_prefix: str) -> IBlockingEventSubscriber:
-        consumer = _make_consumer(kafka_bootstrap)
-        return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
+    def make_subscriber(
+        self, kafka_bootstrap: str, topic_prefix: str
+    ) -> Callable[[], IBrokerEventSubscriber]:
+        """Factory that creates subscribers all sharing the same consumer group."""
+        shared_group_id = uuid.uuid4().hex
+
+        def factory() -> IBrokerEventSubscriber:
+            consumer = _make_consumer(kafka_bootstrap, group_id=shared_group_id)
+            return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
+
+        return factory

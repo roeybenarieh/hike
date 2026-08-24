@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,12 +17,12 @@ import pytest
 from redis import Redis
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.domain_event import DomainEvent, register_event
-from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler, IEventPublisher
+from hike.domain_event import DomainEvent
+from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.redis import RedisEventPublisher, RedisEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
-@register_event
+
 @dataclass(frozen=True)
 class PackageArrived(DomainEvent):
     package_id: str
@@ -54,7 +54,7 @@ def group() -> str:
 def _start_subscriber(subscriber: RedisEventSubscriber) -> threading.Thread:
     t = threading.Thread(target=subscriber.start, daemon=True)
     t.start()
-    time.sleep(0.15)  # allow consumer group creation before publishing
+    time.sleep(0.15)
     return t
 
 
@@ -98,12 +98,7 @@ class TestRedisEventSubscriber:
         stream_prefix: str,
         group: str,
     ) -> None:
-        """A failing handler must not ack the message so it is redelivered from the PEL.
-
-        Consumer group semantics: the first delivery raises, leaving the
-        message unacknowledged in the Pending Entry List.  The subscriber
-        re-reads it on the next iteration and succeeds.
-        """
+        """Contract 1 (ack/nack): failing handler leaves message in PEL → redelivered."""
         subscriber = RedisEventSubscriber(
             redis_client, stream_prefix=stream_prefix, group=group
         )
@@ -115,11 +110,11 @@ class TestRedisEventSubscriber:
                 nonlocal attempts
                 attempts += 1
                 if attempts == 1:
-                    raise RuntimeError("first attempt fails — message must be redelivered")
+                    raise RuntimeError("first attempt fails — message must stay in PEL")
                 received.append(event)
                 subscriber.close()
 
-        subscriber.subscribe(_FlakyHandler())
+        subscriber.subscribe(_FlakyHandler())  # type: ignore[arg-type]
         t = _start_subscriber(subscriber)
 
         publisher = RedisEventPublisher(redis_client, stream_prefix=stream_prefix)
@@ -138,12 +133,7 @@ class TestRedisEventSubscriber:
         stream_prefix: str,
         group: str,
     ) -> None:
-        """Consumer keeps running after a handler failure.
-
-        P1 fails on first delivery (nacked, requeued to PEL); P2 succeeds.
-        P1 is redelivered from the PEL and also succeeds.  Both messages end
-        up in *received*.
-        """
+        """Consumer keeps running after a handler failure."""
         subscriber = RedisEventSubscriber(
             redis_client, stream_prefix=stream_prefix, group=group
         )
@@ -161,7 +151,7 @@ class TestRedisEventSubscriber:
                 if len(received) == 2:
                     subscriber.close()
 
-        subscriber.subscribe(_Handler())
+        subscriber.subscribe(_Handler())  # type: ignore[arg-type]
         t = _start_subscriber(subscriber)
 
         publisher = RedisEventPublisher(redis_client, stream_prefix=stream_prefix)
@@ -176,9 +166,77 @@ class TestRedisEventSubscriber:
         assert len(received) == 2
         assert {e.package_id for e in received} == {"P1", "P2"}
 
+    def test_failover_via_xautoclaim(
+        self,
+        redis_client: Redis,  # type: ignore[type-arg]
+        stream_prefix: str,
+        group: str,
+    ) -> None:
+        """Contract 2 (failover): crashed consumer's in-flight message is claimed by a peer.
+
+        Sub1's handler blocks indefinitely — the message stays unacked in sub1's
+        Pending Entry List.  Sub2 (same group, short claim_idle_ms) calls
+        XAUTOCLAIM and steals the idle message, then processes it successfully.
+        """
+        claim_idle_ms = 200
+
+        sub1 = RedisEventSubscriber(
+            redis_client,
+            stream_prefix=stream_prefix,
+            group=group,
+            consumer="consumer-1",
+            claim_idle_ms=claim_idle_ms,
+        )
+        sub2 = RedisEventSubscriber(
+            redis_client,
+            stream_prefix=stream_prefix,
+            group=group,
+            consumer="consumer-2",
+            claim_idle_ms=claim_idle_ms,
+        )
+
+        sub1_received = threading.Event()
+        sub2_received = threading.Event()
+
+        class _BlockingHandler(IEventHandler[PackageArrived]):
+            def handle(self, event: PackageArrived) -> None:
+                sub1_received.set()
+                # Block until the test is over — message stays unacked in PEL.
+                time.sleep(30)
+
+        class _RecoveryHandler(IEventHandler[PackageArrived]):
+            def handle(self, event: PackageArrived) -> None:
+                sub2_received.set()
+                sub2.close()
+
+        sub1.subscribe(_BlockingHandler())  # type: ignore[arg-type]
+        sub2.subscribe(_RecoveryHandler())  # type: ignore[arg-type]
+
+        # Start sub1 first so it creates the consumer group.
+        t1 = _start_subscriber(sub1)
+
+        publisher = RedisEventPublisher(redis_client, stream_prefix=stream_prefix)
+        publisher.publish([PackageArrived(package_id="P1", location="Paris")])
+
+        # Wait for sub1 to receive the message (its handler will then block).
+        assert sub1_received.wait(timeout=10), "sub1 did not receive the message"
+
+        # Wait longer than claim_idle_ms so the message is eligible for claiming.
+        time.sleep(0.4)
+
+        # Start sub2 — it should XAUTOCLAIM the idle message from sub1's PEL.
+        t2 = _start_subscriber(sub2)
+        assert sub2_received.wait(timeout=10), (
+            "sub2 did not recover the message via XAUTOCLAIM within 10 s"
+        )
+
+        sub1.close()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
 
 # ---------------------------------------------------------------------------
-# Parity tests (IEventPublisher + IBlockingEventSubscriber interface)
+# Parity tests (three contracts + smoke tests)
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +248,24 @@ class TestRedisEventProviderParity(EventProviderParitySuite):
         return RedisEventPublisher(redis_client, stream_prefix=stream_prefix)
 
     @pytest.fixture
-    def subscriber(
-        self, redis_client: Redis, stream_prefix: str, group: str  # type: ignore[type-arg]
-    ) -> IBlockingEventSubscriber:
-        return RedisEventSubscriber(redis_client, stream_prefix=stream_prefix, group=group)
+    def make_subscriber(
+        self,
+        redis_client: Redis,  # type: ignore[type-arg]
+        stream_prefix: str,
+        group: str,
+    ) -> Callable[[], IBrokerEventSubscriber]:
+        """Factory that creates subscribers all sharing the same consumer group.
+
+        claim_idle_ms=200 ensures the ack/nack contract test (which sleeps 0.5 s
+        between sub1 and sub2) can rely on XAUTOCLAIM to reclaim sub1's idle
+        message.
+        """
+        def factory() -> IBrokerEventSubscriber:
+            return RedisEventSubscriber(
+                redis_client,
+                stream_prefix=stream_prefix,
+                group=group,
+                claim_idle_ms=200,
+            )
+
+        return factory
