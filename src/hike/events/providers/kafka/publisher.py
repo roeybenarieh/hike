@@ -4,7 +4,9 @@ from typing import Iterable
 
 from confluent_kafka import KafkaError, KafkaException, Producer
 
-from hike.domain_event import DomainEvent, serialize_event
+import json
+
+from hike.domain_event import DomainEvent
 from hike.events.interfaces import IEventPublisher
 
 
@@ -30,7 +32,8 @@ class KafkaEventPublisher(IEventPublisher[DomainEvent]):
                 delivery_errors.append(err)
 
         for event in events:
-            event_type, json_data = serialize_event(event)
+            event_type = event.event_name
+            json_data = json.dumps(event.to_dict(), default=str)
             topic = f"{self._topic_prefix}.{event_type}"
             self._producer.produce(
                 topic,

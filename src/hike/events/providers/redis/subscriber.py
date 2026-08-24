@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from typing import Any, cast
@@ -7,9 +8,7 @@ from typing import Any, cast
 from redis import Redis
 from redis.exceptions import ResponseError
 
-from hike.domain_event import DomainEvent, deserialize_event
-from hike.events.interfaces import IBlockingEventSubscriber, IEventHandler
-from hike.events.utils import event_type_for
+from hike.events.interfaces import IBrokerEventSubscriber
 
 _log = logging.getLogger(__name__)
 
@@ -26,31 +25,24 @@ def _decode(val: Any, default: str = "") -> str:
     return str(val)
 
 
-class RedisEventSubscriber(IBlockingEventSubscriber):
+class RedisEventSubscriber(IBrokerEventSubscriber):
     """Receives domain events from Redis Streams using a consumer group.
 
     Call :meth:`subscribe` for each handler, then :meth:`start` to begin
     consuming (blocking).  Each event type is read from its own stream
     ``{stream_prefix}.{EventTypeName}`` via the configured consumer group.
 
+    Multiple instances of the same subscriber class share the same consumer
+    group by default (competing consumers): each message is delivered to
+    exactly one instance.  If an instance crashes before acknowledging a
+    message, the message sits in its Pending Entry List (PEL).  After
+    *claim_idle_ms* milliseconds of inactivity, any surviving instance
+    automatically reclaims and reprocesses those stranded messages via
+    ``XAUTOCLAIM``.  Pass an explicit *group* name to override the default.
+
     **Ack/nack:** a message is acknowledged with ``XACK`` only after **all**
     registered handlers complete without raising.  If any handler raises, the
-    message is left in the consumer's Pending Entry List (PEL) and redelivered
-    on the next iteration of the poll loop.  This matches the at-least-once
-    delivery guarantee provided by :class:`KafkaEventSubscriber` and
-    :class:`RabbitMQEventSubscriber`.
-
-    **Consumer groups:** the *group* parameter names the consumer group.
-    Multiple subscriber instances with the same *group* share the message load
-    (each message is delivered to exactly one consumer in the group).  Use
-    different *group* names for independent subscribers that each need a full
-    copy of every message.
-
-    The consumer group is created with ``MKSTREAM`` and ``id="$"`` on first
-    :meth:`start`, so only messages published *after* the subscriber starts are
-    delivered.  If the group already exists (e.g., on restart), the subscriber
-    resumes from the last acknowledged position and first re-delivers any
-    pending (unacknowledged) messages.
+    message is left in the PEL and redelivered on the next poll iteration.
 
     Install with: ``pip install hike[redis]``
     """
@@ -59,19 +51,20 @@ class RedisEventSubscriber(IBlockingEventSubscriber):
         self,
         client: Redis,  # type: ignore[type-arg]
         stream_prefix: str = "hike",
-        group: str = "hike.consumers",
+        group: str = "",
         consumer: str | None = None,
+        claim_idle_ms: int = 30_000,
     ) -> None:
+        super().__init__()
         self._client = client
         self._stream_prefix = stream_prefix
-        self._group = group
+        # Default group name is derived from the concrete class so that all
+        # instances of the same subscriber class share one group (competing
+        # consumers) while different subscriber classes stay isolated.
+        self._group = group or f"hike.consumer.{type(self).__name__}"
         self._consumer = consumer or uuid.uuid4().hex
-        self._handlers: dict[str, list[IEventHandler[DomainEvent]]] = {}
+        self._claim_idle_ms = claim_idle_ms
         self._running = False
-
-    def subscribe[TEvent: DomainEvent](self, event_handler: IEventHandler[TEvent]) -> None:
-        event_type = event_type_for(event_handler)
-        self._handlers.setdefault(event_type.__name__, []).append(event_handler)  # type: ignore[arg-type]
 
     def _stream_key(self, event_type_name: str) -> str:
         return f"{self._stream_prefix}.{event_type_name}"
@@ -82,10 +75,15 @@ class RedisEventSubscriber(IBlockingEventSubscriber):
             raw_fields: Any = entry[1]
             fields: dict[str, str] = {_decode(k): _decode(v) for k, v in raw_fields.items()}
             event_type_name = fields.get("event_type", "")
-            event = deserialize_event(event_type_name, fields.get("data", "{}"))
+            event = self._event_classes[event_type_name].from_dict(json.loads(fields.get("data", "{}")))
+            if event.id in self._seen_ids:
+                self._client.xack(stream_key, self._group, msg_id)  # pyright: ignore[reportUnknownMemberType]
+                _log.debug("Duplicate event %s skipped", event.id)
+                continue
             try:
                 for handler in self._handlers.get(event_type_name, []):
                     handler.handle(event)
+                self._seen_ids.add(event.id)
                 self._client.xack(stream_key, self._group, msg_id)  # pyright: ignore[reportUnknownMemberType]
             except Exception:
                 _log.exception(
@@ -103,11 +101,26 @@ class RedisEventSubscriber(IBlockingEventSubscriber):
             except ResponseError:
                 pass  # BUSYGROUP: group already exists, resume from last committed position
 
-        stream_keys = {self._stream_key(name) for name in self._handlers}
+        stream_keys = [self._stream_key(name) for name in self._handlers]
         self._running = True
         try:
             while self._running:
-                # Re-deliver any previously unacknowledged messages before reading new ones.
+                # Reclaim messages from crashed peers that have been idle too long.
+                for stream_key in stream_keys:
+                    claimed: Any = self._client.xautoclaim(  # pyright: ignore[reportUnknownMemberType]
+                        stream_key,
+                        self._group,
+                        self._consumer,
+                        min_idle_time=self._claim_idle_ms,
+                        start_id="0-0",
+                        count=10,
+                    )
+                    # xautoclaim returns (next_start_id, entries, deleted_ids)
+                    claimed_entries: list[Any] = claimed[1]
+                    if claimed_entries:
+                        self._dispatch(stream_key, claimed_entries)
+
+                # Re-deliver any of OUR own previously unacknowledged messages.
                 pending = cast(
                     _XReadResponse,
                     self._client.xreadgroup(  # pyright: ignore[reportUnknownMemberType]

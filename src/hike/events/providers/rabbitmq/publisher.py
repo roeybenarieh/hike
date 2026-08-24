@@ -5,7 +5,9 @@ from typing import Iterable
 import pika
 from pika.adapters.blocking_connection import BlockingChannel
 
-from hike.domain_event import DomainEvent, serialize_event
+import json
+
+from hike.domain_event import DomainEvent
 from hike.events.interfaces import IEventPublisher
 
 
@@ -37,7 +39,8 @@ class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
 
     def publish(self, events: Iterable[DomainEvent]) -> None:
         for event in events:
-            event_type, json_data = serialize_event(event)
+            event_type = event.event_name
+            json_data = json.dumps(event.to_dict(), default=str)
             self._channel.basic_publish(
                 exchange=self._exchange,
                 routing_key=event_type,
