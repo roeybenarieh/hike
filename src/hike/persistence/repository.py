@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Generic, TypeVar, overload, final
 
 from hike import Aggregate
@@ -72,6 +72,17 @@ class IRepository(Generic[TId, TPersistable, TSession], ABC):
         :param obj: The object to save.
         :raise ResourceAlreadyExistError: if an object with the same id already exists.
         """
+
+    def save_many(self, objs: Iterable[TPersistable]) -> list[TId]:
+        """Save multiple new objects.
+
+        Delegates to :meth:`save` for each object in order.  Stops at the
+        first conflict — objects before it are already persisted.
+
+        :param objs: The objects to save.
+        :raise ResourceAlreadyExistError: if any object with the same id already exists.
+        """
+        return [self.save(obj) for obj in objs]
 
     @overload
     def delete(self, identifier: TId, /) -> None:

@@ -72,6 +72,27 @@ class RepositoryParitySuite:
         assert fetched.name == Name("Sea Spirit")
         assert fetched.price == Price(4_999.99)
 
+    def test_save_many_and_get_each(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boats = [Boat(name=Name(n), price=Price(p)) for n, p in [("X", 1.0), ("Y", 2.0), ("Z", 3.0)]]
+        with uow(repo):
+            ids = repo.save_many(boats)
+            uow.commit()
+        assert len(ids) == 3
+        with uow(repo):
+            for boat in boats:
+                fetched = repo.get_one(boat.get_id())
+                assert fetched.name == boat.name
+
+    def test_save_many_raises_on_duplicate(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Dup"), price=Price(1.0))
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with pytest.raises(ResourceAlreadyExistError):
+            with uow(repo):
+                repo.save_many([Boat(name=Name("New"), price=Price(2.0)), boat])
+                uow.commit()
+
     def test_update(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
         boat = Boat(name=Name("Old Name"), price=Price(100.0))
         with uow(repo):
@@ -561,39 +582,6 @@ class RepositoryParitySuite:
         assert not thread.is_alive(), "watch(include_existing=True) did not yield 2 items within 8 s"
         assert len(results) == 2
         assert {r.name for r in results} == {Name("Existing"), Name("New")}
-
-    # ------------------------------------------------------------------
-    # is_modified / refresh
-    # ------------------------------------------------------------------
-
-    def test_is_modified_false_after_save(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
-        boat = Boat(name=Name("Fresh"), price=Price(1.0))
-        with uow(repo):
-            repo.save(boat)
-            uow.commit()
-        with uow(repo):
-            assert repo.is_modified(boat) is False
-
-    def test_is_modified_true_after_external_update(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
-        boat = Boat(name=Name("Stale"), price=Price(1.0))
-        with uow(repo):
-            repo.save(boat)
-            uow.commit()
-        with uow(repo):
-            copy = repo.get_one(boat.get_id())
-            copy.price = Price(2.0)
-            repo.update(copy)
-            uow.commit()
-        with uow(repo):
-            assert repo.is_modified(boat) is True
-
-    def test_is_modified_raises_for_nonexistent(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
-        ghost = Boat(name=Name("Ghost"), price=Price(1.0))
-        with uow(repo):
-            with pytest.raises(ResourceDoesNotExistError):
-                repo.is_modified(ghost)
-
-
 
     # ------------------------------------------------------------------
     # is_modified / refresh
