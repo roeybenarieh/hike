@@ -133,14 +133,22 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
-    def watch(self) -> Iterator[TPersistable]:
+    def watch(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
         q: queue.Queue[TPersistable] = queue.Queue()
         self._insert_queues.append(q)
         try:
+            seen: set[Any] = set()
+            if include_existing:
+                for obj in list(self.session.values()):
+                    seen.add(obj.get_id())
+                    yield deepcopy(cast(TPersistable, obj))
             while True:
                 try:
                     obj = q.get(timeout=_WATCH_POLL)
                 except queue.Empty:
+                    continue
+                if obj.get_id() in seen:
+                    seen.discard(obj.get_id())
                     continue
                 yield obj
         finally:
@@ -159,6 +167,12 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
         self.session[key] = copy
         obj.set_version(obj.get_version() + 1)
         self._after_mutate(obj)
+
+    def is_modified(self, obj: TPersistable) -> bool:
+        stored = cast(TPersistable | None, self.session.get(obj.get_id()))
+        if stored is None:
+            raise ResourceDoesNotExistError(obj)
+        return stored.get_version() != obj.get_version()
 
     def count(self, specification: ISpecification) -> int:
         return sum(1 for obj in self.session.values() if specification.is_satisfied(obj))

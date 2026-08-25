@@ -208,10 +208,14 @@ class IRepository(Generic[TId, TPersistable, TSession], ABC):
         """
 
     @abstractmethod
-    def watch(self) -> Iterator[TPersistable]:
-        """Yield newly inserted persistables, blocking until each one arrives.
+    def watch(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
+        """Yield persistables as they are inserted, blocking until each one arrives.
 
-        Blocks the calling thread efficiently (OS-level wait, not busy-poll).
+        When *include_existing* is True, all records currently in the database
+        are yielded first, then streaming continues for new inserts.  Each
+        record is yielded exactly once — inserts that arrive concurrently
+        during the initial scan are deduplicated by ID.
+
         Each call returns a fresh, infinite iterator; break out of the loop to
         stop.  Concurrent calls are supported.
 
@@ -219,7 +223,24 @@ class IRepository(Generic[TId, TPersistable, TSession], ABC):
         streams, pub/sub) where available, or timed sleep with an interval of
         at least 100 ms as a last resort.
 
+        Example::
+
+            for order in repo.watch():
+                process(order)   # called for each new insert; break to stop
+
         :raise DBConnectionError: if the underlying stream/subscription drops.
+        """
+
+    @abstractmethod
+    def is_modified(self, obj: TPersistable) -> bool:
+        """Return True if the database version of *obj* differs from its local version.
+
+        A True result means another writer has updated the record since *obj*
+        was last read.  Callers should re-fetch before any subsequent
+        version-sensitive writes.
+
+        :param obj: The object whose version to check.
+        :raise ResourceDoesNotExistError: if the object does not exist in the database.
         """
 
 

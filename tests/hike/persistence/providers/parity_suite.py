@@ -503,6 +503,130 @@ class RepositoryParitySuite:
         assert results[0].name == Name("Watcher Boat")
         assert results[0].price == Price(42.0)
 
+    def test_watch_include_existing_yields_preexisting(
+        self,
+        uow: UnitOfWork[Any],
+        repo: IRepository[UUID, Boat, Any],
+        watch_repo: IRepository[UUID, Boat, Any],
+    ) -> None:
+        boat_a = Boat(name=Name("Alpha"), price=Price(1.0))
+        boat_b = Boat(name=Name("Beta"), price=Price(2.0))
+        with uow(repo):
+            repo.save(boat_a)
+            repo.save(boat_b)
+            uow.commit()
+
+        results: list[Boat] = []
+
+        def run_watch() -> None:
+            for item in watch_repo.watch(include_existing=True):
+                results.append(item)  # type: ignore[arg-type]
+                if len(results) == 2:
+                    break
+
+        thread = threading.Thread(target=run_watch, daemon=True)
+        thread.start()
+        thread.join(timeout=8.0)
+        assert not thread.is_alive(), "watch(include_existing=True) did not yield existing items within 8 s"
+        assert {r.name for r in results} == {Name("Alpha"), Name("Beta")}
+
+    def test_watch_include_existing_no_duplicates(
+        self,
+        uow: UnitOfWork[Any],
+        repo: IRepository[UUID, Boat, Any],
+        watch_repo: IRepository[UUID, Boat, Any],
+    ) -> None:
+        existing = Boat(name=Name("Existing"), price=Price(1.0))
+        with uow(repo):
+            repo.save(existing)
+            uow.commit()
+
+        new_boat = Boat(name=Name("New"), price=Price(2.0))
+        results: list[Boat] = []
+
+        def run_watch() -> None:
+            for item in watch_repo.watch(include_existing=True):
+                results.append(item)  # type: ignore[arg-type]
+                if len(results) == 2:
+                    break
+
+        thread = threading.Thread(target=run_watch, daemon=True)
+        thread.start()
+
+        with uow(repo):
+            repo.save(new_boat)
+            uow.commit()
+
+        thread.join(timeout=8.0)
+        assert not thread.is_alive(), "watch(include_existing=True) did not yield 2 items within 8 s"
+        assert len(results) == 2
+        assert {r.name for r in results} == {Name("Existing"), Name("New")}
+
+    # ------------------------------------------------------------------
+    # is_modified / refresh
+    # ------------------------------------------------------------------
+
+    def test_is_modified_false_after_save(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Fresh"), price=Price(1.0))
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with uow(repo):
+            assert repo.is_modified(boat) is False
+
+    def test_is_modified_true_after_external_update(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Stale"), price=Price(1.0))
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with uow(repo):
+            copy = repo.get_one(boat.get_id())
+            copy.price = Price(2.0)
+            repo.update(copy)
+            uow.commit()
+        with uow(repo):
+            assert repo.is_modified(boat) is True
+
+    def test_is_modified_raises_for_nonexistent(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        ghost = Boat(name=Name("Ghost"), price=Price(1.0))
+        with uow(repo):
+            with pytest.raises(ResourceDoesNotExistError):
+                repo.is_modified(ghost)
+
+
+
+    # ------------------------------------------------------------------
+    # is_modified / refresh
+    # ------------------------------------------------------------------
+
+    def test_is_modified_false_after_save(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Fresh"), price=Price(1.0))
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with uow(repo):
+            assert repo.is_modified(boat) is False
+
+    def test_is_modified_true_after_external_update(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        boat = Boat(name=Name("Stale"), price=Price(1.0))
+        with uow(repo):
+            repo.save(boat)
+            uow.commit()
+        with uow(repo):
+            copy = repo.get_one(boat.get_id())
+            copy.price = Price(2.0)
+            repo.update(copy)
+            uow.commit()
+        with uow(repo):
+            assert repo.is_modified(boat) is True
+
+    def test_is_modified_raises_for_nonexistent(self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]) -> None:
+        ghost = Boat(name=Name("Ghost"), price=Price(1.0))
+        with uow(repo):
+            with pytest.raises(ResourceDoesNotExistError):
+                repo.is_modified(ghost)
+
+
 
 class CrossProcessWatchParitySuite:
     """Parity suite for the cross-process contract of ``IRepository.watch()``.

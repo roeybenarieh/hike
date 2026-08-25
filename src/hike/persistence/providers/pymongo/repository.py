@@ -211,6 +211,16 @@ class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
+    def is_modified(self, obj: TPersistable) -> bool:
+        doc = self._collection.find_one(
+            {"id": obj.get_id()},
+            {"__hike_version": 1},
+            session=self._session,
+        )
+        if doc is None:
+            raise ResourceDoesNotExistError(obj)
+        return doc.get("__hike_version", 0) != obj.get_version()
+
     def update(self, obj: TPersistable) -> None:
         v = obj.get_version()
         new_doc = {**obj.to_dict(), "__hike_version": v + 1}
@@ -243,15 +253,24 @@ class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]
         )
         self._after_mutate(obj)
 
-    def watch(self) -> Iterator[TPersistable]:
+    def watch(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
         pipeline = [{"$match": {"operationType": "insert"}}]
         with self._collection.watch(pipeline, max_await_time_ms=500) as stream:
+            seen: set[Any] = set()
+            if include_existing:
+                for doc in self._collection.find({}):
+                    seen.add(doc.get("id"))
+                    yield self._from_doc(doc)
             while True:
                 change = stream.try_next()
                 if change is None:
                     continue
                 doc = change.get("fullDocument")
                 if doc is None:
+                    continue
+                doc_id = doc.get("id")
+                if doc_id in seen:
+                    seen.discard(doc_id)
                     continue
                 yield self._from_doc(doc)
 

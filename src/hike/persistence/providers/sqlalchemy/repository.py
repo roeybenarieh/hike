@@ -402,6 +402,12 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
+    def is_modified(self, obj: TPersistable) -> bool:
+        model = self.session.get(self._model_class, obj.get_id())
+        if model is None:
+            raise ResourceDoesNotExistError(obj)
+        return getattr(model, VERSION_ATTR) != obj.get_version()
+
     def count(self, specification: ISpecification) -> int:
         visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)  # type: ignore[arg-type]
         specification.accept(visitor)
@@ -431,13 +437,16 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
             setattr(model, VERSION_ATTR, getattr(model, VERSION_ATTR) + 1)
         self._after_mutate(obj)
 
-    def watch(self) -> Iterator[TPersistable]:
+    def watch(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
         if self._probe_listen_notify():
-            yield from self._watch_listen()
+            yield from self._watch_listen(include_existing=include_existing)
         else:
             seen_ids: set[Any] = set()
             for m in self.session.scalars(select(self._model_class)).all():
-                seen_ids.add(getattr(m, "id"))
+                obj_id = getattr(m, "id")
+                if include_existing:
+                    yield self._from_model(m)
+                seen_ids.add(obj_id)
             yield from self._watch_poll(seen_ids)
 
     def _watch_poll(self, seen_ids: set[Any]) -> Iterator[TPersistable]:
@@ -452,7 +461,7 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
             for item in new_items:
                 yield item
 
-    def _watch_listen(self) -> Iterator[TPersistable]:
+    def _watch_listen(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
         """Database-native notification watch (PostgreSQL, CockroachDB, etc.).
 
         save() embeds the inserted PK as the NOTIFY payload; the watcher fetches
@@ -463,9 +472,18 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as listen_conn:
             listen_conn.execute(text(f"LISTEN {channel}"))
             raw: Any = cast(Any, listen_conn.connection).driver_connection
+            seen: set[Any] = set()
+            if include_existing:
+                for m in self.session.scalars(select(self._model_class)).all():
+                    pk = getattr(m, "id")
+                    seen.add(pk)
+                    yield self._from_model(m)
             while True:
                 for payload in _drain_notifications(raw):
                     pk = _coerce_pk(payload)
+                    if pk in seen:
+                        seen.discard(pk)
+                        continue
                     model = self.session.get(self._model_class, pk)
                     if model is not None:
                         yield self._from_model(model)

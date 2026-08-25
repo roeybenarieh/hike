@@ -184,6 +184,14 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
 
         return Page(items=page_items, total=None, has_next=has_next, next_cursor=next_cursor)
 
+    def is_modified(self, obj: TPersistable) -> bool:
+        key = self._key(obj.get_id())
+        raw = cast(bytes | None, self._client.get(key))
+        if raw is None:
+            raise ResourceDoesNotExistError(obj)
+        stored_version: int = json.loads(raw, object_hook=_aggregate_object_hook).get("__hike_version", 0)
+        return stored_version != obj.get_version()
+
     def update(self, obj: TPersistable) -> None:
         key = self._key(obj.get_id())
         raw = cast(bytes | None, self._client.get(key))
@@ -216,10 +224,18 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
         self.session.set(key, self._serialize(obj, version=new_version))
         self._after_mutate(obj)
 
-    def watch(self) -> Iterator[TPersistable]:
+    def watch(self, *, include_existing: bool = False) -> Iterator[TPersistable]:
         pubsub = self._client.pubsub()  # pyright: ignore[reportUnknownMemberType]
         pubsub.subscribe(self._watch_channel)  # pyright: ignore[reportUnknownMemberType]
         try:
+            seen: set[Any] = set()
+            if include_existing:
+                for key in cast(Iterator[bytes], self._client.scan_iter(f"{self._key_prefix}:*")):  # pyright: ignore[reportUnknownMemberType]
+                    raw = cast(bytes | None, self._client.get(key))
+                    if raw is not None:
+                        obj = self._deserialize(raw)
+                        seen.add(obj.get_id())
+                        yield obj
             while True:
                 msg = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
                 if msg is None:
@@ -227,7 +243,12 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
                 data: bytes | str | None = cast(Any, msg).get("data")  # pyright: ignore[reportUnknownVariableType]
                 if not isinstance(data, (bytes, str)):
                     continue
-                yield self._deserialize(data)
+                obj = self._deserialize(data)
+                obj_id = obj.get_id()
+                if obj_id in seen:
+                    seen.discard(obj_id)
+                    continue
+                yield obj
         finally:
             pubsub.unsubscribe(self._watch_channel)  # pyright: ignore[reportUnknownMemberType]
 
