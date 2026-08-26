@@ -18,7 +18,7 @@ from redis import Redis
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.domain_event import DomainEvent
-from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
+from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.redis import RedisEventPublisher, RedisEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
@@ -112,7 +112,7 @@ class TestRedisEventSubscriber:
                 if attempts == 1:
                     raise RuntimeError("first attempt fails — message must stay in PEL")
                 received.append(event)
-                subscriber.close()
+                subscriber.cleanup()
 
         subscriber.subscribe(_FlakyHandler())  # type: ignore[arg-type]
         t = _start_subscriber(subscriber)
@@ -149,7 +149,7 @@ class TestRedisEventSubscriber:
                     raise RuntimeError("fail P1 first time")
                 received.append(event)
                 if len(received) == 2:
-                    subscriber.close()
+                    subscriber.cleanup()
 
         subscriber.subscribe(_Handler())  # type: ignore[arg-type]
         t = _start_subscriber(subscriber)
@@ -207,7 +207,7 @@ class TestRedisEventSubscriber:
         class _RecoveryHandler(IEventHandler[PackageArrived]):
             def handle(self, event: PackageArrived) -> None:
                 sub2_received.set()
-                sub2.close()
+                sub2.cleanup()
 
         sub1.subscribe(_BlockingHandler())  # type: ignore[arg-type]
         sub2.subscribe(_RecoveryHandler())  # type: ignore[arg-type]
@@ -230,7 +230,7 @@ class TestRedisEventSubscriber:
             "sub2 did not recover the message via XAUTOCLAIM within 10 s"
         )
 
-        sub1.close()
+        sub1.cleanup()
         t1.join(timeout=5)
         t2.join(timeout=5)
 
@@ -253,14 +253,14 @@ class TestRedisEventProviderParity(EventProviderParitySuite):
         redis_client: Redis,  # type: ignore[type-arg]
         stream_prefix: str,
         group: str,
-    ) -> Callable[[], IBrokerEventSubscriber]:
+    ) -> Callable[[], IExternalEventSubscriber]:
         """Factory that creates subscribers all sharing the same consumer group.
 
         claim_idle_ms=200 ensures the ack/nack contract test (which sleeps 0.5 s
         between sub1 and sub2) can rely on XAUTOCLAIM to reclaim sub1's idle
         message.
         """
-        def factory() -> IBrokerEventSubscriber:
+        def factory() -> IExternalEventSubscriber:
             return RedisEventSubscriber(
                 redis_client,
                 stream_prefix=stream_prefix,

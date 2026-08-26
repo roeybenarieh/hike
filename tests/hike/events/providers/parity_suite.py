@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from hike.domain_event import DomainEvent
-from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
+from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class _PingEvent(DomainEvent):
 class EventProviderParitySuite:
 
     def _run_subscriber(
-        self, subscriber: IBrokerEventSubscriber, *, delay: float = 0.15
+        self, subscriber: IExternalEventSubscriber, *, delay: float = 0.15
     ) -> threading.Thread:
         """Start *subscriber* in a daemon thread and return after *delay* seconds.
 
@@ -54,7 +54,7 @@ class EventProviderParitySuite:
     def test_publish_then_receive(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         sub = make_subscriber()
         received: list[_PingEvent] = []
@@ -62,7 +62,7 @@ class EventProviderParitySuite:
         class _Handler(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 received.append(event)
-                sub.close()
+                sub.cleanup()
 
         sub.subscribe(_Handler())  # type: ignore[arg-type]
         t = self._run_subscriber(sub)
@@ -76,7 +76,7 @@ class EventProviderParitySuite:
     def test_multiple_handlers_all_called(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         sub = make_subscriber()
         calls: list[str] = []
@@ -88,7 +88,7 @@ class EventProviderParitySuite:
         class _H2(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 calls.append("h2")
-                sub.close()
+                sub.cleanup()
 
         sub.subscribe(_H1())  # type: ignore[arg-type]
         sub.subscribe(_H2())  # type: ignore[arg-type]
@@ -102,7 +102,7 @@ class EventProviderParitySuite:
 
     def test_close_stops_subscriber(
         self,
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         sub = make_subscriber()
 
@@ -112,14 +112,14 @@ class EventProviderParitySuite:
 
         sub.subscribe(_Noop())  # type: ignore[arg-type]
         t = self._run_subscriber(sub)
-        sub.close()
+        sub.cleanup()
         t.join(timeout=10)
         assert not t.is_alive()
 
     def test_handler_failure_does_not_stop_subscriber(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         """A failing handler must not kill the subscriber loop."""
         sub = make_subscriber()
@@ -133,7 +133,7 @@ class EventProviderParitySuite:
                 if attempts == 1:
                     raise RuntimeError("deliberate first-attempt failure")
                 received.append(event)
-                sub.close()
+                sub.cleanup()
 
         sub.subscribe(_FlakyHandler())  # type: ignore[arg-type]
         t = self._run_subscriber(sub)
@@ -154,7 +154,7 @@ class EventProviderParitySuite:
     def test_ack_nack_contract(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         """A failing handler must NOT ack the message.
 
@@ -167,7 +167,7 @@ class EventProviderParitySuite:
 
         class _FailingHandler(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
-                sub1.close()
+                sub1.cleanup()
                 raise RuntimeError("deliberate failure — must not ack")
 
         sub1.subscribe(_FailingHandler())  # type: ignore[arg-type]
@@ -186,7 +186,7 @@ class EventProviderParitySuite:
         class _SuccessHandler(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 received.append(event)
-                sub2.close()
+                sub2.cleanup()
 
         sub2.subscribe(_SuccessHandler())  # type: ignore[arg-type]
         t2 = self._run_subscriber(sub2)
@@ -202,7 +202,7 @@ class EventProviderParitySuite:
     def test_exclusive_inflight_contract(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         """Two concurrent instances must not both process the same message.
 
@@ -218,13 +218,13 @@ class EventProviderParitySuite:
         class _H1(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 processed_by.append("sub1")
-                sub1.close()
+                sub1.cleanup()
                 finished.set()
 
         class _H2(IEventHandler[_PingEvent]):
             def handle(self, event: _PingEvent) -> None:
                 processed_by.append("sub2")
-                sub2.close()
+                sub2.cleanup()
                 finished.set()
 
         sub1.subscribe(_H1())  # type: ignore[arg-type]
@@ -237,8 +237,8 @@ class EventProviderParitySuite:
         assert finished.wait(timeout=30), "no subscriber processed the message within 30 s"
         time.sleep(1.0)  # give the losing subscriber time to incorrectly process
 
-        sub1.close()
-        sub2.close()
+        sub1.cleanup()
+        sub2.cleanup()
         t1.join(timeout=5)
         t2.join(timeout=5)
 
@@ -253,7 +253,7 @@ class EventProviderParitySuite:
     def test_deduplication_contract(
         self,
         publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IBrokerEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber],
     ) -> None:
         """Publishing the same event id twice must invoke the handler exactly once.
 
@@ -280,7 +280,7 @@ class EventProviderParitySuite:
 
         assert first_received.wait(timeout=15), "subscriber did not receive the event"
         time.sleep(1.5)  # allow the duplicate to arrive and (incorrectly) be processed
-        sub.close()
+        sub.cleanup()
         t.join(timeout=5)
 
         assert call_count == 1, f"expected 1 (dedup), got {call_count}"

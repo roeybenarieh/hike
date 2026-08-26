@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
+from typing import NoReturn
+
 from confluent_kafka import Consumer, KafkaError, KafkaException
 from confluent_kafka._types import HeadersType
 
-from hike.events.interfaces import IBrokerEventSubscriber
+from hike.domain_event import DomainEvent
+from hike.events.interfaces import IExternalEventSubscriber
+from hike.events.interfaces.background_task import Task
 
 _log = logging.getLogger(__name__)
 
@@ -20,7 +25,7 @@ def _header_value(headers: HeadersType, key: str) -> str:
     return raw or ""
 
 
-class KafkaEventSubscriber(IBrokerEventSubscriber):
+class KafkaEventSubscriber(IExternalEventSubscriber[DomainEvent]):
     """Consumes domain events from Kafka topics and dispatches them to registered handlers.
 
     Subscribe handlers before calling :meth:`start`.  Each unique event type
@@ -48,42 +53,38 @@ class KafkaEventSubscriber(IBrokerEventSubscriber):
         super().__init__()
         self._consumer = consumer
         self._topic_prefix = topic_prefix
-        self._running = False
 
-    def start(self) -> None:
+    def start(self) -> NoReturn:
         topics = [f"{self._topic_prefix}.{name}" for name in self._handlers]
         self._consumer.subscribe(topics)
-        self._running = True
-        try:
-            while self._running:
-                msg = self._consumer.poll(timeout=1.0)
-                if msg is None:
+        while self._running:
+            msg = self._consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+            error = msg.error()
+            if error:
+                if error.code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                    _log.debug("Topic not yet available, retrying: %s", error)
                     continue
-                error = msg.error()
-                if error:
-                    if error.code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
-                        _log.debug("Topic not yet available, retrying: %s", error)
-                        continue
-                    raise KafkaException(error)
-                raw_value = msg.value()
-                if raw_value is None:
-                    continue
-                raw_headers = msg.headers()
-                event_type_name = _header_value(raw_headers, "event_type") if raw_headers is not None else ""
-                event = self._event_classes[event_type_name].from_dict(json.loads(raw_value.decode()))
-                if event.id in self._seen_ids:
-                    self._consumer.commit(message=msg, asynchronous=False)
-                    _log.debug("Duplicate event %s skipped", event.id)
-                    continue
-                try:
-                    for handler in self._handlers.get(event_type_name, []):
-                        handler.handle(event)
-                    self._seen_ids.add(event.id)
-                    self._consumer.commit(message=msg, asynchronous=False)
-                except Exception:
-                    _log.exception("Handler failed for %s — offset not committed, message will be redelivered", event_type_name)
-        finally:
+                raise KafkaException(error)
+            raw_value = msg.value()
+            if raw_value is None:
+                continue
+            raw_headers = msg.headers()
+            event_type_name = _header_value(raw_headers, "event_type") if raw_headers is not None else ""
+            event = self._deserialize(event_type_name, json.loads(raw_value.decode()))
+            try:
+                self._dispatch_to_handlers(event_type_name, event)
+                self._consumer.commit(message=msg, asynchronous=False)
+            except Exception:
+                _log.exception("Handler failed for %s — offset not committed, message will be redelivered",
+                               event_type_name)
+        with suppress(Exception):
             self._consumer.close()
+        raise RuntimeError("subscriber stopped")
 
-    def close(self) -> None:
-        self._running = False
+    def tasks(self) -> list[Task]:
+        return [self.start]
+
+    def cleanup(self) -> None:
+        super().cleanup()

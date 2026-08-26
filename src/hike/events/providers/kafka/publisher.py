@@ -32,7 +32,7 @@ class KafkaEventPublisher(IEventPublisher[DomainEvent]):
                 delivery_errors.append(err)
 
         for event in events:
-            event_type = event.event_name
+            event_type = event.event_type()
             json_data = json.dumps(event.to_dict(), default=str)
             topic = f"{self._topic_prefix}.{event_type}"
             self._producer.produce(

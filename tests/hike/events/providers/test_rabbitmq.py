@@ -18,7 +18,7 @@ from pika.adapters.blocking_connection import BlockingChannel
 from testcontainers.core.container import DockerContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.domain_event import DomainEvent
-from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
+from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.rabbitmq import RabbitMQEventPublisher, RabbitMQEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
@@ -167,7 +167,7 @@ class TestRabbitMQEventSubscriber:
                     if attempts == 1:
                         raise RuntimeError("first attempt fails — should be nacked and requeued")
                     received.append(event)
-                    subscriber.close()
+                    subscriber.cleanup()
 
             subscriber.subscribe(_FlakyHandler())  # type: ignore[arg-type]
 
@@ -240,7 +240,7 @@ class TestRabbitMQEventSubscriber:
             class _RecoveryHandler(IEventHandler[ParcelShipped]):
                 def handle(self, event: ParcelShipped) -> None:
                     received.append(event)
-                    sub.close()
+                    sub.cleanup()
 
             sub.subscribe(_RecoveryHandler())  # type: ignore[arg-type]
             t = threading.Thread(target=sub.start, daemon=True)
@@ -281,7 +281,7 @@ class TestRabbitMQEventSubscriber:
                         raise RuntimeError("fail T1 first time")
                     received.append(event)
                     if len(received) == 2:
-                        subscriber.close()
+                        subscriber.cleanup()
 
             subscriber.subscribe(_Handler())  # type: ignore[arg-type]
 
@@ -323,11 +323,11 @@ class TestRabbitMQEventProviderParity(EventProviderParitySuite):
         rabbitmq_params: pika.ConnectionParameters,
         exchange: str,
         queue: str,
-    ) -> Iterator[Callable[[], IBrokerEventSubscriber]]:
+    ) -> Iterator[Callable[[], IExternalEventSubscriber]]:
         """Factory that creates fresh subscribers all sharing the same queue."""
         connections: list[pika.BlockingConnection] = []
 
-        def factory() -> IBrokerEventSubscriber:
+        def factory() -> IExternalEventSubscriber:
             conn = pika.BlockingConnection(rabbitmq_params)
             connections.append(conn)
             ch = conn.channel()

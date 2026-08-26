@@ -8,8 +8,6 @@ import pytest
 from hike.domain_event import DomainEvent
 from hike.events.event_bus import EventBus
 from hike.events.interfaces import IEventHandler, IReversibleEventHandler
-from hike.events.utils import event_type_for
-
 
 # ---------------------------------------------------------------------------
 # Minimal event types
@@ -54,38 +52,6 @@ class _RecordingReversibleHandler(IReversibleEventHandler[OrderPlaced]):
 class _FailingHandler(IEventHandler[OrderPlaced]):
     def handle(self, event: OrderPlaced) -> None:
         raise RuntimeError("regular handler failed")
-
-
-# ---------------------------------------------------------------------------
-# event_type_for
-# ---------------------------------------------------------------------------
-
-
-def testevent_type_for_direct_subclass() -> None:
-    assert event_type_for(_RecordingHandler()) is OrderPlaced
-
-
-def testevent_type_for_reversible_handler() -> None:
-    assert event_type_for(_RecordingReversibleHandler()) is OrderPlaced
-
-
-def testevent_type_for_resolves_via_mro() -> None:
-    """Event type is found on an intermediate base class, not the leaf handler."""
-    class _Base(IEventHandler[OrderPlaced]):
-        def handle(self, event: OrderPlaced) -> None: ...
-
-    class _Concrete(_Base):
-        pass
-
-    assert event_type_for(_Concrete()) is OrderPlaced
-
-
-def testevent_type_for_raises_when_not_parameterized() -> None:
-    class _Bare(IEventHandler):  # type: ignore[type-arg]
-        def handle(self, event: DomainEvent) -> None: ...
-
-    with pytest.raises(TypeError, match="must specify an event type"):
-        event_type_for(_Bare())
 
 
 # ---------------------------------------------------------------------------

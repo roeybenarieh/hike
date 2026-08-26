@@ -16,7 +16,7 @@ from confluent_kafka import Consumer, Producer  # pyright: ignore[reportMissingM
 from testcontainers.community.kafka import KafkaContainer  # pyright: ignore[reportMissingTypeStubs]
 
 from hike.domain_event import DomainEvent
-from hike.events.interfaces import IBrokerEventSubscriber, IEventHandler, IEventPublisher
+from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.kafka import KafkaEventPublisher, KafkaEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
@@ -142,7 +142,7 @@ class TestKafkaEventSubscriber:
 
         class _FailingHandler(IEventHandler[VesselSailed]):
             def handle(self, event: VesselSailed) -> None:
-                subscriber1.close()
+                subscriber1.cleanup()
                 raise RuntimeError("processing failed — must not commit")
 
         subscriber1.subscribe(_FailingHandler())  # type: ignore[arg-type]
@@ -158,7 +158,7 @@ class TestKafkaEventSubscriber:
         class _SuccessHandler(IEventHandler[VesselSailed]):
             def handle(self, event: VesselSailed) -> None:
                 received.append(event)
-                subscriber2.close()
+                subscriber2.cleanup()
 
         subscriber2.subscribe(_SuccessHandler())  # type: ignore[arg-type]
         t2 = threading.Thread(target=subscriber2.start, daemon=True)
@@ -188,7 +188,7 @@ class TestKafkaEventSubscriber:
                 if event.destination == "Fail":
                     raise RuntimeError("intentional failure")
                 received.append(event)
-                subscriber.close()
+                subscriber.cleanup()
 
         subscriber.subscribe(_Handler())  # type: ignore[arg-type]
         t = threading.Thread(target=subscriber.start, daemon=True)
@@ -213,11 +213,11 @@ class TestKafkaEventProviderParity(EventProviderParitySuite):
     @pytest.fixture
     def make_subscriber(
         self, kafka_bootstrap: str, topic_prefix: str
-    ) -> Callable[[], IBrokerEventSubscriber]:
+    ) -> Callable[[], IExternalEventSubscriber]:
         """Factory that creates subscribers all sharing the same consumer group."""
         shared_group_id = uuid.uuid4().hex
 
-        def factory() -> IBrokerEventSubscriber:
+        def factory() -> IExternalEventSubscriber:
             consumer = _make_consumer(kafka_bootstrap, group_id=shared_group_id)
             return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
 

@@ -1,27 +1,29 @@
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
-from types import TracebackType
-from typing import Self
+from typing import Callable, NoReturn
+
+# blocking
+type Task = Callable[[], NoReturn]
 
 
-class BackgroundTask(ABC):
+class IBackgroundTasks(ABC):
     @abstractmethod
-    def close(self) -> None: ...
+    def cleanup(self) -> None:
+        """Release any resources held by this task after it has stopped.
+
+        Called only as a safety net when the task exits unexpectedly — not as a
+        graceful-shutdown signal.  Implementations should be idempotent and must
+        not raise.
+        """
+        ...
 
     @abstractmethod
-    def start(self) -> None: ...
+    def tasks(self) -> list[Task]:
+        """Return the blocking callables that should be run in background threads.
 
-    def __enter__(self) -> Self:
-        self.start()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        _exc_tb: TracebackType | None,
-    ) -> None:
-        self.close()
-        if exc_type is not None and exc_val is not None:
-            raise exc_val
+        Each returned callable runs until the underlying broker connection is lost
+        or an unrecoverable error occurs.  They are not expected to return under
+        normal operation.
+        """
+        ...

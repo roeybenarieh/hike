@@ -31,7 +31,7 @@ class RedisEventPublisher(IEventPublisher[DomainEvent]):
 
     def publish(self, events: Iterable[DomainEvent]) -> None:
         for event in events:
-            event_type = event.event_name
+            event_type = event.event_type()
             json_data = json.dumps(event.to_dict(), default=str)
             stream_key = f"{self._stream_prefix}.{event_type}"
             self._client.xadd(  # pyright: ignore[reportUnknownMemberType]

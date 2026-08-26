@@ -11,7 +11,9 @@ from .persistence.persistable import Persistable
 
 
 # TODO: integration event must have event-version style api stability. and should require backward compatibility
-# strategies
+# TODO: integration event should be persistable, regular event not
+# TODO: how to do the mapping between domain events to integration events
+# TODO: how to do validation to incoming integration events
 @dataclass(frozen=True, kw_only=True, eq=False)
 class Event(Persistable[Any]):
     """Base for all domain events.
@@ -31,9 +33,9 @@ class Event(Persistable[Any]):
     id: Any = field(default_factory=uuid4)
     occurred_at: float = field(default_factory=time.time)
 
-    @property
-    def event_name(self) -> str:
-        return type(self).__name__
+    @classmethod
+    def event_type(cls) -> str:
+        return cls.__name__
 
     def get_id(self) -> Any:
         return self.id
@@ -54,20 +56,6 @@ class Event(Persistable[Any]):
 
 class DomainEvent(DomainObject, Event):
     ...
-
-
-_EVENT_REGISTRY: dict[str, type[DomainEvent]] = {}
-
-
-def register_event[T: DomainEvent](cls: type[T]) -> type[T]:
-    """Register a ``DomainEvent`` subclass so it can be deserialized by name."""
-    _EVENT_REGISTRY[cls.__name__] = cls
-    return cls
-
-
-def get_registered_event(name: str) -> type[DomainEvent]:
-    """Return the event class registered under *name* via ``@register_event``."""
-    return _EVENT_REGISTRY[name]
 
 # related video: https://www.youtube.com/watch?v=KCvsk5tTP3w
 # NOTE: the event bus can either:

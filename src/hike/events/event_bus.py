@@ -2,7 +2,7 @@ from typing import Iterable
 
 from hike.domain_event import DomainEvent
 from hike.events.interfaces import IEventBus, IEventHandler, IReversibleEventHandler
-from hike.events.utils import event_type_for
+
 
 
 class EventBus(IEventBus):
@@ -12,16 +12,11 @@ class EventBus(IEventBus):
         self._reversible: dict[type[DomainEvent], list[IReversibleEventHandler[DomainEvent]]] = {}
         self._regular: dict[type[DomainEvent], list[IEventHandler[DomainEvent]]] = {}
 
-    def subscribe[TEvent: DomainEvent](
-            self,
-            event_handler: IEventHandler[TEvent],
-    ) -> None:
-        """Subscribe handler to event bus"""
-        event_type = event_type_for(event_handler)
+    def _subscribe(self, event_type: str, event_class: type[DomainEvent], event_handler: IEventHandler[DomainEvent]) -> None:
         if isinstance(event_handler, IReversibleEventHandler):
-            self._reversible.setdefault(event_type, []).append(event_handler)  # type: ignore[arg-type]
+            self._reversible.setdefault(event_class, []).append(event_handler)  # type: ignore[arg-type]
         else:
-            self._regular.setdefault(event_type, []).append(event_handler)  # type: ignore[arg-type]
+            self._regular.setdefault(event_class, []).append(event_handler)  # type: ignore[arg-type]
 
     def publish(self, events: Iterable[DomainEvent]) -> None:
         """must first publish to reversible event handlers, then to regular handlers, if error occurs reverse them."""

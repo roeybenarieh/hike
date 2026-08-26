@@ -19,7 +19,7 @@ from hike.value_object import (
 from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
 from hike.aggregate import Aggregate, UuidAggregate, authority
 from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule, SpecificationRule
-from hike.domain_event import DomainEvent, register_event
+from hike.domain_event import DomainEvent
 from hike.domain_service import DomainService
 from hike.persistence.persistable import Persistable
 from hike.persistence.repository import (
@@ -90,7 +90,6 @@ __all__ = [
     "rule",
     "SpecificationRule",
     "DomainEvent",
-    "register_event",
     "DomainService",
     "Persistable",
     "IRepository",
