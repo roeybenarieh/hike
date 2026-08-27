@@ -183,28 +183,78 @@ def add_player(team_id, player, team_repo, player_repo, uow):
 
 ---
 
-## 4. `EventBus` — Publishing Domain Events
+## 4. `EventBus` — Eventual Consistency Across Aggregates
 
-`EventBus` provides a **publish/subscribe interface** for domain events. Aggregate commands raise events; repositories collect them automatically. The `UnitOfWork` dispatches them on commit via one of two modes:
+`EventBus` provides a **publish/subscribe interface** for domain events. It is the right tool when you can tolerate a brief window of inconsistency between aggregates — the invariant is checked or enforced asynchronously, after the first aggregate's change commits.
 
-- **`bus=`** — in-memory synchronous dispatch, same process.
-- **`outbox=`** — events written to DB atomically, relayed to another bounded context via outbox/inbox.
+### How transactions work with EventBus
 
-```python
-# In-memory sync
-with uow(repo, bus=bus):
-    order.place()
-    repo.save(order)
-    uow.commit()  # → bus dispatches OrderPlaced, then commit (handler error = rollback)
+`EventBus` is passed to `UnitOfWork` at construction time as the `event_producer`. On every `uow.commit()` the sequence is:
 
-# Outbox (cross-service, crash-safe)
-with uow(repo, outbox=outbox_repo):
-    order.place()
-    repo.save(order)
-    uow.commit()  # → order + outbox row committed atomically
+```
+repo.save(aggregate)       → repo collects the aggregate's raised events
+
+uow.commit():
+  ├─ bus.publish(events)   → all subscribed handlers run synchronously, in order
+  │     if any handler     → exception propagates;
+  │       raises              context.rollback() is called by __exit__
+  └─ context.commit()      → DB write only happens when ALL handlers succeed
 ```
 
-For the full explanation — why, when, and step-by-step setup — see the **[Domain Events](domain-events.md)** guide.
+This gives you a strong guarantee *within the process*: either the domain change and all handler reactions succeed together, or nothing commits.
+
+```python
+from hike import UnitOfWork
+from hike.events.event_bus import EventBus
+from hike.events.interfaces import IEventHandler
+
+bus = EventBus()
+uow = UnitOfWork(context, event_producer=bus)
+
+class EnforceUniqueness(IEventHandler[PlayerAdded]):
+    """Reacts to a player being added by checking global uniqueness."""
+
+    def handle(self, event: PlayerAdded) -> None:
+        if self._registry.exists(event.player_id):
+            raise DuplicatePlayerError(event.player_id)
+            # → commit is aborted; player is not persisted
+
+bus.subscribe(EnforceUniqueness(global_registry))
+
+with uow(team_repo):
+    team.add_player(new_player)
+    team_repo.save(team)
+    uow.commit()
+```
+
+### Handler failure = rollback
+
+If any handler raises, `context.rollback()` fires before the exception propagates. The aggregate's write is rolled back as if it never happened. This makes `EventBus` suitable for cross-aggregate rules that need eventual but still atomic reactions within a bounded context.
+
+### Handler ordering and short-circuit
+
+Handlers on the same event type run in **subscription order**. The first failure stops the chain — no subsequent handlers run. Use this to express priority:
+
+```python
+bus.subscribe(EnforceCreditLimit(credit_service))   # runs first; can veto
+bus.subscribe(DecrementInventory(inventory_repo))   # runs only if credit check passes
+bus.subscribe(SendConfirmationEmail(mailer))        # runs only if both above succeed
+```
+
+### Compensation for reversible side effects
+
+If a handler has already written its own transaction before a later handler fails, Hike can automatically reverse it. Extend `IReversibleEventHandler` and implement `compensate()` — see [Domain Events → Reversible handlers](domain-events.md#reversible-handlers--compensation) for the full pattern.
+
+### EventBus vs. strong consistency tools
+
+| | `EventBus` | `DomainService` / `@authority` |
+| :--- | :--- | :--- |
+| **Consistency** | Eventual within the process | Strong — all writes in one transaction |
+| **Coupling** | Loose — publisher knows nothing about subscribers | Explicit — service calls both repos |
+| **Failure mode** | Handler failure = rollback | Pre-condition check fails = no write at all |
+| **Use when** | Reactions are known at subscription time | The rule must be checked before any write |
+
+For the full EventBus reference — defining events, handler forms, `drain()` for testing — see the **[Domain Events](domain-events.md)** guide. For cross-service delivery with crash safety, see **[Integration Events](integration-events.md)**.
 
 ---
 

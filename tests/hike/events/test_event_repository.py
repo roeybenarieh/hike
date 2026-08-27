@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from hike.domain_event import DomainEvent
-from hike.events.event_repository import RepositoryEventPublisher, RepositoryEventSubscriber
+from hike.events.integration_event import IntegrationEvent
+from hike.events.providers.repository import RepositoryEventPublisher, RepositoryEventSubscriber
 from hike.events.interfaces import IEventHandler
 from hike.persistence.persistable import Persistable
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryPersistableRepository
@@ -17,9 +17,10 @@ from hike.persistence.repository import ResourceDoesNotExistError
 from hike.persistence.uow import UnitOfWork
 
 
-@dataclass(frozen=True)
-class _Ev(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class _Ev(IntegrationEvent):
     payload: str
+    version: int = 1
 
 
 @pytest.fixture

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import json
 from typing import Iterable
 
 import pika
 from pika.adapters.blocking_connection import BlockingChannel
 
-import json
-
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IEventPublisher
 
 
-class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
+class RabbitMQEventPublisher(IEventPublisher[IntegrationEvent]):
     """Publishes domain events to a RabbitMQ topic exchange.
 
     Each event is routed via its class name as the routing key, so consumers
@@ -26,9 +25,9 @@ class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
     """
 
     def __init__(
-        self,
-        channel: BlockingChannel,
-        exchange: str = "hike.events",
+            self,
+            channel: BlockingChannel,
+            exchange: str = "hike.events",
     ) -> None:
         self._channel = channel
         self._exchange = exchange
@@ -37,7 +36,7 @@ class RabbitMQEventPublisher(IEventPublisher[DomainEvent]):
         )
         self._channel.confirm_delivery()
 
-    def publish(self, events: Iterable[DomainEvent]) -> None:
+    def publish(self, events: Iterable[IntegrationEvent]) -> None:
         for event in events:
             event_type = event.event_type()
             json_data = json.dumps(event.to_dict(), default=str)

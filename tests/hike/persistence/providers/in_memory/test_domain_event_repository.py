@@ -1,4 +1,4 @@
-"""Tests for DomainEvent persistence via InMemoryPersistableRepository."""
+"""Tests for IntegrationEvent persistence via InMemoryPersistableRepository."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.persistence.persistable import Persistable
 from hike.persistence.providers.in_memory import InMemoryPersistableRepository
 from hike.persistence.repository import (
@@ -17,11 +17,12 @@ from hike.persistence.repository import (
 
 
 @dataclass(frozen=True, kw_only=True, eq=False)
-class OrderShipped(DomainEvent):
+class OrderShipped(IntegrationEvent):
     order_id: str
+    version: int = 1
 
 
-class TestDomainEventIdAutoGeneration:
+class TestIntegrationEventIdAutoGeneration:
     def test_unique_id_per_instance(self) -> None:
         e1 = OrderShipped(order_id="A")
         e2 = OrderShipped(order_id="A")
@@ -37,7 +38,7 @@ class TestDomainEventIdAutoGeneration:
         assert event.id == fixed
 
 
-class TestDomainEventPersistable:
+class TestIntegrationEventPersistable:
     def test_is_persistable(self) -> None:
         assert isinstance(OrderShipped(order_id="A"), Persistable)
 
@@ -60,7 +61,7 @@ class TestDomainEventPersistable:
         assert len({e1, e2}) == 1
 
 
-class TestInMemoryPersistableRepositoryWithDomainEvent:
+class TestInMemoryPersistableRepositoryWithIntegrationEvent:
     @pytest.fixture
     def repo(self) -> InMemoryPersistableRepository[UUID, OrderShipped]:
         return InMemoryPersistableRepository()

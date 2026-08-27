@@ -4,27 +4,29 @@ from uuid import uuid4
 
 import pytest
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IEventHandler
 from hike.events.interfaces.background_task import Task
 from hike.events.interfaces.subscriber import IExternalEventSubscriber, _event_type_for  # pyright: ignore[reportPrivateUsage]
 
 
-@dataclass(frozen=True)
-class _PingEvent(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class _PingEvent(IntegrationEvent):
     payload: str
+    version: int = 1
 
 
-@dataclass(frozen=True)
-class _PongEvent(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class _PongEvent(IntegrationEvent):
     payload: str
+    version: int = 1
 
 _dispatch = "_dispatch_to_handlers"
 _hdict = "_handlers"
 
 
-class _Subscriber(IExternalEventSubscriber[DomainEvent]):
-    def _subscribe(self, event_type: str, event_class: type[DomainEvent], event_handler: IEventHandler[DomainEvent]) -> None:
+class _Subscriber(IExternalEventSubscriber[IntegrationEvent]):
+    def _subscribe(self, event_type: str, event_class: type[IntegrationEvent], event_handler: IEventHandler[IntegrationEvent]) -> None:
         super()._subscribe(event_type, event_class, event_handler)
 
     def cleanup(self) -> None:
@@ -34,7 +36,7 @@ class _Subscriber(IExternalEventSubscriber[DomainEvent]):
         return []
 
 
-def _make_sub() -> IExternalEventSubscriber[DomainEvent]:
+def _make_sub() -> IExternalEventSubscriber[IntegrationEvent]:
     """Return a subscriber typed as the base to give Pyright full method visibility."""
     return _Subscriber()  # pyright: ignore[reportAbstractUsage]
 
@@ -52,9 +54,10 @@ class TestEventTypeFor:
 
         assert _event_type_for(_H()) is _PingEvent
 
-    def test_raises_when_handle_only_annotated_with_base_domain_event(self) -> None:
+    def test_raises_when_handle_only_annotated_with_base_event(self) -> None:
+        from hike.domain_event import Event
         class _H(IEventHandler):  # type: ignore[type-arg]
-            def handle(self, event: DomainEvent) -> None: ...  # type: ignore[override]
+            def handle(self, event: Event) -> None: ...  # type: ignore[override]
 
         with pytest.raises(TypeError):
             _event_type_for(_H())
@@ -173,7 +176,7 @@ class TestSubscribe:
         calls: list[tuple[str, type]] = []
 
         class _Tracking(_Subscriber):
-            def _on_subscribe(self, event_type_name: str, event_type: type[DomainEvent]) -> None:
+            def _on_subscribe(self, event_type_name: str, event_type: type[IntegrationEvent]) -> None:
                 calls.append((event_type_name, event_type))
 
         class _H(IEventHandler[_PingEvent]):

@@ -43,6 +43,7 @@ site/
 # Tools
 .serena/
 graphify-out/
+.graphifyignore
 
 # devenv local state (generated; not project code)
 .devenv/

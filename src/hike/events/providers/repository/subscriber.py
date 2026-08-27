@@ -1,15 +1,15 @@
-from typing import Any, Iterable, NoReturn
+from typing import Any, NoReturn
 
-from hike import DomainEvent, IRepository, UnitOfWork
-from hike.events.interfaces import IEventPublisher
+from hike import IRepository, UnitOfWork
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces.background_task import Task
 from hike.events.interfaces.subscriber import IExternalEventSubscriber
 
 
-class RepositoryEventSubscriber[T: DomainEvent, TSessions](IExternalEventSubscriber[T]):
+class RepositoryEventSubscriber[TEvent: IntegrationEvent, TSessions](IExternalEventSubscriber[TEvent]):
     def __init__(
             self,
-            event_repo: IRepository[Any, T, TSessions],
+            event_repo: IRepository[Any, TEvent, TSessions],
             event_uow: UnitOfWork[TSessions]
     ):
         super().__init__()
@@ -31,14 +31,3 @@ class RepositoryEventSubscriber[T: DomainEvent, TSessions](IExternalEventSubscri
 
     def tasks(self) -> list[Task]:
         return [self.start]
-
-
-class RepositoryEventPublisher[T: DomainEvent, TSessions](IEventPublisher[T]):
-
-    def __init__(self, event_repo: IRepository[Any, T, TSessions]):
-        super().__init__()
-        self.event_repo = event_repo
-
-    def publish(self, events: Iterable[T]) -> None:
-        # TODO: convert events to integration events
-        self.event_repo.save_many(events)

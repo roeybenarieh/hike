@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import Iterable
 
 from redis import Redis
 
-import json
-
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IEventPublisher
 
 
-class RedisEventPublisher(IEventPublisher[DomainEvent]):
+class RedisEventPublisher(IEventPublisher[IntegrationEvent]):
     """Publishes domain events to Redis Streams.
 
     Each event type is appended to its own stream:
@@ -29,7 +28,7 @@ class RedisEventPublisher(IEventPublisher[DomainEvent]):
         self._client = client
         self._stream_prefix = stream_prefix
 
-    def publish(self, events: Iterable[DomainEvent]) -> None:
+    def publish(self, events: Iterable[IntegrationEvent]) -> None:
         for event in events:
             event_type = event.event_type()
             json_data = json.dumps(event.to_dict(), default=str)

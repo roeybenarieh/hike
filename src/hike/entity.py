@@ -358,6 +358,7 @@ def field(
     return _dc_field(**kw)  # pyright: ignore[reportReturnType]
 
 
+# TODO: is entity suppose to be coupled to Persistable?
 @dataclass_transform(kw_only_default=True, field_specifiers=(field,))
 class Entity[TId: Hashable](DomainObject, Persistable[TId]):
     """Base class for DDD entities, generic over the raw ID type ``TId``.

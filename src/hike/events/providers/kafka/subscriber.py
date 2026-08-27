@@ -8,7 +8,7 @@ from typing import NoReturn
 from confluent_kafka import Consumer, KafkaError, KafkaException
 from confluent_kafka._types import HeadersType
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber
 from hike.events.interfaces.background_task import Task
 
@@ -25,7 +25,7 @@ def _header_value(headers: HeadersType, key: str) -> str:
     return raw or ""
 
 
-class KafkaEventSubscriber(IExternalEventSubscriber[DomainEvent]):
+class KafkaEventSubscriber(IExternalEventSubscriber[IntegrationEvent]):
     """Consumes domain events from Kafka topics and dispatches them to registered handlers.
 
     Subscribe handlers before calling :meth:`start`.  Each unique event type

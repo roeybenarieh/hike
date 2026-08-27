@@ -4,15 +4,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from unittest.mock import MagicMock
 
-from hike.domain_event import DomainEvent
-from hike.events.event_repository import RepositoryEventPublisher, RepositoryEventSubscriber
+from hike.events.integration_event import IntegrationEvent
+from hike.events.providers.repository import RepositoryEventPublisher, RepositoryEventSubscriber
 from hike.events.interfaces import IEventHandler
 from hike.events.transactional_box import InboxEventSubscriber, OutboxEventPublisher, TransactionalBox
 
 
-@dataclass(frozen=True)
-class _Ev(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class _Ev(IntegrationEvent):
     payload: str
+    version: int = 1
 
 
 class TestOutboxEventPublisher:
@@ -84,7 +85,7 @@ class TestTransactionalBox:
             def handle(self, event: _Ev) -> None: ...
 
         handler = _H()
-        box._subscribe("_Ev", _Ev, handler)  # pyright: ignore[reportPrivateUsage,reportUnknownMemberType]
+        box._subscribe("_Ev", _Ev, handler)  # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportArgumentType]
         inbox.subscribe.assert_called_once_with("_Ev", handler)
 
     def test_cleanup_calls_inbox_and_outbox(self) -> None:

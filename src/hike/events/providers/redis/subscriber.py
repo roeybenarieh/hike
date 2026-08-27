@@ -8,7 +8,7 @@ from typing import Any, cast, NoReturn
 from redis import Redis
 from redis.exceptions import ResponseError
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber
 from hike.events.interfaces.background_task import Task
 
@@ -27,7 +27,7 @@ def _decode(val: Any, default: str = "") -> str:
     return str(val)
 
 
-class RedisEventSubscriber(IExternalEventSubscriber[DomainEvent]):
+class RedisEventSubscriber(IExternalEventSubscriber[IntegrationEvent]):
     """Receives domain events from Redis Streams using a consumer group.
 
     Call :meth:`subscribe` for each handler, then :meth:`start` to begin

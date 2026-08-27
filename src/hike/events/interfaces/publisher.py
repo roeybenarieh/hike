@@ -1,24 +1,24 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Iterable, final
+from typing import Iterable, final
 
-from hike.domain_event import DomainEvent
+from hike.domain_event import Event
 from hike.events.interfaces import IEventHandler
 from hike.events.interfaces.background_task import IBackgroundTasks
 
 
-class IEventPublisher[TDomainEvent: DomainEvent](IEventHandler[Any], ABC):  # type: ignore[type-arg]
+class IEventPublisher[TEvent: Event](IEventHandler[TEvent], ABC):
     """Other synonyms: event dispatcher/producer"""
 
     @abstractmethod
-    def publish(self, events: Iterable[TDomainEvent]) -> None:
+    def publish(self, events: Iterable[TEvent]) -> None:
         """Raises on failure."""
 
     @final
-    def handle(self, event: Iterable[TDomainEvent]) -> None:  # type: ignore[override]
-        self.publish(event)
+    def handle(self, event: TEvent) -> None:
+        self.publish([event])
 
 
-class IExternalEventPublisher[T: DomainEvent](IEventPublisher[T], IBackgroundTasks, ABC):
+class IExternalEventPublisher[TEvent: Event](IEventPublisher[TEvent], IBackgroundTasks, ABC):
     """Other synonyms: event dispatcher/producer"""

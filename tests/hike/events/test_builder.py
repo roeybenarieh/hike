@@ -5,8 +5,8 @@ from typing import Any, Iterable, NoReturn
 
 import pytest
 
-from hike.domain_event import DomainEvent
 from hike.events.builder import TransactionalBoxBuilder
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IEventHandler, IEventPublisher
 from hike.events.interfaces.background_task import Task
 from hike.events.interfaces.subscriber import IExternalEventSubscriber
@@ -16,12 +16,12 @@ from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryPers
 from hike.persistence.uow import UnitOfWork
 
 
-class _Publisher(IEventPublisher[DomainEvent]):
-    def publish(self, events: Iterable[DomainEvent]) -> None:
+class _Publisher(IEventPublisher[IntegrationEvent]):
+    def publish(self, events: Iterable[IntegrationEvent]) -> None:
         pass
 
 
-class _Subscriber(IExternalEventSubscriber[DomainEvent]):
+class _Subscriber(IExternalEventSubscriber[IntegrationEvent]):
     def _subscribe(  # type: ignore[override]
         self, event_type: str, event_class: type, event_handler: IEventHandler  # type: ignore[type-arg]
     ) -> None:

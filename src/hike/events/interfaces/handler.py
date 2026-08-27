@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from hike.domain_event import DomainEvent
+from hike.domain_event import Event
 
 
-class IEventHandler[TDomainEvent: DomainEvent](ABC):
+class IEventHandler[T: Event](ABC):
 
     @abstractmethod
-    def handle(self, event: TDomainEvent) -> None:
+    def handle(self, event: T) -> None:
         """might raise an error indicating that couldn't handle the event"""
 
-    def __call__(self, event: TDomainEvent) -> None:
+    def __call__(self, event: T) -> None:
         self.handle(event)
 
 
-class IReversibleEventHandler[TDomainEvent: DomainEvent](IEventHandler[TDomainEvent], ABC):
+class IReversibleEventHandler[T: Event](IEventHandler[T], ABC):
 
     @abstractmethod
     def compensate(self) -> None: ...

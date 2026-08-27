@@ -17,7 +17,7 @@ import pytest
 from pika.adapters.blocking_connection import BlockingChannel
 from testcontainers.core.container import DockerContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.rabbitmq import RabbitMQEventPublisher, RabbitMQEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
@@ -50,10 +50,11 @@ class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeS
         raise RuntimeError("RabbitMQ did not become ready within 30 s")
 
 
-@dataclass(frozen=True)
-class ParcelShipped(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class ParcelShipped(IntegrationEvent):
     tracking_id: str
     recipient: str
+    version: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +315,7 @@ class TestRabbitMQEventProviderParity(EventProviderParitySuite):
     @pytest.fixture
     def publisher(
         self, pub_channel: BlockingChannel, exchange: str
-    ) -> IEventPublisher[DomainEvent]:
+    ) -> IEventPublisher[IntegrationEvent]:
         return RabbitMQEventPublisher(pub_channel, exchange=exchange)
 
     @pytest.fixture
@@ -323,11 +324,11 @@ class TestRabbitMQEventProviderParity(EventProviderParitySuite):
         rabbitmq_params: pika.ConnectionParameters,
         exchange: str,
         queue: str,
-    ) -> Iterator[Callable[[], IExternalEventSubscriber]]:
+    ) -> Iterator[Callable[[], IExternalEventSubscriber[IntegrationEvent]]]:
         """Factory that creates fresh subscribers all sharing the same queue."""
         connections: list[pika.BlockingConnection] = []
 
-        def factory() -> IExternalEventSubscriber:
+        def factory() -> IExternalEventSubscriber[IntegrationEvent]:
             conn = pika.BlockingConnection(rabbitmq_params)
             connections.append(conn)
             ch = conn.channel()

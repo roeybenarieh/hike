@@ -5,7 +5,7 @@ from hike.events.interfaces import IEventBus, IEventHandler, IReversibleEventHan
 
 
 
-class EventBus(IEventBus):
+class EventBus(IEventBus[DomainEvent]):
     """Synchronous in-memory bus — wires up producers to consumers."""
 
     def __init__(self) -> None:

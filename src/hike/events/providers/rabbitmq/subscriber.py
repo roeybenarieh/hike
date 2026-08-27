@@ -8,14 +8,14 @@ import pika.spec
 from pika.adapters.blocking_connection import BlockingChannel
 from pika.exceptions import StreamLostError
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber
 from hike.events.interfaces.background_task import Task
 
 _log = logging.getLogger(__name__)
 
 
-class RabbitMQEventSubscriber(IExternalEventSubscriber[DomainEvent]):
+class RabbitMQEventSubscriber(IExternalEventSubscriber[IntegrationEvent]):
     """Consumes domain events from RabbitMQ and dispatches them to registered handlers.
 
     Binds a shared durable queue to the configured exchange using each event
@@ -53,7 +53,7 @@ class RabbitMQEventSubscriber(IExternalEventSubscriber[DomainEvent]):
         )
         self._channel.queue_declare(queue=self._queue, durable=True)
 
-    def _on_subscribe(self, event_type_name: str, event_type: type[DomainEvent]) -> None:
+    def _on_subscribe(self, event_type_name: str, event_type: type[IntegrationEvent]) -> None:
         self._channel.queue_bind(
             exchange=self._exchange,
             queue=self._queue,

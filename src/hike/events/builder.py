@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Self
 
-from hike.events.event_repository import RepositoryEventPublisher, RepositoryEventSubscriber
+from hike.events.providers.repository import RepositoryEventPublisher, RepositoryEventSubscriber
 from hike.events.interfaces import IEventPublisher
 from hike.events.interfaces.subscriber import IExternalEventSubscriber
 from hike.events.transactional_box import InboxEventSubscriber, OutboxEventPublisher, TransactionalBox

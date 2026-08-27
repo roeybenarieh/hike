@@ -4,7 +4,7 @@ Abstract parity test suite for IEventPublisher + IBlockingEventSubscriber.
 Every concrete event provider must have a test class that inherits from
 ``EventProviderParitySuite`` and provides the following pytest fixtures:
 
-- ``publisher``       — an ``IEventPublisher[DomainEvent]`` wired to the broker
+- ``publisher``       — an ``IEventPublisher[IntegrationEvent]`` wired to the broker
 - ``make_subscriber`` — a *callable* that creates a fresh ``IBlockingEventSubscriber``
                         each time it is called, always connected to the **same**
                         broker resource (queue / consumer-group / topic-prefix) so
@@ -22,19 +22,20 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 
 
-@dataclass(frozen=True)
-class _PingEvent(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class _PingEvent(IntegrationEvent):
     payload: str
+    version: int = 1
 
 
 class EventProviderParitySuite:
 
     def _run_subscriber(
-        self, subscriber: IExternalEventSubscriber, *, delay: float = 0.15
+        self, subscriber: IExternalEventSubscriber[IntegrationEvent], *, delay: float = 0.15
     ) -> threading.Thread:
         """Start *subscriber* in a daemon thread and return after *delay* seconds.
 
@@ -42,7 +43,7 @@ class EventProviderParitySuite:
         the test publishes messages.  All three providers are safe with 0.15 s.
         Kafka retains messages so late-joining consumers still receive them.
         """
-        t = threading.Thread(target=subscriber.start, daemon=True)
+        t = threading.Thread(target=subscriber.tasks()[0], daemon=True)
         t.start()
         time.sleep(delay)
         return t
@@ -53,8 +54,8 @@ class EventProviderParitySuite:
 
     def test_publish_then_receive(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         sub = make_subscriber()
         received: list[_PingEvent] = []
@@ -75,8 +76,8 @@ class EventProviderParitySuite:
 
     def test_multiple_handlers_all_called(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         sub = make_subscriber()
         calls: list[str] = []
@@ -102,7 +103,7 @@ class EventProviderParitySuite:
 
     def test_close_stops_subscriber(
         self,
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         sub = make_subscriber()
 
@@ -118,8 +119,8 @@ class EventProviderParitySuite:
 
     def test_handler_failure_does_not_stop_subscriber(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         """A failing handler must not kill the subscriber loop."""
         sub = make_subscriber()
@@ -153,8 +154,8 @@ class EventProviderParitySuite:
 
     def test_ack_nack_contract(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         """A failing handler must NOT ack the message.
 
@@ -201,8 +202,8 @@ class EventProviderParitySuite:
 
     def test_exclusive_inflight_contract(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         """Two concurrent instances must not both process the same message.
 
@@ -252,8 +253,8 @@ class EventProviderParitySuite:
 
     def test_deduplication_contract(
         self,
-        publisher: IEventPublisher[DomainEvent],
-        make_subscriber: Callable[[], IExternalEventSubscriber],
+        publisher: IEventPublisher[IntegrationEvent],
+        make_subscriber: Callable[[], IExternalEventSubscriber[IntegrationEvent]],
     ) -> None:
         """Publishing the same event id twice must invoke the handler exactly once.
 

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import Iterable
 
 from confluent_kafka import KafkaError, KafkaException, Producer
 
-import json
-
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IEventPublisher
 
 
-class KafkaEventPublisher(IEventPublisher[DomainEvent]):
+class KafkaEventPublisher(IEventPublisher[IntegrationEvent]):
     """Publishes domain events to Kafka.
 
     Each event type is published to its own topic: ``{topic_prefix}.{EventTypeName}``.
@@ -24,7 +23,7 @@ class KafkaEventPublisher(IEventPublisher[DomainEvent]):
         self._producer = producer
         self._topic_prefix = topic_prefix
 
-    def publish(self, events: Iterable[DomainEvent]) -> None:
+    def publish(self, events: Iterable[IntegrationEvent]) -> None:
         delivery_errors: list[KafkaError] = []
 
         def _on_delivery(err: KafkaError | None, _: object) -> None:

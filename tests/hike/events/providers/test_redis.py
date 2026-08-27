@@ -17,16 +17,17 @@ import pytest
 from redis import Redis
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.redis import RedisEventPublisher, RedisEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
 
-@dataclass(frozen=True)
-class PackageArrived(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class PackageArrived(IntegrationEvent):
     package_id: str
     location: str
+    version: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +245,7 @@ class TestRedisEventProviderParity(EventProviderParitySuite):
     @pytest.fixture
     def publisher(
         self, redis_client: Redis, stream_prefix: str  # type: ignore[type-arg]
-    ) -> IEventPublisher[DomainEvent]:
+    ) -> IEventPublisher[IntegrationEvent]:
         return RedisEventPublisher(redis_client, stream_prefix=stream_prefix)
 
     @pytest.fixture
@@ -253,14 +254,14 @@ class TestRedisEventProviderParity(EventProviderParitySuite):
         redis_client: Redis,  # type: ignore[type-arg]
         stream_prefix: str,
         group: str,
-    ) -> Callable[[], IExternalEventSubscriber]:
+    ) -> Callable[[], IExternalEventSubscriber[IntegrationEvent]]:
         """Factory that creates subscribers all sharing the same consumer group.
 
         claim_idle_ms=200 ensures the ack/nack contract test (which sleeps 0.5 s
         between sub1 and sub2) can rely on XAUTOCLAIM to reclaim sub1's idle
         message.
         """
-        def factory() -> IExternalEventSubscriber:
+        def factory() -> IExternalEventSubscriber[IntegrationEvent]:
             return RedisEventSubscriber(
                 redis_client,
                 stream_prefix=stream_prefix,

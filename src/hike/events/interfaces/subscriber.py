@@ -4,12 +4,13 @@ import typing
 from abc import ABC, abstractmethod
 from typing import Any, final, overload
 
-from hike.domain_event import DomainEvent
+from hike.domain_event import Event
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces.background_task import IBackgroundTasks
 from hike.events.interfaces.handler import IEventHandler
 
 
-def _event_type_for[T: DomainEvent](handler: IEventHandler[T]) -> type[T]:
+def _event_type_for[TEvent: Event](handler: IEventHandler[TEvent]) -> type[TEvent]:
     """Return the concrete ``DomainEvent`` subclass *handler* is typed for."""
     for cls in type(handler).__mro__:
         for base in getattr(cls, "__orig_bases__", ()):
@@ -23,7 +24,7 @@ def _event_type_for[T: DomainEvent](handler: IEventHandler[T]) -> type[T]:
     try:
         hints = typing.get_type_hints(type(handler).handle)
         event_type = hints.get("event")
-        if isinstance(event_type, type) and issubclass(event_type, DomainEvent) and event_type is not DomainEvent:
+        if isinstance(event_type, type) and issubclass(event_type, Event) and event_type is not Event:
             return event_type  # type: ignore[return-value]
     except Exception:
         pass
@@ -31,22 +32,21 @@ def _event_type_for[T: DomainEvent](handler: IEventHandler[T]) -> type[T]:
     raise TypeError(f"{type(handler).__name__} must specify an event type via IEventHandler[T]")
 
 
-# TODO: remove generic type for subscriber(publisher needs the generic! for the RepositoryPublisher)
-class IEventSubscriber[T: DomainEvent](ABC):
+class IEventSubscriber[TEvent: Event](ABC):
 
     @overload
-    def subscribe(self, event_handler: IEventHandler[T], /) -> None:
+    def subscribe(self, event_handler: IEventHandler[TEvent], /) -> None:
         ...
 
     @overload
-    def subscribe(self, event_type: str, event_handler: IEventHandler[T], /) -> None:
+    def subscribe(self, event_type: str, event_handler: IEventHandler[TEvent], /) -> None:
         ...
 
     @final
     def subscribe(
             self,
-            event_type_or_handler: str | IEventHandler[T],
-            event_handler: IEventHandler[T] | None = None,
+            event_type_or_handler: str | IEventHandler[TEvent],
+            event_handler: IEventHandler[TEvent] | None = None,
             /,
     ) -> None:
         """multiple calls to this method is supported"""
@@ -58,31 +58,32 @@ class IEventSubscriber[T: DomainEvent](ABC):
             self._subscribe(event_cls.event_type(), event_cls, event_type_or_handler)
 
     @abstractmethod
-    def _subscribe(self, event_type: str, event_class: type[T], event_handler: IEventHandler[T]) -> None:
+    def _subscribe(self, event_type: str, event_class: type[TEvent], event_handler: IEventHandler[TEvent]) -> None:
         """multiple calls to this method is supported"""
 
 
-class IExternalEventSubscriber[T: DomainEvent](IEventSubscriber[T], IBackgroundTasks, ABC):
+class IExternalEventSubscriber[TEvent: IntegrationEvent](IEventSubscriber[TEvent], IBackgroundTasks, ABC):
     """Blocking subscriber that consumes events from a broker."""
 
     def __init__(self) -> None:
-        self._handlers: dict[str, list[IEventHandler[T]]] = {}  # this should be like the event bus and for everyone
-        self._event_classes: dict[str, type[T]] = {}
+        self._handlers: dict[
+            str, list[IEventHandler[TEvent]]] = {}  # this should be like the event bus and for everyone
+        self._event_classes: dict[str, type[TEvent]] = {}
         self._seen_ids: dict[str, set[Any]] = {}
         self._running = True
 
     def cleanup(self) -> None:
         self._running = False
 
-    def _subscribe(self, event_type: str, event_class: type[T], event_handler: IEventHandler[T]) -> None:
+    def _subscribe(self, event_type: str, event_class: type[TEvent], event_handler: IEventHandler[TEvent]) -> None:
         self._handlers.setdefault(event_type, []).append(event_handler)
         self._event_classes[event_type] = event_class  # type: ignore[assignment]
         self._on_subscribe(event_type, event_class)  # type: ignore[arg-type]
 
-    def _deserialize(self, event_type_name: str, data: dict[str, Any]) -> T:
+    def _deserialize(self, event_type_name: str, data: dict[str, Any]) -> TEvent:
         return self._event_classes[event_type_name].from_dict(data)  # type: ignore[return-value]
 
-    def _dispatch_to_handlers(self, event_type_name: str, event: T) -> None:
+    def _dispatch_to_handlers(self, event_type_name: str, event: TEvent) -> None:
         """Dispatch *event* to all registered handlers with deduplication.
 
         Silently skips the event if its id has already been seen.
@@ -94,7 +95,7 @@ class IExternalEventSubscriber[T: DomainEvent](IEventSubscriber[T], IBackgroundT
             handler.handle(event)
         self._seen_ids.setdefault(event_type_name, set()).add(event.id)
 
-    def _on_subscribe(self, event_type_name: str, event_type: type[T]) -> None:
+    def _on_subscribe(self, event_type_name: str, event_type: type[TEvent]) -> None:
         """Hook called once per :meth:`subscribe` call.
 
         Override to perform provider-specific side-effects such as binding a

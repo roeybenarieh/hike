@@ -15,16 +15,17 @@ import pytest
 from confluent_kafka import Consumer, Producer  # pyright: ignore[reportMissingModuleSource]
 from testcontainers.community.kafka import KafkaContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.domain_event import DomainEvent
+from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
 from hike.events.providers.kafka import KafkaEventPublisher, KafkaEventSubscriber
 from tests.hike.events.providers.parity_suite import EventProviderParitySuite
 
 
-@dataclass(frozen=True)
-class VesselSailed(DomainEvent):
+@dataclass(frozen=True, kw_only=True)
+class VesselSailed(IntegrationEvent):
     vessel_id: str
     destination: str
+    version: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -207,17 +208,17 @@ class TestKafkaEventSubscriber:
 
 class TestKafkaEventProviderParity(EventProviderParitySuite):
     @pytest.fixture
-    def publisher(self, producer: Producer, topic_prefix: str) -> IEventPublisher[DomainEvent]:
+    def publisher(self, producer: Producer, topic_prefix: str) -> IEventPublisher[IntegrationEvent]:
         return KafkaEventPublisher(producer, topic_prefix=topic_prefix)
 
     @pytest.fixture
     def make_subscriber(
         self, kafka_bootstrap: str, topic_prefix: str
-    ) -> Callable[[], IExternalEventSubscriber]:
+    ) -> Callable[[], IExternalEventSubscriber[IntegrationEvent]]:
         """Factory that creates subscribers all sharing the same consumer group."""
         shared_group_id = uuid.uuid4().hex
 
-        def factory() -> IExternalEventSubscriber:
+        def factory() -> IExternalEventSubscriber[IntegrationEvent]:
             consumer = _make_consumer(kafka_bootstrap, group_id=shared_group_id)
             return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
 
