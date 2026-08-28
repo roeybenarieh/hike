@@ -14,6 +14,7 @@ from hike.specifications.specs import (
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 
 
@@ -76,3 +77,10 @@ class MongoDBEvaluationSpecificationVisitor(ISpecificationVisitor):
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
         self.filters = {".".join(spec.field.path): {"$lte": spec.operand}}
+
+    def visit_regex(self, spec: RegexSpecification) -> None:
+        path = ".".join(spec.field.path)
+        doc: dict[str, Any] = {"$regex": spec.pattern}
+        if spec.case_insensitive:
+            doc["$options"] = "i"
+        self.filters = {path: doc}

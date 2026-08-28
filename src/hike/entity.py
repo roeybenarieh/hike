@@ -12,11 +12,12 @@ from .persistence.persistable import Persistable
 from .rules import Rule
 from .specifications.specs import (
     EqualSpecification,
-    NotEqualSpecification,
-    GreaterThanSpecification,
     GreaterThanEqualSpecification,
-    LessThanSpecification,
+    GreaterThanSpecification,
     LessThanEqualSpecification,
+    LessThanSpecification,
+    NotEqualSpecification,
+    RegexSpecification,
 )
 from .value_object import ValueObject
 
@@ -109,6 +110,14 @@ class TerminalFieldProxy:
     def __ge__(self, other: object) -> GreaterThanEqualSpecification:
         self._reject_proxy_operand(other)
         return GreaterThanEqualSpecification(self, other)
+
+    def matches(self, pattern: str, *, case_insensitive: bool = False) -> RegexSpecification:
+        """Return a POSIX ERE regex specification for this field.
+
+        Pattern is validated immediately using ``google-re2`` in strict POSIX mode.
+        Requires ``hike[regex]``.
+        """
+        return RegexSpecification(self, pattern, case_insensitive=case_insensitive)
 
     def __hash__(self) -> int:
         return hash((self.field_name, self.entity_class))

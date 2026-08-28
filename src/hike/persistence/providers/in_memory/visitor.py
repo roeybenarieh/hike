@@ -8,6 +8,7 @@ from hike.specifications.specs import (
     BaseFilterSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 from hike.value_object import ValueObject
 
@@ -76,3 +77,7 @@ class InMemoryEvaluationSpecificationVisitor(ISpecificationVisitor):
 
     def visit_less_than_equal(self, spec: BaseFilterSpecification) -> None:
         self.result = self._field_value(spec) <= spec.operand
+
+    def visit_regex(self, spec: RegexSpecification) -> None:
+        value = self._field_value(spec)
+        self.result = spec.search(str(value))

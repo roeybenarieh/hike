@@ -3,10 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, and_, not_, or_, select, true
+from sqlalchemy import ColumnElement, Select, and_, func, literal_column, not_, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute
 
 from hike.entity import Entity, TerminalFieldProxy
+from hike.persistence.providers.sqlalchemy.dialect import SupportedDialects
+from hike.persistence.repository import UnsupportedDialectError
 from hike.specifications import ISpecificationVisitor
 from hike.specifications.specs import (
     AndSpecification,
@@ -19,9 +21,128 @@ from hike.specifications.specs import (
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 
 _EMPTY_FILTER: ColumnElement[Any] = true()
+
+
+# ---------------------------------------------------------------------------
+# Pattern transformers
+# ---------------------------------------------------------------------------
+# Two rewrites are applied before a pattern reaches certain SQL backends.
+#
+# 1. _patch_dot — PostgreSQL matches '.' against '\n' by default; every other
+#    backend excludes '\n'.  Replace '.' → '[^\n]' for PostgreSQL.
+#    Note: (?p) cannot be used instead — it also excludes '\n' from negated
+#    bracket expressions like [^x], but RE2 only restricts bare '.'.
+#
+# 2. _rewrite_posix_for_ascii — MySQL (ICU), MariaDB (PCRE), Oracle, and
+#    PostgreSQL (UTF-8 locale) all treat [[:alpha:]], [[:upper:]], [[:lower:]],
+#    and [[:alnum:]] as Unicode-aware.  RE2 (the reference engine) treats them
+#    as ASCII-only.  Replace the four Unicode-differing classes with explicit
+#    ASCII ranges so all backends agree with the in-memory RE2 result.
+
+_POSIX_ASCII: dict[str, str] = {
+    "alpha": "A-Za-z",
+    "upper": "A-Z",
+    "lower": "a-z",
+    "alnum": "A-Za-z0-9",
+}
+
+
+def _end_of_bracket(pattern: str, start: int) -> int:
+    """Return the index just past the ']' closing the bracket expression at pattern[start]."""
+    n = len(pattern)
+    i = start + 1  # skip opening [
+    if i < n and pattern[i] == "^":
+        i += 1
+    if i < n and pattern[i] == "]":
+        i += 1  # leading ] is literal in POSIX ERE
+    while i < n and pattern[i] != "]":
+        if pattern[i] != "[" or i + 1 >= n or pattern[i + 1] not in (":", ".", "="):
+            i += 1
+            continue
+        end_ch = pattern[i + 1]
+        close = pattern.find(f"{end_ch}]", i + 2)
+        i = close + 2 if close >= 0 else n
+    return i + 1 if i < n else i
+
+
+def _patch_dot(pattern: str) -> str:
+    """Replace the metachar ``'.'`` with ``'[^\\n]'`` in a POSIX ERE pattern.
+
+    Only characters *outside* bracket expressions are replaced.  The function
+    correctly handles POSIX class tokens ``[:..:], [..], [=..=]`` inside
+    bracket expressions and skips them verbatim.
+
+    This keeps PostgreSQL's dot behaviour consistent with RE2 and every other
+    SQL backend (MySQL, Oracle, MariaDB, SQLite, MSSQL), all of which do not
+    match ``'.'`` against ``'\\n'`` by default.  The PostgreSQL embedded flag
+    ``(?p)`` cannot be used instead because it also excludes ``'\\n'`` from
+    negated bracket expressions (e.g. ``[^x]``), which RE2 still allows to
+    match newlines.
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i] == ".":
+            result.append("[^\n]")
+            i += 1
+            continue
+        if pattern[i] == "[":
+            end = _end_of_bracket(pattern, i)
+            result.append(pattern[i:end])
+            i = end
+            continue
+        result.append(pattern[i])
+        i += 1
+    return "".join(result)
+
+
+def _rewrite_bracket(pattern: str, start: int, result: list[str]) -> int:
+    """Process one bracket expression from pattern[start], rewriting POSIX classes; return new index."""
+    n = len(pattern)
+    i = start + 1  # skip opening [
+    result.append("[")
+    if i < n and pattern[i] == "^":
+        result.append("^")
+        i += 1
+    if i < n and pattern[i] == "]":
+        result.append("]")
+        i += 1  # leading ] is literal in POSIX ERE
+    while i < n and pattern[i] != "]":
+        if pattern[i] != "[" or i + 1 >= n or pattern[i + 1] != ":":
+            result.append(pattern[i])
+            i += 1
+            continue
+        close = pattern.find(":]", i + 2)
+        name = pattern[i + 2 : close] if close >= 0 else pattern[i + 2 :]
+        i = close + 2 if close >= 0 else n
+        result.append(_POSIX_ASCII.get(name) or f"[:{name}:]")
+    if i < n:
+        result.append("]")
+        i += 1
+    return i
+
+
+def _rewrite_posix_for_ascii(pattern: str) -> str:
+    """Replace Unicode-differing POSIX classes with explicit ASCII ranges.
+
+    Only ``[:alpha:]``, ``[:upper:]``, ``[:lower:]``, and ``[:alnum:]`` are
+    rewritten — the four classes whose Unicode vs. ASCII semantics differ.
+    All other content (including other POSIX classes) is returned verbatim.
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i] != "[":
+            result.append(pattern[i])
+            i += 1
+            continue
+        i = _rewrite_bracket(pattern, i, result)
+    return "".join(result)
+
 
 
 class ISQLAlchemyMapper(ABC):
@@ -126,19 +247,47 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
     Example::
 
         mapper = MyMapper()
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(Boat, mapper)
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(Boat, mapper, SupportedDialects.POSTGRESQL, ())
         (Boat.engine.price > 1_000).accept(visitor)
         stmt = visitor.result()
         # → SELECT boat.* FROM boat JOIN engine ON ... WHERE engine.price > 1000
+
+    Regex dialect notes
+    -------------------
+    POSIX character classes (``[[:alpha:]]``, ``[[:digit:]]``, etc.) are sent
+    to the database verbatim.  Unicode-awareness varies by backend:
+
+    * **PostgreSQL** — POSIX ERE via ``~`` / ``~*``; dot-rewrite applied so
+      ``'.'`` does not match ``'\\n'``.  Unicode-aware.
+    * **MySQL 8** — ``REGEXP_LIKE(col, pat, flag)``; uses ICU (Unicode-aware POSIX classes).
+    * **MariaDB** — ``col REGEXP pat``; uses PCRE with ``(?i)`` / ``(?-i)`` inline
+      mode modifiers (Unicode-aware in a UTF-8 locale).  ``REGEXP_LIKE`` does not
+      exist in MariaDB.
+    * **Oracle** — ``REGEXP_LIKE(col, pat, flag)``; Unicode-aware.
+    * **SQLite** — user-defined ``REGEXP`` / ``IREGEXP`` UDFs backed by the
+      ``regex`` Python module; registered at connection time.  Unicode-aware.
+    * **SQL Server 2025 (v17+)** — ``REGEXP_LIKE(col, pat, flag)`` via the RE2
+      engine.  **POSIX character classes are ASCII-only in RE2**: ``[[:alpha:]]``
+      matches only ``[A-Za-z]``, ``[[:upper:]]`` matches only ``[A-Z]``, etc.
+      Use ``\\p{L}`` / ``\\p{Lu}`` / ``\\p{Ll}`` RE2 Unicode escapes when
+      Unicode letter matching is required.
+    * **Any other dialect, or SQL Server < 2025** — raises
+      :class:`~hike.persistence.repository.UnsupportedDialectError`.
     """
 
     def __init__(
         self,
         aggregate_class: type[Entity[Any]],
         mapper: ISQLAlchemyMapper,
+        dialect: SupportedDialects,
+        dialect_server_version: tuple[int, ...],
     ) -> None:
         self._mapper = mapper
         self._root_model = mapper.get_model(aggregate_class)
+        self._dialect: SupportedDialects = dialect
+        # Server version tuple, e.g. (17, 0, 1) for SQL Server 2025.  Used to
+        # gate REGEXP_LIKE support (SQL Server 2025+ only, major version >= 17).
+        self._dialect_server_version = dialect_server_version
         self.filters: ColumnElement[Any] = _EMPTY_FILTER
         self._joins: list[type] = []
         self._joined_models: set[type] = set()
@@ -230,3 +379,80 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
         col, val = self._visit_filter(spec)
         self.filters = col <= val
+
+    def visit_regex(self, spec: RegexSpecification) -> None:
+        col = self.resolve_column(spec.field)
+        d = self._dialect
+
+        if d == SupportedDialects.POSTGRESQL:
+            # PostgreSQL POSIX ERE: '~' = case-sensitive, '~*' = case-insensitive.
+            # Two rewrites are applied:
+            # 1. _rewrite_posix_for_ascii: replace Unicode-differing POSIX classes
+            #    ([[:alpha:]] etc.) with ASCII ranges to match RE2 reference behaviour.
+            # 2. _patch_dot: replace '.' with '[^\n]' because PostgreSQL's '.'
+            #    matches newlines by default; all other backends exclude '\n'.
+            op = "~*" if spec.case_insensitive else "~"
+            self.filters = col.op(op)(_patch_dot(_rewrite_posix_for_ascii(spec.pattern)))
+
+        elif d == SupportedDialects.MYSQL:
+            # REGEXP_LIKE(string, pattern, flags):
+            #   'c' = case-sensitive (default), 'i' = case-insensitive.
+            # MySQL 8 uses ICU which treats [[:alpha:]] etc. as Unicode-aware.
+            # Rewrite to ASCII ranges to match RE2 reference behaviour.
+            flags = "i" if spec.case_insensitive else "c"
+            self.filters = func.REGEXP_LIKE(col, _rewrite_posix_for_ascii(spec.pattern), flags)
+
+        elif d == SupportedDialects.MARIADB:
+            # MariaDB has no REGEXP_LIKE; uses the PCRE-based REGEXP operator.
+            # Case control uses PCRE inline mode modifiers (collation is typically
+            # case-insensitive in utf8mb4_unicode_ci setups).
+            # (?i)  — enable case-insensitive matching (overrides collation)
+            # (?-i) — force case-sensitive matching regardless of collation
+            # MariaDB's PCRE treats [[:alpha:]] etc. as Unicode-aware; rewrite
+            # to ASCII ranges to match RE2 reference behaviour.
+            prefix = "(?i)" if spec.case_insensitive else "(?-i)"
+            self.filters = col.op("REGEXP")(prefix + _rewrite_posix_for_ascii(spec.pattern))
+
+        elif d == SupportedDialects.ORACLE:
+            # REGEXP_LIKE(string, pattern, match_parameter):
+            #   'c' = case-sensitive, 'i' = case-insensitive.
+            # Oracle's regex engine is Unicode-aware for POSIX character classes;
+            # rewrite to ASCII ranges to match RE2 reference behaviour.
+            flags = "i" if spec.case_insensitive else "c"
+            self.filters = func.REGEXP_LIKE(col, _rewrite_posix_for_ascii(spec.pattern), flags)
+
+        elif d == SupportedDialects.SQLITE:
+            # SQLite has no built-in regex.  The test fixtures (and any
+            # SQLite-backed repository setup) must register REGEXP and IREGEXP
+            # as Python UDFs via a SQLAlchemy connect event.  Both use the
+            # ``regex`` module so POSIX classes behave identically to in-memory.
+            #
+            # REGEXP is recognised as a special infix operator by SQLite itself.
+            # IREGEXP is a plain UDF called as a function (pattern first, then value).
+            if spec.case_insensitive:
+                self.filters = func.IREGEXP(spec.pattern, col)
+            else:
+                self.filters = col.op("REGEXP")(spec.pattern)
+
+        elif d == SupportedDialects.MSSQL and self._dialect_server_version[:1] >= (17,):
+            # SQL Server 2025 (major version 17) introduces native REGEXP_LIKE at
+            # database compatibility level 170, backed by the RE2 engine.
+            # Flags: 'c' = case-sensitive, 'i' = case-insensitive.
+            #
+            # RE2 POSIX character classes are ASCII-only: [[:alpha:]] = [A-Za-z],
+            # [[:upper:]] = [A-Z], [[:lower:]] = [a-z], [[:alnum:]] = [0-9A-Za-z].
+            # Use \p{L} / \p{Lu} / \p{Ll} RE2 Unicode escapes for letter matching.
+            #
+            # literal_column embeds the flag as a SQL literal rather than a bound
+            # parameter — SQLAlchemy binds Python strings as nvarchar on MSSQL,
+            # but REGEXP_LIKE requires varchar for the flags argument.
+            flag_lit: ColumnElement[Any] = literal_column("'i'") if spec.case_insensitive else literal_column("'c'")
+            self.filters = func.REGEXP_LIKE(col, spec.pattern, flag_lit)
+
+        else:
+            # Only MSSQL < 17 reaches here — unknown dialects are rejected by
+            # SupportedDialects.parse() in the repository before the visitor is constructed.
+            raise UnsupportedDialectError(
+                f"SQL Server {self._dialect_server_version} does not support REGEXP_LIKE. "
+                f"Upgrade to SQL Server 2025 (major version 17+)."
+            )

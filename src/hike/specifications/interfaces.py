@@ -14,6 +14,7 @@ if TYPE_CHECKING:
         NotEqualSpecification,
         NotSpecification,
         OrSpecification,
+        RegexSpecification,
     )
 
 # TODO: add a NoneSpecification
@@ -77,3 +78,6 @@ class ISpecificationVisitor(ABC):
 
     @abstractmethod
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None: ...
+
+    @abstractmethod
+    def visit_regex(self, spec: RegexSpecification) -> None: ...

@@ -38,7 +38,7 @@ class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeS
 
     def start(self) -> "_RabbitMqContainer":
         super().start()  # pyright: ignore[reportUnknownMemberType]
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             try:
                 conn = pika.BlockingConnection(self.get_connection_params())
@@ -47,7 +47,7 @@ class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeS
                     return self
             except Exception:
                 time.sleep(0.5)
-        raise RuntimeError("RabbitMQ did not become ready within 30 s")
+        raise RuntimeError("RabbitMQ did not become ready within 60 s")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,8 +64,11 @@ class ParcelShipped(IntegrationEvent):
 
 @pytest.fixture(scope="session")
 def rabbitmq_params() -> Iterator[pika.ConnectionParameters]:
-    with _RabbitMqContainer("rabbitmq:3.13-alpine") as rmq:
-        yield rmq.get_connection_params()
+    try:
+        with _RabbitMqContainer("rabbitmq:3.13-alpine") as rmq:
+            yield rmq.get_connection_params()
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture

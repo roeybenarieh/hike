@@ -261,7 +261,7 @@ class TestSQLAlchemyRepositoryParity(RepositoryParitySuite, CrossProcessWatchPar
 
     @pytest.fixture
     def watch_repo(self, pg_engine: SAEngine) -> Iterator[SQLAlchemyRepository[UUID, Boat]]:
-        repo = SQLAlchemyRepository(Boat, dict_boat_mapper)
+        repo: SQLAlchemyRepository[UUID, Boat] = SQLAlchemyRepository(Boat, dict_boat_mapper)
         sess = sessionmaker(pg_engine)()
         repo.session = sess
         yield repo
@@ -297,7 +297,7 @@ def test_motorboat_save_and_get_one(uow: UnitOfWork[Session], motorboat_repo: SQ
         uow.commit()
 
     with uow(motorboat_repo):
-        fetched = motorboat_repo.get_one(boat.id)
+        fetched = motorboat_repo.get_one(boat.get_id())
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
@@ -354,7 +354,7 @@ def test_motorboat_update_engine_price(uow: UnitOfWork[Session], motorboat_repo:
         uow.commit()
 
     with uow(motorboat_repo):
-        fetched = motorboat_repo.get_one(boat.id)
+        fetched = motorboat_repo.get_one(boat.get_id())
 
     assert fetched.engine.price == Price(3_000.0)
 
@@ -372,7 +372,7 @@ def test_flat_motorboat_save_and_get_one(uow: UnitOfWork[Session], flat_motorboa
         uow.commit()
 
     with uow(flat_motorboat_repo):
-        fetched = flat_motorboat_repo.get_one(boat.id)
+        fetched = flat_motorboat_repo.get_one(boat.get_id())
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
@@ -408,7 +408,7 @@ def test_flat_motorboat_update_engine_price(uow: UnitOfWork[Session], flat_motor
         uow.commit()
 
     with uow(flat_motorboat_repo):
-        fetched = flat_motorboat_repo.get_one(boat.id)
+        fetched = flat_motorboat_repo.get_one(boat.get_id())
 
     assert fetched.engine.price == Price(3_000.0)
 
@@ -428,7 +428,7 @@ def test_flat_journey_save_and_get_one(uow: UnitOfWork[Session], flat_journey_re
         uow.commit()
 
     with uow(flat_journey_repo):
-        fetched = flat_journey_repo.get_one(journey.id)
+        fetched = flat_journey_repo.get_one(journey.get_id())
 
     assert fetched.name == Name("France Trip")
     assert len(fetched.checkpoints) == 2
@@ -448,7 +448,7 @@ def test_flat_journey_update_checkpoints(uow: UnitOfWork[Session], flat_journey_
         uow.commit()
 
     with uow(flat_journey_repo):
-        fetched = flat_journey_repo.get_one(journey.id)
+        fetched = flat_journey_repo.get_one(journey.get_id())
 
     assert len(fetched.checkpoints) == 2
 
@@ -466,7 +466,7 @@ def test_auto_save_and_get_one(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRe
         uow.commit()
 
     with uow(auto_repo):
-        fetched = auto_repo.get_one(boat.id)
+        fetched = auto_repo.get_one(boat.get_id())
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
@@ -485,7 +485,7 @@ def test_auto_update(uow: UnitOfWork[Session], auto_repo: SQLAlchemyRepository[U
         uow.commit()
 
     with uow(auto_repo):
-        fetched = auto_repo.get_one(boat.id)
+        fetched = auto_repo.get_one(boat.get_id())
 
     assert fetched.price == Price(200.0)
 
@@ -532,9 +532,9 @@ def test_auto_optimistic_lock_conflict(uow: UnitOfWork[Session], auto_repo: SQLA
         uow.commit()
 
     with uow(auto_repo):
-        copy_a = auto_repo.get_one(boat.id)
+        copy_a = auto_repo.get_one(boat.get_id())
     with uow(auto_repo):
-        copy_b = auto_repo.get_one(boat.id)
+        copy_b = auto_repo.get_one(boat.get_id())
 
     copy_a.price = Price(200.0)
     with uow(auto_repo):
@@ -556,7 +556,7 @@ def test_auto_motorboat_save_and_get_one(uow: UnitOfWork[Session], auto_motorboa
         uow.commit()
 
     with uow(auto_motorboat_repo):
-        fetched = auto_motorboat_repo.get_one(boat.id)
+        fetched = auto_motorboat_repo.get_one(boat.get_id())
 
     assert fetched.name == Name("Sea Spirit")
     assert fetched.price == Price(4_999.99)
@@ -592,7 +592,7 @@ def test_auto_motorboat_update_engine_price(uow: UnitOfWork[Session], auto_motor
         uow.commit()
 
     with uow(auto_motorboat_repo):
-        fetched = auto_motorboat_repo.get_one(boat.id)
+        fetched = auto_motorboat_repo.get_one(boat.get_id())
 
     assert fetched.engine.price == Price(3_000.0)
 
@@ -610,7 +610,7 @@ def test_auto_journey_save_and_get_one_with_checkpoints(
         uow.commit()
 
     with uow(auto_journey_repo):
-        fetched = auto_journey_repo.get_one(journey.id)
+        fetched = auto_journey_repo.get_one(journey.get_id())
 
     assert fetched.name == Name("France Trip")
     assert len(fetched.checkpoints) == 2
@@ -630,6 +630,6 @@ def test_auto_journey_update_checkpoints(uow: UnitOfWork[Session], auto_journey_
         uow.commit()
 
     with uow(auto_journey_repo):
-        fetched = auto_journey_repo.get_one(journey.id)
+        fetched = auto_journey_repo.get_one(journey.get_id())
 
     assert len(fetched.checkpoints) == 2

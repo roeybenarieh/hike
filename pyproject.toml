@@ -7,11 +7,14 @@ authors = [
     { name = "Roey Ben Arieh", email = "roey280404@gmail.com" }
 ]
 requires-python = ">=3.14"
+dependencies = [
+    "google-re2>=1.1",
+]
 
 [project.optional-dependencies]
 pymongo    = ["pymongo>=4.16.0"]
 redis      = ["redis>=7.4.0"]
-sqlalchemy = ["sqlalchemy>=2.0.49", "psycopg[binary]>=3.0"]
+sqlalchemy = ["sqlalchemy>=2.0.49"]
 kafka      = ["confluent-kafka>=2.5.0"]
 rabbitmq   = ["pika>=1.3.0"]
 all        = ["ihike[pymongo,redis,sqlalchemy,kafka,rabbitmq]"]
@@ -35,14 +38,19 @@ show_missing = true
 skip_covered = false
 fail_under = 80
 
+[tool.pytest.ini_options]
+addopts = "--ff"
+
 [dependency-groups]
 dev = [
     "ihike[all]",
     "pytest>=9.0.3",
     "pytest-cov>=6.0.0",
     "testcontainers[mongodb,postgres,redis]>=4.15.0",
-    "confluent-kafka>=2.5.0",
-    "pika>=1.3.0",
+    "psycopg[binary]>=3.0",
+    "pymysql>=1.2.0",
+    "pymssql>=2.3.13",
+    "oracledb>=4.0.2",
 ]
 docs = [
     "mkdocs>=1.6.1",

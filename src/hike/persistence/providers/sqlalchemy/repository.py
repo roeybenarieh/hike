@@ -6,6 +6,7 @@ from collections.abc import Iterator, Sequence
 from typing import Any, cast, get_origin, get_type_hints
 
 from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from hike.entity import Entity, Field
@@ -30,6 +31,7 @@ from hike.persistence.repository import (
 )
 from hike.specifications import ISpecification
 
+from .dialect import SupportedDialects
 from .mappers import DictAutoSQLAlchemyMapper, VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
 
@@ -141,7 +143,20 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
 
     @property
     def _listen_channel(self) -> str:
-        return f"hike_{self._model_class.__tablename__}_inserts"  # pyright: ignore[reportUnknownMemberType]
+        return f"hike_{getattr(self._model_class, '__tablename__', '')}_inserts"
+
+    @property
+    def _dialect(self) -> SupportedDialects:
+        return SupportedDialects.parse(self.session.connection().dialect.name)  # type: ignore[no-any-return]
+
+    @property
+    def _dialect_server_version(self) -> tuple[int, ...]:
+        # server_version_info is a tuple of ints, e.g. (17, 0, 1) for SQL Server 2025.
+        # It may be None for dialects that don't expose a version (e.g. SQLite).
+        raw: tuple[int, ...] | None = getattr(self.session.connection().dialect, "server_version_info", None)
+        if raw is None:
+            return ()
+        return tuple(raw)
 
     def _probe_listen_notify(self) -> bool:
         """Return True if the database supports LISTEN/NOTIFY semantics.
@@ -150,10 +165,10 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         with a real LISTEN/UNLISTEN call — result is cached for this instance.
         """
         if self._listen_notify_ok is None:
-            dialect = self.session.connection().dialect.name
-            if dialect in {"postgresql"}:
+            dialect = self._dialect
+            if dialect == SupportedDialects.POSTGRESQL:
                 self._listen_notify_ok = True
-            elif dialect in {"sqlite", "mysql", "mariadb", "mssql", "oracle"}:
+            elif dialect in {SupportedDialects.SQLITE, SupportedDialects.MYSQL, SupportedDialects.MARIADB, SupportedDialects.MSSQL, SupportedDialects.ORACLE}:
                 self._listen_notify_ok = False
             else:
                 try:
@@ -162,17 +177,18 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
                         probe.execute(text(f"LISTEN {self._listen_channel}"))
                         probe.execute(text(f"UNLISTEN {self._listen_channel}"))
                     self._listen_notify_ok = True
-                except Exception:
+                except SQLAlchemyError:
                     self._listen_notify_ok = False
-        return self._listen_notify_ok
+        return self._listen_notify_ok is True
 
     def _hints(self) -> dict[str, Any]:
         try:
             return get_type_hints(self._aggregate_class)
-        except Exception:
+        except (NameError, AttributeError, TypeError):
             return {}
 
-    def _list_entity_fields(self, hints: dict[str, Any]) -> dict[str, type]:
+    @staticmethod
+    def _list_entity_fields(hints: dict[str, Any]) -> dict[str, type]:
         """Return {field_name: elem_cls} for list[Entity] fields."""
         result: dict[str, type] = {}
         for name, ann in hints.items():
@@ -184,7 +200,8 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
                 result[name] = elem_cls
         return result
 
-    def _single_entity_fields(self, hints: dict[str, Any]) -> dict[str, type]:
+    @staticmethod
+    def _single_entity_fields(hints: dict[str, Any]) -> dict[str, type]:
         """Return {field_name: entity_cls} for Field[Entity] (non-list) fields."""
         result: dict[str, type] = {}
         for name, ann in hints.items():
@@ -201,10 +218,10 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         """Recursively upsert a nested entity's ORM row (depth-first) and return the tracked model."""
         try:
             hints: dict[str, Any] = get_type_hints(entity_cls)
-        except Exception:
+        except (NameError, AttributeError, TypeError):
             hints = {}
         sub_single = self._single_entity_fields(hints)
-        model_cls = self._mapper.get_model(entity_cls)
+        model_cls = self._mapper.get_model(cast(type[Entity[Any]], entity_cls))
         entity_dict: dict[str, Any] = entity.to_dict()
 
         for sub_name, sub_cls in sub_single.items():
@@ -224,7 +241,7 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         """Recursively read raw field values from *orm_obj* for reconstructing *entity_cls*."""
         try:
             hints: dict[str, Any] = get_type_hints(entity_cls)
-        except Exception:
+        except (NameError, AttributeError, TypeError):
             hints = {}
         sub_single = self._single_entity_fields(hints)
         init_names = set(cast(type[Entity[Any]], entity_cls).get_init_field_names())
@@ -257,7 +274,7 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
             if expanded is not None:
                 flat.update(expanded)
             else:
-                nested_model_cls = self._mapper.get_model(elem_cls)
+                nested_model_cls = self._mapper.get_model(cast(type[Entity[Any]], elem_cls))
                 flat[name] = [nested_model_cls(**item) for item in cast(list[Any], flat[name])]
 
         for name, entity_cls in single_fields.items():
@@ -342,7 +359,10 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         ordering: Sequence[OrderBy] | None = None,
         pagination: Pagination | None = None,
     ) -> list[TPersistable] | Page[TPersistable]:
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)  # type: ignore[arg-type]
+        dialect = self._dialect
+        dialect_version = self._dialect_server_version
+
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper, dialect=dialect, dialect_server_version=dialect_version)  # type: ignore[arg-type]
         specification.accept(visitor)
 
         ordering_list = list(ordering) if ordering else []
@@ -353,11 +373,15 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         for col, ob in col_pairs:
             stmt = stmt.order_by(sa_asc(col) if ob.direction == "asc" else sa_desc(col))
 
+        id_col = self._mapper.get_column(self._model_class, "id")
+
+        # MSSQL requires ORDER BY for OFFSET/FETCH; add id as tiebreaker when no ordering given.
+        if not ordering_list and pagination is not None and dialect == SupportedDialects.MSSQL:
+            stmt = stmt.order_by(sa_asc(id_col))
+
         if pagination is None:
             rows = self.session.scalars(stmt).all()
             return [self._from_model(row) for row in rows]
-
-        id_col = self._mapper.get_column(self._model_class, "id")
 
         if isinstance(pagination, OffsetPagination):
             count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -409,7 +433,9 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         return getattr(model, VERSION_ATTR) != obj.get_version()
 
     def count(self, specification: ISpecification) -> int:
-        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper)  # type: ignore[arg-type]
+        dialect = self._dialect
+        dialect_version = self._dialect_server_version
+        visitor = SQLAlchemyEvaluationSpecificationVisitor(self._aggregate_class, self._mapper, dialect=dialect, dialect_server_version=dialect_version)  # type: ignore[arg-type]
         specification.accept(visitor)
         stmt = visitor.result()
         count_stmt = select(func.count()).select_from(stmt.subquery())

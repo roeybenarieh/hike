@@ -19,19 +19,22 @@ Specifications are built using **class-level field comparisons**. Hike's `Field`
 ```python
 from hike import UuidAggregate, Field, ValueObject
 
+class Name(ValueObject[str]): ...
 class Price(ValueObject[float]): ...
 class Category(ValueObject[str]): ...
 
 class Product(UuidAggregate):
+    name: Field[Name]
     price: Field[Price]
     category: Field[Category]
 
 # These produce specification objects, not booleans:
 is_cheap       = Product.price < 50.0
 is_electronics = Product.category == "electronics"
+contains_pro = Product.name.matches(r".*pro.*", case_insensitive=True)
 
 # Check a single object:
-product = Product(price=Price(29.99), category=Category("electronics"))
+product = Product(name=Name("Widget Pro"), price=Price(29.99), category=Category("electronics"))
 is_cheap.is_satisfied(product)   # True
 
 # Filter a collection:
@@ -39,7 +42,7 @@ products = [...]
 cheap_ones = list(is_cheap.filter(products))
 ```
 
-All six comparison operators are supported:
+All comparison operators are supported:
 
 | Operator | Meaning |
 | :--- | :--- |
@@ -49,6 +52,7 @@ All six comparison operators are supported:
 | `<=` | less than or equal |
 | `>` | greater than |
 | `>=` | greater than or equal |
+| `.matches(pattern)` | field value matches a POSIX ERE pattern |
 
 ---
 
@@ -186,9 +190,29 @@ has_stock  = Product.quantity > 0
 spec = is_active & (is_cheap | has_stock)
 spec = ~is_active
 
-# Query a repository
+# --- Regex (POSIX ERE) ---
+
+# Basic pattern — validated at construction, not at query time
+is_digital = Product.sku.matches(r"^DIG-[[:digit:]]{4}$")
+
+# Case-insensitive
+contains_pro = Product.name.matches(r"pro", case_insensitive=True)
+
+# POSIX named character classes
+has_digit   = Product.sku.matches(r"[[:digit:]]")
+alpha_only  = Product.name.matches(r"^[[:alpha:]]+$")
+
+# These raise re2.error immediately (PCRE constructs are rejected):
+# Product.name.matches(r"\d+")        ← use [[:digit:]]+ instead
+# Product.name.matches(r"(?=sale)")   ← lookaheads not supported
+
+# Compose regex specs just like any other spec
+spec = is_digital & (is_cheap | contains_pro)
+
+# --- Query a repository ---
 with uow(repo):
     results = repo.get_many(is_active & is_cheap)
+    regex_results = repo.get_many(is_digital & is_active)
 
 # Use as an invariant — combines multiple fields into one coherent rule
 listable = SpecificationRule(

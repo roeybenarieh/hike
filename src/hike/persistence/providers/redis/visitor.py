@@ -16,6 +16,7 @@ from hike.specifications.specs import (
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 
 # RediSearch query syntax quick reference:
@@ -131,3 +132,9 @@ class RedisEvaluationSpecificationVisitor(ISpecificationVisitor):
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
         self.query = _redis_leaf(".".join(spec.field.path), spec.operand, "lte")
+
+    def visit_regex(self, spec: RegexSpecification) -> None:  # noqa: ARG002
+        # RediSearch has no regex operator. Emitting match-all so the composite
+        # query remains structurally valid; RedisRepository evaluates all specs
+        # via is_satisfied() (google-re2 POSIX mode) in any case.
+        self.query = self._MATCH_ALL

@@ -8,6 +8,8 @@ import pytest
 
 from hike.entity import TerminalFieldProxy
 from hike.value_object import ValueObject
+import re2
+
 from hike.specifications import (
     AndSpecification,
     BaseFilterSpecification,
@@ -21,6 +23,7 @@ from hike.specifications import (
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 from tests.hike.conftest import Category, ListingName, Price, ProductListing, Rating
 
@@ -78,6 +81,10 @@ class ListingFilterSpecificationVisitor(ISpecificationVisitor):
 
     def visit_less_than_equal(self, spec: LessThanEqualSpecification) -> None:
         self.result = self._actual(spec) <= spec.operand
+
+    def visit_regex(self, spec: RegexSpecification) -> None:
+        value = self._actual(spec)
+        self.result = spec.search(str(value))
 
 
 def _evaluate(listing: ProductListing, spec: ISpecification) -> bool:
@@ -319,3 +326,106 @@ class TestCatalogFiltering:
         results = self._filter(all_listings, spec)
         assert len(results) == 4
         assert all(r.name != "Cheap Cable" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Tests: RegexSpecification (POSIX ERE via regex module)
+# ---------------------------------------------------------------------------
+
+
+class TestRegexSpecification:
+    # -- construction --------------------------------------------------------
+
+    def test_created_via_matches(self) -> None:
+        spec = ProductListing.name.matches(r"[[:alpha:]]+")
+        assert isinstance(spec, RegexSpecification)
+        assert spec.pattern == r"[[:alpha:]]+"
+        assert spec.case_insensitive is False
+
+    def test_case_insensitive_flag_stored(self) -> None:
+        spec = ProductListing.name.matches(r"[[:upper:]]", case_insensitive=True)
+        assert spec.case_insensitive is True
+
+    def test_lookahead_rejected_at_construction(self) -> None:
+        with pytest.raises(re2.error):
+            ProductListing.name.matches(r"(?=foo)")
+
+    def test_backreference_rejected_at_construction(self) -> None:
+        with pytest.raises(re2.error):
+            ProductListing.name.matches(r"(foo)\1")
+
+    # -- dispatch ------------------------------------------------------------
+
+    def test_accept_dispatches_to_visit_regex(self) -> None:
+        spec = ProductListing.name.matches(r"[[:alpha:]]+")
+        visited: list[RegexSpecification] = []
+
+        class _Capture(ListingFilterSpecificationVisitor):
+            def visit_regex(self, s: RegexSpecification) -> None:  # type: ignore[override]
+                visited.append(s)
+                super().visit_regex(s)
+
+        listing = ProductListing(
+            price=Price(10.0), category=Category("x"), rating=Rating(4.0), name=ListingName("Hello")
+        )
+        spec.accept(_Capture(listing))
+        assert visited == [spec]
+
+    # -- in-memory evaluation ------------------------------------------------
+
+    def test_match_returns_true(self, budget_headphones: ProductListing) -> None:
+        # "Budget Headphones" contains alpha chars
+        spec = ProductListing.name.matches(r"[[:upper:]][[:lower:]]+")
+        assert spec.is_satisfied(budget_headphones) is True
+
+    def test_no_match_returns_false(self, budget_headphones: ProductListing) -> None:
+        spec = ProductListing.name.matches(r"^[[:digit:]]")
+        assert spec.is_satisfied(budget_headphones) is False
+
+    def test_case_insensitive_match(self, budget_headphones: ProductListing) -> None:
+        # "Budget Headphones" — lowercase pattern matches case-insensitively
+        spec = ProductListing.name.matches(r"budget", case_insensitive=True)
+        assert spec.is_satisfied(budget_headphones) is True
+
+    def test_case_sensitive_no_match(self, budget_headphones: ProductListing) -> None:
+        # "Budget Headphones" — lowercase "budget" does not match case-sensitively
+        spec = ProductListing.name.matches(r"^budget")
+        assert spec.is_satisfied(budget_headphones) is False
+
+    def test_posix_character_class_digit(self) -> None:
+        listing = ProductListing(
+            price=Price(9.99), category=Category("x"), rating=Rating(3.0), name=ListingName("Item123")
+        )
+        spec = ProductListing.name.matches(r"[[:digit:]]+")
+        assert spec.is_satisfied(listing) is True
+
+    # -- composition ---------------------------------------------------------
+
+    def test_regex_and_spec(self, budget_headphones: ProductListing, python_book: ProductListing) -> None:
+        spec = ProductListing.name.matches(r"Headphones") & (ProductListing.price < 50)
+        assert spec.is_satisfied(budget_headphones) is True
+        assert spec.is_satisfied(python_book) is False
+
+    def test_regex_or_spec(self, pro_headphones: ProductListing, desk_lamp: ProductListing) -> None:
+        spec = ProductListing.name.matches(r"Pro") | (ProductListing.price < 40)
+        assert spec.is_satisfied(pro_headphones) is True  # matches pattern
+        assert spec.is_satisfied(desk_lamp) is True       # 35.00 < 40
+
+    def test_not_regex_spec(self, budget_headphones: ProductListing, python_book: ProductListing) -> None:
+        spec = ~ProductListing.name.matches(r"Headphones")
+        assert spec.is_satisfied(budget_headphones) is False
+        assert spec.is_satisfied(python_book) is True
+
+    def test_filter_by_regex(
+        self,
+        budget_headphones: ProductListing,
+        pro_headphones: ProductListing,
+        python_book: ProductListing,
+        desk_lamp: ProductListing,
+        cheap_cable: ProductListing,
+    ) -> None:
+        all_listings = [budget_headphones, pro_headphones, python_book, desk_lamp, cheap_cable]
+        spec = ProductListing.name.matches(r"Headphones")
+        results = list(spec.filter(all_listings))
+        assert len(results) == 2
+        assert all("Headphones" in r.name.value for r in results)

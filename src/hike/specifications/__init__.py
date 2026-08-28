@@ -10,6 +10,7 @@ from .specs import (
     NotEqualSpecification,
     NotSpecification,
     OrSpecification,
+    RegexSpecification,
 )
 __all__ = [
     "ISpecification",
@@ -24,4 +25,5 @@ __all__ = [
     "GreaterThanEqualSpecification",
     "LessThanSpecification",
     "LessThanEqualSpecification",
+    "RegexSpecification",
 ]

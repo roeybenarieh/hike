@@ -15,6 +15,7 @@ except ImportError as _exc:
         "Install it with: pip install hike[sqlalchemy]"
     ) from _exc
 
+from hike.persistence.providers.sqlalchemy.dialect import SupportedDialects
 from hike.persistence.providers.sqlalchemy.db_context import SQLAlchemyDBContext
 from hike.persistence.providers.sqlalchemy.mappers import (
     DictAutoSQLAlchemyMapper,
@@ -26,6 +27,7 @@ from hike.persistence.providers.sqlalchemy.repository import SQLAlchemyPersistab
 from hike.persistence.providers.sqlalchemy.visitor import ISQLAlchemyMapper
 
 __all__ = [
+    "SupportedDialects",
     "DictAutoSQLAlchemyMapper",
     "DictSQLAlchemyMapper",
     "FlatAutoSQLAlchemyMapper",

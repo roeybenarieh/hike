@@ -42,6 +42,15 @@ class OptimisticLockError(ResourceError):
     """
 
 
+class UnsupportedDialectError(RepositoryError):
+    """Raised when a regex specification is used with an unsupported database dialect.
+
+    Supported dialects: postgresql, mysql, mariadb, oracle, sqlite, and mssql (SQL
+    Server 2025+, major version 17+).  SQL Server before version 17 does not include
+    REGEXP_LIKE and is therefore unsupported.
+    """
+
+
 # HACK: Python has no higher-kinded types, so we cannot statically enforce that
 # TId is TPersistable's ID type, nor that TPersistable is parameterized by TId.
 # Subclasses must keep them consistent by convention.
