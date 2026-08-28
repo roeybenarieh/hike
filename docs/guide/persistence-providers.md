@@ -158,6 +158,95 @@ with uow(repo):
 
 ---
 
+## Regex filtering
+
+All providers support `Field.matches(pattern)` via `RegexSpecification`. Patterns are validated at construction time — invalid syntax raises `re2.error` immediately, before any query reaches the database.
+
+### Regex standard
+
+Hike uses **[google-re2](https://github.com/google/re2)** as the reference engine. Every pattern must be a valid RE2 expression. RE2 accepts most POSIX ERE syntax plus several common Perl extensions (`\d`, `\w`, `\s`, `\b`). It deliberately rejects constructs that require backtracking:
+
+| Construct | Status | Alternative |
+| :--- | :--- | :--- |
+| `[[:alpha:]]`, `[[:digit:]]` | ✅ Supported | — |
+| `\d`, `\w`, `\s`, `\b` | ✅ Supported | — |
+| `.` (dot) | ✅ Supported | Does **not** match `\n` |
+| `(?i)` inline flags | ✅ Supported | Use `case_insensitive=True` arg instead |
+| `(?=…)` lookahead | ❌ Rejected | No alternative |
+| `\1` backreferences | ❌ Rejected | No alternative |
+
+```python
+# Valid — validated immediately by re2
+sku_spec    = Product.sku.matches(r"^[A-Z]{2}-\d{4}$")
+name_spec   = Product.name.matches(r"pro", case_insensitive=True)
+alpha_spec  = Product.name.matches(r"^[[:alpha:]]+$")
+
+# Invalid — raises re2.error at construction time (before any DB call)
+Product.name.matches(r"(?=sale)")   # lookahead
+Product.name.matches(r"(.)\1")      # backreference
+```
+
+### POSIX character classes — ASCII-only across all providers
+
+POSIX named classes (`[[:alpha:]]`, `[[:upper:]]`, `[[:lower:]]`, `[[:alnum:]]`) are **ASCII-only** in every provider. This matches RE2's native behaviour and means `[[:alpha:]]` matches `[A-Za-z]` — not Unicode letters like `é` or `ñ`.
+
+Providers whose database engine would otherwise treat these classes as Unicode-aware (MySQL ICU, MariaDB PCRE, Oracle, PostgreSQL UTF-8) automatically receive a rewritten pattern (`[[:alpha:]]` → `[A-Za-z]`) so results are identical across all backends.
+
+### Per-provider support
+
+| Provider | Database | Mechanism | Notes |
+| :--- | :--- | :--- | :--- |
+| **SQLAlchemy** | PostgreSQL | `~` / `~*` operators | `.` rewritten to `[^\n]` — PostgreSQL's `.` matches newlines by default |
+| **SQLAlchemy** | MySQL 8+ | `REGEXP_LIKE(col, pat, flags)` | Requires MySQL ≥ 8.0 |
+| **SQLAlchemy** | MariaDB | `col REGEXP pat` / `REGEXP BINARY` | `(?i)` prefix for case-insensitive |
+| **SQLAlchemy** | SQLite | Python UDFs `REGEXP` / `IREGEXP` | UDFs must be registered on each connection (see below) |
+| **SQLAlchemy** | SQL Server | `REGEXP_LIKE(col, pat, flags)` | Requires SQL Server 2025 (major version ≥ 17) |
+| **SQLAlchemy** | Oracle | `REGEXP_LIKE(col, pat, flags)` | `'c'` / `'i'` match parameter |
+| **PyMongo** | MongoDB | `{ $regex: pat, $options: … }` | PCRE2 engine; ASCII-only by default |
+| **InMemory** | — | `re2.search()` / `re2.fullmatch()` | Reference behaviour |
+| **Redis** | — | `re2.search()` in-memory scan | Scans all keys; no server-side filtering |
+
+### SQLite — registering UDFs
+
+SQLite has no built-in regex engine. You must register two Python functions (`REGEXP` and `IREGEXP`) backed by RE2 before using `matches()`. Do this once when the engine is created:
+
+```python
+import re2
+from sqlalchemy import event
+
+def _register_regexp_udfs(dbapi_connection, _connection_record):
+    _icase = re2.Options()
+    _icase.case_sensitive = False
+
+    def regexp(pattern: str, value: str) -> bool:
+        try:
+            return re2.search(pattern, value) is not None
+        except Exception:
+            return False
+
+    def iregexp(pattern: str, value: str) -> bool:
+        try:
+            return re2.search(pattern, value, _icase) is not None
+        except Exception:
+            return False
+
+    dbapi_connection.create_function("REGEXP", 2, regexp)
+    dbapi_connection.create_function("IREGEXP", 2, iregexp)
+
+engine = create_engine("sqlite:///mydb.db", connect_args={"check_same_thread": False})
+event.listen(engine, "connect", _register_regexp_udfs)
+```
+
+!!! note "WAL mode recommended"
+    If you also use `watch()`, enable WAL mode so the polling thread can read rows committed by the main session:
+    ```python
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.commit()
+    ```
+
+---
+
 ## Switching providers
 
 Because every provider implements the same `IRepository` interface, switching is a one-line change in your setup code. Business logic and domain tests are unaffected:
