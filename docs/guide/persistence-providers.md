@@ -74,7 +74,7 @@ with uow(repo):
 
 `DictAutoSQLAlchemyMapper` infers ORM models from your aggregate's field annotations — no manual ORM boilerplate. For full control over table names, column types, and indexes, see **[SQLAlchemy Mappers](sqlalchemy-mappers.md)**.
 
-**Supported databases**: PostgreSQL, SQLite, MySQL, MariaDB, and any other SQLAlchemy-compatible engine.
+**Supported databases**: PostgreSQL, MySQL 8+, MariaDB, SQLite, Oracle, and SQL Server 2025 (v17+). Other SQLAlchemy-compatible engines work for basic CRUD and filtering — regex specifications require one of the listed dialects.
 
 ---
 
