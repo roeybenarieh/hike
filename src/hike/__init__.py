@@ -21,7 +21,7 @@ from hike.aggregate import Aggregate, UuidAggregate, authority
 from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule, SpecificationRule
 from hike.domain_event import DomainEvent
 from hike.domain_service import DomainService
-from hike.persistence.persistable import Persistable
+from hike.persistence.persistable import DataclassPersistable, Persistable
 from hike.persistence.repository import (
     IRepository,
     IAggregateRepository,
@@ -92,6 +92,7 @@ __all__ = [
     "DomainEvent",
     "DomainService",
     "Persistable",
+    "DataclassPersistable",
     "IRepository",
     "IAggregateRepository",
     "RepositoryError",

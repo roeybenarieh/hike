@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import abstractmethod, ABC
-from typing import Any, Hashable, Self, final
+from typing import Any, Hashable, Self, cast, final
 
 _HIKE_VERSION = "__hike_version__"
 
@@ -49,3 +50,34 @@ class Persistable[TId: Hashable](ABC):
 
     def __hash__(self) -> int:
         return hash(self.get_id())
+
+
+class DataclassPersistable[TId: Hashable](Persistable[TId], ABC):
+    """Persistable mixin for plain dataclasses.
+
+    Provides default to_dict, from_dict, and get_init_field_names for any
+    plain dataclass — mutable or frozen, with or without non-init fields.
+    Subclasses still need to implement get_id().
+
+    For frozen dataclasses, from_dict skips setattr for non-init fields and
+    relies on __post_init__ to recompute them (matching frozen semantics).
+    """
+
+    def to_dict(self) -> dict[str, Any]:
+        return {f.name: getattr(self, f.name) for f in dataclasses.fields(cast(Any, self))}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        dc_fields = dataclasses.fields(cast(Any, cls))
+        init_kwargs = {f.name: data[f.name] for f in dc_fields if f.init and f.name in data}
+        instance = cls(**init_kwargs)
+        params = getattr(cls, "__dataclass_params__", None)
+        if not getattr(params, "frozen", False):
+            for f in dc_fields:
+                if not f.init and f.name in data:
+                    setattr(instance, f.name, data[f.name])
+        return instance
+
+    @classmethod
+    def get_init_field_names(cls) -> tuple[str, ...]:
+        return tuple(f.name for f in dataclasses.fields(cast(Any, cls)) if f.init)
