@@ -42,9 +42,9 @@ _hike_locks_meta = MetaData()
 _hike_locks_table = Table(
     "__hike_saga_locks",
     _hike_locks_meta,
-    Column("namespace", String(512), nullable=False, primary_key=True),
-    Column("obj_id", String(512), nullable=False, primary_key=True),
-    Column("owner", String(512), nullable=False),
+    Column("namespace", String(255), nullable=False, primary_key=True),
+    Column("obj_id", String(255), nullable=False, primary_key=True),
+    Column("owner", String(255), nullable=False),
     Column("expires_at", Float(), nullable=True),  # Unix timestamp; NULL = no expiry
 )
 _hike_locks_table_created: bool = False
