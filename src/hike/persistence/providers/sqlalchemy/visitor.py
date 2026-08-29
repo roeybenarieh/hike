@@ -6,7 +6,8 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, and_, func, literal_column, not_, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute
 
-from hike.entity import Entity, TerminalFieldProxy
+from hike.entity import Entity
+from hike.specifications.proxy import TerminalFieldProxy
 from hike.persistence.providers.sqlalchemy.dialect import SupportedDialects
 from hike.persistence.repository import UnsupportedDialectError
 from hike.specifications import ISpecificationVisitor

@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from hike.entity import TerminalFieldProxy
+from hike.specifications.proxy import TerminalFieldProxy
 from hike.value_object import ValueObject
 import re2
 

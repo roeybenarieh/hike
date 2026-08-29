@@ -8,7 +8,7 @@ import re2 as _re2
 from .interfaces import ISpecification, ISpecificationVisitor
 
 if TYPE_CHECKING:
-    from hike.entity import TerminalFieldProxy
+    from .proxy import TerminalFieldProxy
 
 
 ##### Composite Specifications ####

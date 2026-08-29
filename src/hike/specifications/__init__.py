@@ -1,4 +1,5 @@
 from .interfaces import ISpecification, ISpecificationVisitor
+from .proxy import FieldProxy, TerminalFieldProxy
 from .specs import (
     AndSpecification,
     BaseFilterSpecification,
@@ -15,6 +16,8 @@ from .specs import (
 __all__ = [
     "ISpecification",
     "ISpecificationVisitor",
+    "FieldProxy",
+    "TerminalFieldProxy",
     "AndSpecification",
     "OrSpecification",
     "NotSpecification",

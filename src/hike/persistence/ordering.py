@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from hike.entity import TerminalFieldProxy
+from hike.specifications.proxy import TerminalFieldProxy
 from hike.value_object import ValueObject
 
 

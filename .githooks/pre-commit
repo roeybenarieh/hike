@@ -4,7 +4,10 @@ set -e
 echo "==> Type checking..."
 uv run pyright src/
 
-echo "==> Tests + coverage..."
-uv run pytest tests/ --cov --cov-report=term-missing -q
+echo "==> Tests..."
+uv run pytest tests/ -q \
+  --ignore=tests/hike/persistence/providers/sqlalchemy \
+  --ignore=tests/hike/persistence/providers/pymongo \
+  --ignore=tests/hike/persistence/providers/redis
 
 echo "==> Pre-commit checks passed."

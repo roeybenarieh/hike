@@ -70,7 +70,7 @@ class TestFieldDescriptor:
         assert e.name.value == "Titanic"
 
     def test_class_access_returns_field_proxy(self) -> None:
-        from hike.entity import FieldProxy
+        from hike.specifications.proxy import FieldProxy
         assert isinstance(Engine.name, FieldProxy)
 
     def test_raw_value_auto_converted(self) -> None:

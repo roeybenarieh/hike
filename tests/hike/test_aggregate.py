@@ -7,7 +7,7 @@ import pytest
 
 from hike.aggregate import UuidAggregate
 from hike.domain_event import DomainEvent
-from hike.entity import EntityID, Field
+from hike.entity import EntityUUID, Field
 from hike.rules import Rule, RuleBrokenError, SpecificationRule
 from hike.value_object import ValueObject
 from tests.hike.conftest import Boat, Name, Price
@@ -190,7 +190,7 @@ class TestUuidAggregate:
         assert b1 != b2
 
     def test_explicit_id_is_preserved(self) -> None:
-        eid = EntityID(UUID("12345678-1234-5678-1234-567812345678"))
+        eid = EntityUUID(UUID("12345678-1234-5678-1234-567812345678"))
         boat = Boat(id=eid, name=Name("Named"), price=Price(1.0))
         assert boat.id == eid
 

@@ -10,145 +10,11 @@ from uuid import UUID, uuid4
 from .common import DomainObject
 from .persistence.persistable import Persistable
 from .rules import Rule
-from .specifications.specs import (
-    EqualSpecification,
-    GreaterThanEqualSpecification,
-    GreaterThanSpecification,
-    LessThanEqualSpecification,
-    LessThanSpecification,
-    NotEqualSpecification,
-    RegexSpecification,
-)
+from .specifications.proxy import FieldProxy, TerminalFieldProxy
 from .value_object import ValueObject
 
 _T = TypeVar("_T")
 _TVO = TypeVar("_TVO", bound="ValueObject[Any]")
-
-
-class EntityID[TId: Hashable](ValueObject[TId]):
-    """A ValueObject that wraps the raw identifier of a DDD entity.
-
-    Use ``Field[EntityID[UUID]]`` (or any hashable raw type) in entity
-    subclasses to get type-safe, VO-wrapped IDs that participate in
-    spec-building via ``FieldProxy``.
-    """
-
-
-class TerminalFieldProxy:
-    """Class-level proxy for ``Field[ValueObject]`` fields.
-
-    Returned when a ``Field[T]``-annotated field is accessed at the class level
-    and ``T`` is a ``ValueObject``.  Its comparison operators produce
-    ``Specification`` objects for building queries:
-
-        Boat.price < 100        →  LessThanSpecification
-        Boat.price == 50        →  EqualSpecification
-        (Boat.price >= 10) & (Boat.price < 100)   →  AndSpecification
-
-    Does NOT support attribute chaining — use ``Field[Entity]`` (which returns
-    a ``FieldProxy``) when you need to traverse to nested entity fields.
-    """
-
-    def __init__(
-            self,
-            field_name: str,
-            field_type: type,
-            entity_class: type,
-            parent: FieldProxy | None = None,
-    ) -> None:
-        self.field_name = field_name
-        self.field_type = field_type
-        self.entity_class = entity_class
-        self.parent = parent
-
-    @property
-    def path(self) -> list[str]:
-        """Full field-name chain from root to leaf, e.g. ``['engine', 'price']``."""
-        parts: list[str] = []
-        node: TerminalFieldProxy | None = self
-        while node is not None:
-            parts.append(node.field_name)
-            node = node.parent
-        parts.reverse()
-        return parts
-
-    @property
-    def root(self) -> TerminalFieldProxy:
-        """The root proxy — the one directly on the queried class."""
-        node: TerminalFieldProxy = self
-        while node.parent is not None:
-            node = node.parent
-        return node
-
-    def _reject_proxy_operand(self, other: object) -> None:
-        if isinstance(other, TerminalFieldProxy):
-            raise TypeError(
-                f"Field-to-field comparisons are not supported. "
-                f"Use a scalar value as the operand, not {other!r}."
-            )
-
-    def __eq__(self, other: object) -> EqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
-        self._reject_proxy_operand(other)
-        return EqualSpecification(self, other)
-
-    def __ne__(self, other: object) -> NotEqualSpecification:  # pyright: ignore[reportIncompatibleMethodOverride]
-        self._reject_proxy_operand(other)
-        return NotEqualSpecification(self, other)
-
-    def __lt__(self, other: object) -> LessThanSpecification:
-        self._reject_proxy_operand(other)
-        return LessThanSpecification(self, other)
-
-    def __le__(self, other: object) -> LessThanEqualSpecification:
-        self._reject_proxy_operand(other)
-        return LessThanEqualSpecification(self, other)
-
-    def __gt__(self, other: object) -> GreaterThanSpecification:
-        self._reject_proxy_operand(other)
-        return GreaterThanSpecification(self, other)
-
-    def __ge__(self, other: object) -> GreaterThanEqualSpecification:
-        self._reject_proxy_operand(other)
-        return GreaterThanEqualSpecification(self, other)
-
-    def matches(self, pattern: str, *, case_insensitive: bool = False) -> RegexSpecification:
-        """Return a POSIX ERE regex specification for this field.
-
-        Pattern is validated immediately using ``google-re2`` in strict POSIX mode.
-        Requires ``hike[regex]``.
-        """
-        return RegexSpecification(self, pattern, case_insensitive=case_insensitive)
-
-    def __hash__(self) -> int:
-        return hash((self.field_name, self.entity_class))
-
-    def __repr__(self) -> str:
-        return f"{self.root.entity_class.__name__}.{'.'.join(self.path)}"
-
-
-class FieldProxy(TerminalFieldProxy):
-    """Class-level proxy for ``Field[Entity]`` fields.
-
-    Extends ``TerminalFieldProxy`` with attribute chaining, enabling nested specs:
-
-        Boat.engine.price > 1_000   →  GreaterThanSpecification with path ["engine", "price"]
-
-    The ``path`` property returns the full list of field names from root to leaf.
-    Visitor implementations use it to traverse the object graph during evaluation.
-    """
-
-    def __getattr__(self, name: str) -> FieldProxy:
-        """Enable chaining: ``Boat.engine.price`` returns a nested FieldProxy."""
-        if name.startswith("_"):
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-        for klass in self.field_type.__mro__:
-            if name in klass.__dict__ and isinstance(klass.__dict__[name], _FieldDescriptor):
-                desc: _FieldDescriptor[Any] = klass.__dict__[name]
-                return FieldProxy(name, desc.field_type, self.field_type, parent=self)
-        raise AttributeError(
-            f"'{self.field_type.__name__}' has no Field attribute '{name}'. "
-            f"Make sure it is annotated with Field[T]."
-        )
 
 
 class Field(Generic[_T]):
@@ -197,6 +63,22 @@ class Field(Generic[_T]):
 
     def __set__(self, instance: object, value: _T) -> None:
         raise NotImplementedError  # pragma: no cover
+
+class EntityID[TId: Hashable](ValueObject[TId]):
+    """A ValueObject that wraps the raw identifier of a DDD entity.
+
+    Use ``Field[EntityID[UUID]]`` (or any hashable raw type) in entity
+    subclasses to get type-safe, VO-wrapped IDs that participate in
+    spec-building via ``FieldProxy``.
+    """
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        if cls is EntityID:
+            raise TypeError(
+                "EntityID cannot be instantiated directly; "
+                "subclass it to define a concrete ID type."
+            )
+        return super().__new__(cls)
 
 
 def unwrap_field(ann_type: object) -> type[ValueObject[Any]] | None:
@@ -306,6 +188,7 @@ class _FieldDescriptor(Generic[_T]):
         self.field_name = field_name
         self.field_type = field_type
         self._private = f"_vo_{field_name}"
+        self.construct_class: type[Any] | None = None
 
     def __set_name__(self, _owner: type, name: str) -> None:
         self.field_name = name
@@ -321,7 +204,7 @@ class _FieldDescriptor(Generic[_T]):
 
     def __get__(self, instance: object, owner: type | None = None) -> FieldProxy | _T:
         if instance is None:
-            return FieldProxy(self.field_name, self.field_type, owner or type(None))
+            return FieldProxy(self.field_name, self.field_type, owner or type(None), resolver=_entity_field_resolver)
         val = instance.__dict__.get(self._private, _MISSING)
         if val is _MISSING:
             raise AttributeError(f"Field '{self.field_name}' not set")
@@ -334,9 +217,23 @@ class _FieldDescriptor(Generic[_T]):
         if isinstance(value, ft):
             instance.__dict__[self._private] = value
         elif issubclass(ft, ValueObject):
-            instance.__dict__[self._private] = ft(value)
+            construct: type[Any] = cast(type[Any], self.construct_class or ft)
+            instance.__dict__[self._private] = construct(value)
         else:
             raise TypeError(f"Expected {ft.__name__}, got {type(value).__name__}")
+
+
+def _entity_field_resolver(entity_class: type, field_name: str) -> tuple[type, type] | None:
+    """Resolver injected into ``FieldProxy`` so it can discover child field types for chaining.
+
+    Returns ``(child_field_type, entity_class)`` when *field_name* is a ``Field[T]``
+    descriptor on *entity_class*, otherwise ``None``.
+    """
+    for klass in entity_class.__mro__:
+        attr = klass.__dict__.get(field_name)
+        if isinstance(attr, _FieldDescriptor):
+            return (cast(_FieldDescriptor[Any], attr).field_type, entity_class)
+    return None
 
 
 def field(
@@ -496,6 +393,28 @@ class Entity[TId: Hashable](DomainObject, Persistable[TId]):
                                                                inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
                 desc.__set_name__(cls, name)
+
+        # ── Step 3.5: infer concrete construction class from default factories ─
+        # When a Field's declared type is abstract (e.g. EntityID), auto-conversion
+        # in _FieldDescriptor.__set__ can't construct it. Store the concrete class
+        # from the default factory so __set__ uses it instead.
+        dc_fields_map: dict[str, Any] = {f.name: f for f in fields(cast(Any, cls))}
+        for name in set(cls.__annotations__):
+            desc_obj = cls.__dict__.get(name)
+            if not isinstance(desc_obj, _FieldDescriptor) or desc_obj.construct_class is not None:
+                continue
+            dc_f = dc_fields_map.get(name)
+            if dc_f is None:
+                continue
+            factory: Any = dc_f.default_factory
+            if not callable(factory):
+                continue
+            try:
+                sample = factory()
+                if isinstance(sample, ValueObject):
+                    desc_obj.construct_class = type(cast(Any, sample))
+            except Exception:
+                pass
 
         # ── Step 4: own __invariants__ + wrap __init__ for auto-checking ─────
         # Each class gets its own empty list so parent invariants aren't shared.
@@ -667,7 +586,11 @@ def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
 
 ##### Base Entity implementations ####
 
+class EntityUUID(EntityID[UUID]):
+    """Concrete EntityID for UUID-keyed entities."""
+
+
 class UuidEntity(Entity[UUID]):
     """Entity with a UUID primary key, auto-generated by default."""
 
-    id: Field[EntityID[UUID]] = field(default_factory=lambda: EntityID(uuid4()))
+    id: Field[EntityID[UUID]] = field(default_factory=lambda: EntityUUID(uuid4()))
