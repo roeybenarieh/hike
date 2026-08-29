@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import ColumnElement, Select, and_, func, literal_column, not_, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute
@@ -343,7 +343,7 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         self,
         spec: BaseFilterSpecification,
     ) -> tuple[InstrumentedAttribute[Any], Any]:
-        return self.resolve_column(spec.field), spec.operand
+        return self.resolve_column(cast(TerminalFieldProxy, spec.field)), spec.operand
 
     def visit_and(self, spec: AndSpecification) -> None:
         left, right = self._visit_left_right_spec(spec)
@@ -382,7 +382,7 @@ class SQLAlchemyEvaluationSpecificationVisitor(ISpecificationVisitor):
         self.filters = col <= val
 
     def visit_regex(self, spec: RegexSpecification) -> None:
-        col = self.resolve_column(spec.field)
+        col = self.resolve_column(cast(TerminalFieldProxy, spec.field))
         d = self._dialect
 
         if d == SupportedDialects.POSTGRESQL:

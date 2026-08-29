@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Protocol
 
 if TYPE_CHECKING:
     from .specs import (
@@ -16,6 +16,28 @@ if TYPE_CHECKING:
 # Given the owner class and a field name, returns (child_field_type, child_owner_class)
 # if the name resolves to a chainable field, or None if it does not.
 FieldResolver = Callable[[type, str], "tuple[type, type] | None"]
+
+
+class FieldPath(Protocol):
+    """Minimal interface consumed by specs and visitors: a chain of field-name segments."""
+
+    @property
+    def path(self) -> list[str]: ...
+
+
+class FieldByName:
+    """Concrete FieldPath for callers who know a field by name rather than via a proxy.
+
+    Use when building specs programmatically (e.g. inside framework internals)
+    instead of through the ComparableObject / TerminalFieldProxy DSL.
+    """
+
+    def __init__(self, *names: str) -> None:
+        self._path = list(names)
+
+    @property
+    def path(self) -> list[str]:
+        return self._path
 
 
 class TerminalFieldProxy:

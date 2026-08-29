@@ -8,7 +8,7 @@ import re2 as _re2
 from .interfaces import ISpecification, ISpecificationVisitor
 
 if TYPE_CHECKING:
-    from .proxy import TerminalFieldProxy
+    from .proxy import FieldPath
 
 
 ##### Composite Specifications ####
@@ -43,7 +43,7 @@ class NotSpecification(ISpecification):
 
 ##### Leaf Specifications #####
 class BaseFilterSpecification(ISpecification, ABC):
-    def __init__(self, field: TerminalFieldProxy, operand: object) -> None:
+    def __init__(self, field: FieldPath, operand: object) -> None:
         self.field = field
         self.operand = operand
 
@@ -116,7 +116,7 @@ class RegexSpecification(BaseFilterSpecification):
 
     def __init__(
         self,
-        field: TerminalFieldProxy,
+        field: FieldPath,
         pattern: str,
         case_insensitive: bool = False,
     ) -> None:
