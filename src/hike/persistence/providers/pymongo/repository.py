@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pymongo import ASCENDING, DESCENDING
@@ -17,6 +19,7 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
+    LockConflictError,
     ResourceAlreadyExistError,
     ResourceDoesNotExistError,
     IAggregateRepository,
@@ -94,10 +97,25 @@ class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]
             self,
             collection: Collection[dict[str, Any]],
             aggregate_class: type[TPersistable],
+            *,
+            locks_collection: Collection[dict[str, Any]] | None = None,
+            lock_ttl: float = 300.0,
     ) -> None:
         super().__init__()
         self._collection = collection
         self._aggregate_class = aggregate_class
+        self._lock_ttl = lock_ttl
+        if locks_collection is None:
+            db = collection.database
+            self._locks_collection: Collection[dict[str, Any]] = db[f"{collection.name}__hike_locks"]
+        else:
+            self._locks_collection = locks_collection
+        self._locks_collection.create_index("obj_id", unique=True, background=True)
+        # TTL index: MongoDB auto-deletes documents when expires_at <= now.
+        # sparse=True excludes documents with no expires_at (indefinite locks).
+        self._locks_collection.create_index(
+            [("expires_at", ASCENDING)], expireAfterSeconds=0, sparse=True, background=True
+        )
 
     def _from_doc(self, document: dict[str, Any]) -> TPersistable:
         """Reconstruct an object from a MongoDB document."""
@@ -273,6 +291,39 @@ class PyMongoPersistableRepository(IRepository[TId, TPersistable, ClientSession]
                     seen.discard(doc_id)
                     continue
                 yield self._from_doc(doc)
+
+
+    def acquire_lock(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> None:
+        owner_str = str(owner) if owner is not None else "__anon__"
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        expires_dt = datetime.now(timezone.utc) + timedelta(seconds=self._lock_ttl)  # always set
+        sleep = 0.05
+        while True:
+            now_dt = datetime.now(timezone.utc)
+            # Eagerly remove any expired lock for this id so we don't have to wait
+            # for MongoDB's background TTL worker (which runs every ~60 s).
+            self._locks_collection.delete_many({
+                "obj_id": id,
+                "expires_at": {"$ne": None, "$lte": now_dt},
+            })
+            existing = self._locks_collection.find_one({"obj_id": id})
+            if existing is None:
+                try:
+                    self._locks_collection.insert_one({"obj_id": id, "owner": owner_str, "expires_at": expires_dt})
+                    return
+                except Exception:
+                    pass  # race — another writer won; retry
+            elif existing["owner"] == owner_str:
+                # Reentrant — refresh TTL
+                self._locks_collection.update_one({"obj_id": id}, {"$set": {"expires_at": expires_dt}})
+                return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise LockConflictError(id, timeout)
+            time.sleep(min(sleep, (deadline - time.monotonic()) if deadline is not None else sleep))
+
+    def release_lock(self, id: TId, *, owner: Any = None) -> None:
+        owner_str = str(owner) if owner is not None else "__anon__"
+        self._locks_collection.delete_one({"obj_id": id, "owner": owner_str})
 
 
 class PyMongoRepository(

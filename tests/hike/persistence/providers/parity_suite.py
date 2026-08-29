@@ -14,6 +14,7 @@ same assertions run against every provider.
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
@@ -25,6 +26,7 @@ import pytest
 from hike.persistence.ordering import asc, desc
 from hike.persistence.pagination import CursorPagination, OffsetPagination, Page, PagePagination
 from hike.persistence.repository import (
+    LockConflictError,
     ResourceAlreadyExistError,
     ResourceDoesNotExistError,
     IRepository,
@@ -1108,3 +1110,141 @@ class CrossProcessWatchParitySuite:
         assert len(results) == 1
         assert results[0].name == Name("Cross Process Boat")
         assert results[0].price == Price(77.0)
+
+
+class LockParitySuite:
+    """Parity suite for :meth:`~hike.persistence.repository.IRepository.acquire_lock`,
+    :meth:`~hike.persistence.repository.IRepository.release_lock`, and
+    :meth:`~hike.persistence.repository.IRepository.locked`.
+
+    Subclasses must provide the same ``uow`` and ``repo`` fixtures as
+    :class:`RepositoryParitySuite`.
+    """
+
+    def test_lock_acquire_and_release(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """Releasing a lock lets a different owner acquire it."""
+        boat_id = uuid4()
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="owner-a")
+            repo.release_lock(boat_id, owner="owner-a")
+            repo.acquire_lock(boat_id, owner="owner-b")
+            repo.release_lock(boat_id, owner="owner-b")
+
+    def test_lock_reentrant_same_owner(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """The same owner can re-acquire a lock it already holds (no deadlock)."""
+        boat_id = uuid4()
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="owner-a")
+            repo.acquire_lock(boat_id, owner="owner-a")  # reentrant — must not block
+            repo.release_lock(boat_id, owner="owner-a")
+
+    def test_locked_context_manager_releases_on_exit(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """``locked()`` releases the lock on normal exit."""
+        boat_id = uuid4()
+        with uow(repo):
+            with repo.locked(boat_id, owner="owner-a"):
+                pass
+            repo.acquire_lock(boat_id, owner="owner-b")
+            repo.release_lock(boat_id, owner="owner-b")
+
+    def test_locked_context_manager_releases_on_exception(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """``locked()`` releases the lock even when the body raises."""
+        boat_id = uuid4()
+        with uow(repo):
+            with pytest.raises(RuntimeError):
+                with repo.locked(boat_id, owner="owner-a"):
+                    raise RuntimeError("boom")
+            repo.acquire_lock(boat_id, owner="owner-b")
+            repo.release_lock(boat_id, owner="owner-b")
+
+    def test_lock_conflict_raises_after_timeout(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """``acquire_lock`` raises ``LockConflictError`` when another owner holds the lock."""
+        boat_id = uuid4()
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="owner-a")
+            with pytest.raises(LockConflictError):
+                repo.acquire_lock(boat_id, owner="owner-b", timeout=0.05)
+            repo.release_lock(boat_id, owner="owner-a")
+
+    def test_release_wrong_owner_is_noop(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """``release_lock`` with the wrong owner silently no-ops."""
+        boat_id = uuid4()
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="owner-a")
+            repo.release_lock(boat_id, owner="owner-b")  # wrong owner — noop
+            with pytest.raises(LockConflictError):
+                repo.acquire_lock(boat_id, owner="owner-c", timeout=0.05)
+            repo.release_lock(boat_id, owner="owner-a")
+
+    def test_lock_persists_across_uow_sessions(
+        self, uow: UnitOfWork[Any], repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """A lock acquired in one UoW session persists into the next session."""
+        boat_id = uuid4()
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="saga-a")
+        with uow(repo):
+            with pytest.raises(LockConflictError):
+                repo.acquire_lock(boat_id, owner="saga-b", timeout=0.05)
+        with uow(repo):
+            repo.release_lock(boat_id, owner="saga-a")
+        with uow(repo):
+            repo.acquire_lock(boat_id, owner="saga-b")
+            repo.release_lock(boat_id, owner="saga-b")
+
+    @pytest.fixture
+    def short_ttl_repo(self) -> Any:
+        """Repository configured with a very short lock_ttl (e.g. 0.2 s) for expiry tests.
+
+        Override in provider-specific subclasses.  The base implementation skips
+        the test so providers that have not wired this fixture yet are not silently
+        broken.
+        """
+        pytest.skip("short_ttl_repo not configured for this provider")
+
+    def test_lock_expires_after_ttl(
+        self, uow: UnitOfWork[Any], short_ttl_repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """A lock auto-expires (via constructor lock_ttl), letting another owner acquire it."""
+        boat_id = uuid4()
+        with uow(short_ttl_repo):
+            short_ttl_repo.acquire_lock(boat_id, owner="owner-a")
+        # Don't release — simulate a crash. After the TTL the lock must be gone.
+        time.sleep(0.35)
+        with uow(short_ttl_repo):
+            short_ttl_repo.acquire_lock(boat_id, owner="owner-b")  # must succeed
+            short_ttl_repo.release_lock(boat_id, owner="owner-b")
+
+    def test_lock_ttl_reentrant_refreshes_expiry(
+        self, uow: UnitOfWork[Any], short_ttl_repo: IRepository[UUID, Boat, Any]
+    ) -> None:
+        """Re-acquiring with the same owner refreshes the TTL dead-man's switch.
+
+        Timeline (TTL = 0.2 s):
+          t=0.00  acquire → expires t=0.20
+          t=0.10  reentrant acquire → refreshed expiry = t=0.30
+          t=0.22  check: past original expiry (0.20), before refreshed expiry (0.30)
+        """
+        boat_id = uuid4()
+        with uow(short_ttl_repo):
+            short_ttl_repo.acquire_lock(boat_id, owner="owner-a")
+        time.sleep(0.10)  # t=0.10 — still within TTL
+        with uow(short_ttl_repo):
+            short_ttl_repo.acquire_lock(boat_id, owner="owner-a")  # reentrant → refreshed to t=0.30
+        time.sleep(0.12)  # t=0.22 — past original expiry (0.20), 0.08 s before refreshed (0.30)
+        with uow(short_ttl_repo):
+            with pytest.raises(LockConflictError):
+                short_ttl_repo.acquire_lock(boat_id, owner="owner-b", timeout=0.05)
+            short_ttl_repo.release_lock(boat_id, owner="owner-a")

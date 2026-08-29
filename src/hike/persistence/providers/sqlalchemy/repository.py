@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import threading as _threading
 import time
 import uuid as _uuid
 from collections.abc import Iterator, Sequence
 from typing import Any, cast, get_origin, get_type_hints
 
-from sqlalchemy import ColumnElement, and_, asc as sa_asc, desc as sa_desc, func, or_, select, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import Column, ColumnElement, Float, MetaData, String, Table, and_, asc as sa_asc, delete as sa_delete, desc as sa_desc, func, insert as sa_insert, or_, select, select as sa_select, text, update as sa_update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from hike.entity import Entity, Field
@@ -20,6 +21,7 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
+    LockConflictError,
     ResourceAlreadyExistError,
     ResourceDoesNotExistError,
     IAggregateRepository,
@@ -34,6 +36,19 @@ from hike.specifications import ISpecification
 from .dialect import SupportedDialects
 from .mappers import DictAutoSQLAlchemyMapper, VERSION_ATTR
 from .visitor import ISQLAlchemyMapper, SQLAlchemyEvaluationSpecificationVisitor
+
+# Module-level lock table (created lazily on first use)
+_hike_locks_meta = MetaData()
+_hike_locks_table = Table(
+    "__hike_saga_locks",
+    _hike_locks_meta,
+    Column("namespace", String(512), nullable=False, primary_key=True),
+    Column("obj_id", String(512), nullable=False, primary_key=True),
+    Column("owner", String(512), nullable=False),
+    Column("expires_at", Float(), nullable=True),  # Unix timestamp; NULL = no expiry
+)
+_hike_locks_table_created: bool = False
+_hike_locks_table_setup_lock = _threading.Lock()
 
 
 def _drain_notifications(raw: Any, timeout: float = 1.0) -> list[str]:
@@ -132,14 +147,28 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
         self,
         aggregate_class: type[TPersistable],
         mapper: ISQLAlchemyMapper | None = None,
+        *,
+        lock_ttl: float = 300.0,
     ) -> None:
         super().__init__()
         self._aggregate_class = aggregate_class
+        self._lock_ttl = lock_ttl
         if mapper is None:
             mapper = DictAutoSQLAlchemyMapper(aggregate_class)  # type: ignore[arg-type]
         self._mapper = mapper
         self._model_class = mapper.get_model(aggregate_class)  # type: ignore[arg-type]
         self._listen_notify_ok: bool | None = None
+
+    @property
+    def session(self) -> Session:
+        if self._session is None:
+            raise RuntimeError("Session wasn't provided to the repository")
+        return self._session  # type: ignore[return-value]
+
+    @session.setter
+    def session(self, value: Session) -> None:
+        self._session = value
+        self._ensure_lock_table()
 
     @property
     def _listen_channel(self) -> str:
@@ -513,6 +542,92 @@ class SQLAlchemyPersistableRepository(IRepository[TId, TPersistable, Session]):
                     model = self.session.get(self._model_class, pk)
                     if model is not None:
                         yield self._from_model(model)
+
+
+    def _ensure_lock_table(self) -> None:
+        global _hike_locks_table_created
+        if not _hike_locks_table_created:
+            with _hike_locks_table_setup_lock:
+                if not _hike_locks_table_created:
+                    engine = self.session.connection().engine
+                    _hike_locks_meta.create_all(engine, checkfirst=True)
+                    # Migration: add expires_at if the table already existed without it.
+                    try:
+                        from sqlalchemy import inspect as _sa_inspect
+                        inspector = _sa_inspect(engine)
+                        existing = {c["name"] for c in inspector.get_columns("__hike_saga_locks")}
+                        if "expires_at" not in existing:
+                            with engine.connect() as conn:
+                                if engine.dialect.name == "mssql":
+                                    conn.execute(text("ALTER TABLE __hike_saga_locks ADD expires_at FLOAT"))
+                                else:
+                                    conn.execute(text("ALTER TABLE __hike_saga_locks ADD COLUMN expires_at FLOAT"))
+                                conn.commit()
+                    except Exception:
+                        pass  # best-effort; old schema is still usable without TTL
+                    _hike_locks_table_created = True
+
+    def acquire_lock(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> None:
+        namespace = getattr(self._model_class, "__tablename__", "unknown")
+        obj_id_str = str(id)
+        owner_str = str(owner) if owner is not None else "__anon__"
+        expires_at = time.time() + self._lock_ttl  # always set
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        sleep = 0.05
+        while True:
+            # Eagerly remove an expired lock for this id.
+            with self.session.begin_nested():
+                self.session.execute(
+                    sa_delete(_hike_locks_table).where(
+                        (_hike_locks_table.c.namespace == namespace)
+                        & (_hike_locks_table.c.obj_id == obj_id_str)
+                        & (_hike_locks_table.c.expires_at.isnot(None))
+                        & (_hike_locks_table.c.expires_at <= time.time())
+                    )
+                )
+            try:
+                with self.session.begin_nested():
+                    self.session.execute(
+                        sa_insert(_hike_locks_table).values(
+                            namespace=namespace, obj_id=obj_id_str, owner=owner_str, expires_at=expires_at
+                        )
+                    )
+                return
+            except IntegrityError:
+                row = self.session.execute(
+                    sa_select(_hike_locks_table.c.owner).where(
+                        (_hike_locks_table.c.namespace == namespace)
+                        & (_hike_locks_table.c.obj_id == obj_id_str)
+                    )
+                ).scalar()
+                if row == owner_str:
+                    # Reentrant — refresh TTL
+                    with self.session.begin_nested():
+                        self.session.execute(
+                            sa_update(_hike_locks_table)
+                            .where(
+                                (_hike_locks_table.c.namespace == namespace)
+                                & (_hike_locks_table.c.obj_id == obj_id_str)
+                            )
+                            .values(expires_at=expires_at)
+                        )
+                    return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise LockConflictError(id, timeout)
+            time.sleep(min(sleep, (deadline - time.monotonic()) if deadline is not None else sleep))
+
+    def release_lock(self, id: TId, *, owner: Any = None) -> None:
+        namespace = getattr(self._model_class, "__tablename__", "unknown")
+        obj_id_str = str(id)
+        owner_str = str(owner) if owner is not None else "__anon__"
+        with self.session.begin_nested():
+            self.session.execute(
+                sa_delete(_hike_locks_table).where(
+                    (_hike_locks_table.c.namespace == namespace)
+                    & (_hike_locks_table.c.obj_id == obj_id_str)
+                    & (_hike_locks_table.c.owner == owner_str)
+                )
+            )
 
 
 class SQLAlchemyRepository(

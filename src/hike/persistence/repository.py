@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Generator, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any, Generic, TypeVar, overload, final
 
 from hike import Aggregate
@@ -40,6 +41,19 @@ class OptimisticLockError(ResourceError):
 
     Callers should re-fetch the object and retry their operation.
     """
+
+
+class LockConflictError(ResourceError):
+    """Raised when an exclusive lock cannot be acquired within the timeout.
+
+    *resource* is the aggregate id that is already locked.
+    *timeout* is the timeout that expired (``None`` means the lock was not
+    immediately available on a non-blocking try).
+    """
+
+    def __init__(self, resource: Any, timeout: float | None = None) -> None:
+        super().__init__(resource)
+        self.timeout = timeout
 
 
 class UnsupportedDialectError(RepositoryError):
@@ -262,6 +276,55 @@ class IRepository(Generic[TId, TPersistable, TSession], ABC):
         :param obj: The object whose version to check.
         :raise ResourceDoesNotExistError: if the object does not exist in the database.
         """
+
+    @abstractmethod
+    def acquire_lock(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> None:
+        """Acquire an exclusive lock on aggregate *id*.
+
+        If the lock is already held by a different *owner*, block until *timeout*
+        seconds elapse (or indefinitely when *timeout* is ``None``), then raise
+        :exc:`LockConflictError`.
+
+        Acquiring a lock already held by the same *owner* is a no-op (reentrant).
+
+        The lock TTL (dead-man's switch that auto-expires the lock if the holder
+        crashes) is configured on the repository constructor, not here.  Persistent
+        providers (Redis, MongoDB, SQLAlchemy) always have a TTL; in-memory does not
+        need one because a process crash wipes all state.
+
+        :param id: The identifier of the aggregate to lock.
+        :param owner: Opaque token identifying the lock holder (e.g. a saga id).
+        :param timeout: Maximum seconds to wait. ``None`` means wait forever.
+        :raise LockConflictError: if the lock cannot be acquired within *timeout*.
+        """
+
+    @abstractmethod
+    def release_lock(self, id: TId, *, owner: Any = None) -> None:
+        """Release the lock on aggregate *id*.
+
+        No-ops silently if the lock is not currently held or is held by a
+        different *owner*.
+
+        :param id: The identifier of the aggregate to unlock.
+        :param owner: Must match the token used when the lock was acquired.
+        """
+
+    @contextmanager
+    def locked(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> Generator[None, None, None]:
+        """Context manager: acquire *id* on enter, release on exit (even on error).
+
+        Usage::
+
+            with repo.locked(order_id, owner=saga_id, timeout=5.0):
+                order = repo.get_one(order_id)
+                order.start_fulfillment()
+                repo.update(order)
+        """
+        self.acquire_lock(id, owner=owner, timeout=timeout)
+        try:
+            yield
+        finally:
+            self.release_lock(id, owner=owner)
 
 
 class IAggregateRepository(IRepository[TId, TAggregate, TSession], ABC):

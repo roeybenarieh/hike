@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import time
 import uuid as _uuid_mod
 from collections.abc import Iterator, Sequence
 from typing import Any, cast
@@ -19,6 +21,7 @@ from hike.persistence.pagination import (
     encode_cursor,
 )
 from hike.persistence.repository import (
+    LockConflictError,
     ResourceAlreadyExistError,
     ResourceDoesNotExistError,
     IAggregateRepository,
@@ -71,11 +74,14 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
             client: Redis,  # redis-py stubs pre-parameterize Redis
             aggregate_class: type[TPersistable],
             key_prefix: str,
+            *,
+            lock_ttl: float = 300.0,
     ) -> None:
         super().__init__()
         self._client = client
         self._aggregate_class = aggregate_class
         self._key_prefix = key_prefix
+        self._lock_ttl = lock_ttl
         self._watch_channel = f"{key_prefix}:__hike_inserts__"
 
     def _key(self, raw_id: Any) -> str:
@@ -251,6 +257,42 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
                 yield obj
         finally:
             pubsub.unsubscribe(self._watch_channel)  # pyright: ignore[reportUnknownMemberType]
+
+
+    _RELEASE_LOCK_SCRIPT = """
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+else
+    return 0
+end
+"""
+
+    def _lock_key(self, raw_id: Any) -> str:
+        return f"{self._key_prefix}:__lock__:{raw_id}"
+
+    def acquire_lock(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> None:
+        owner_str = str(owner) if owner is not None else "__anon__"
+        key = self._lock_key(id)
+        px = math.ceil(self._lock_ttl * 1000)  # milliseconds; always set
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        sleep = 0.05
+        while True:
+            current = cast(bytes | None, self._client.get(key))
+            if current is None:
+                if self._client.set(key, owner_str, nx=True, px=px):  # type: ignore[arg-type]
+                    return
+            elif current.decode() == owner_str:
+                # Reentrant — refresh TTL so the dead-man's switch doesn't fire early
+                self._client.pexpire(key, px)  # type: ignore[attr-defined]
+                return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise LockConflictError(id, timeout)
+            time.sleep(min(sleep, (deadline - time.monotonic()) if deadline is not None else sleep))
+
+    def release_lock(self, id: TId, *, owner: Any = None) -> None:
+        owner_str = str(owner) if owner is not None else "__anon__"
+        key = self._lock_key(id)
+        self._client.eval(self._RELEASE_LOCK_SCRIPT, 1, key, owner_str)  # type: ignore[attr-defined]
 
 
 class RedisRepository(

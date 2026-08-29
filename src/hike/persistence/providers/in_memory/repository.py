@@ -1,4 +1,6 @@
 import queue
+import threading
+import time
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from typing import Any, cast
@@ -15,6 +17,7 @@ from hike.persistence.pagination import (
 )
 from hike.persistence.persistable import Persistable
 from hike.persistence.repository import (
+    LockConflictError,
     ResourceAlreadyExistError,
     ResourceDoesNotExistError,
     IAggregateRepository,
@@ -40,9 +43,12 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
     (see ``InMemoryRepository``).
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, lock_ttl: float | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self._lock_ttl = lock_ttl
         self._insert_queues: list[queue.Queue[TPersistable]] = []
+        self._lock_owners: dict[Any, tuple[Any, float | None]] = {}  # id → (owner, expires_at)
+        self._lock_condition: threading.Condition = threading.Condition()
 
     def _prepare_stored_copy(self, copy: TPersistable) -> None:
         """Called on the deep-copied object before it is stored in the session.
@@ -185,6 +191,40 @@ class InMemoryPersistableRepository(IRepository[TId, TPersistable, dict[Any, Per
         self._prepare_stored_copy(copy)
         self.session[key] = copy
         self._after_mutate(obj)
+
+    def acquire_lock(self, id: TId, *, owner: Any = None, timeout: float | None = None) -> None:
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        my_expires_at = time.monotonic() + self._lock_ttl if self._lock_ttl is not None else None
+        with self._lock_condition:
+            while True:
+                now = time.monotonic()
+                entry = self._lock_owners.get(id)
+                if entry is None:
+                    self._lock_owners[id] = (owner, my_expires_at)
+                    return
+                held_owner, held_expires_at = entry
+                if held_expires_at is not None and held_expires_at <= now:
+                    # Expired — steal the lock and wake any other waiters
+                    self._lock_owners[id] = (owner, my_expires_at)
+                    self._lock_condition.notify_all()
+                    return
+                if held_owner == owner:
+                    # Reentrant — refresh TTL
+                    self._lock_owners[id] = (owner, my_expires_at)
+                    return
+                if deadline is not None and now >= deadline:
+                    raise LockConflictError(id, timeout)
+                remaining = (deadline - now) if deadline is not None else None
+                # Wake up at most every 50 ms to catch TTL-expired locks even without notify
+                wait_time = min(0.05, remaining) if remaining is not None else 0.05
+                self._lock_condition.wait(timeout=wait_time)
+
+    def release_lock(self, id: TId, *, owner: Any = None) -> None:
+        with self._lock_condition:
+            entry = self._lock_owners.get(id)
+            if entry is not None and entry[0] == owner:
+                del self._lock_owners[id]
+                self._lock_condition.notify_all()
 
 
 class InMemoryRepository(
