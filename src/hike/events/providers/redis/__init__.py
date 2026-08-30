@@ -20,10 +20,12 @@ except ImportError as _exc:
         "Install it with: pip install hike[redis]"
     ) from _exc
 
+from hike.events.providers.redis.event_bus import RedisEventBus
 from hike.events.providers.redis.publisher import RedisEventPublisher
 from hike.events.providers.redis.subscriber import RedisEventSubscriber
 
 __all__ = [
+    "RedisEventBus",
     "RedisEventPublisher",
     "RedisEventSubscriber",
 ]

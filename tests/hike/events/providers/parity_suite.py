@@ -1,18 +1,24 @@
 """
-Abstract parity test suite for IEventPublisher + IBlockingEventSubscriber.
+Abstract parity test suites for event providers.
 
-Every concrete event provider must have a test class that inherits from
-``EventProviderParitySuite`` and provides the following pytest fixtures:
+``EventProviderParitySuite`` — tests ``IEventPublisher`` + ``IExternalEventSubscriber``
+as separate objects.  Every concrete provider must have a test class that
+inherits from it and provides these fixtures:
 
 - ``publisher``       — an ``IEventPublisher[IntegrationEvent]`` wired to the broker
-- ``make_subscriber`` — a *callable* that creates a fresh ``IBlockingEventSubscriber``
-                        each time it is called, always connected to the **same**
-                        broker resource (queue / consumer-group / topic-prefix) so
-                        that multiple instances act as competing consumers.
+- ``make_subscriber`` — a *callable* returning a fresh ``IExternalEventSubscriber``
+                        each call, always connected to the **same** broker resource
+                        so multiple instances act as competing consumers.
 
-The base class does **not** declare these fixtures — pytest resolves them by
-name at collection time, so subclass fixtures may accept any additional
-parameters without causing type errors.
+``EventBusParitySuite`` — tests ``IExternalEventBus`` as a unified publish+subscribe
+object.  Every concrete provider must also have a test class that inherits from
+it and provides:
+
+- ``make_event_bus``  — a *callable* returning a fresh ``IExternalEventBus``
+                        each call, always wired to the **same** broker resource.
+
+The base classes do **not** declare these fixtures — pytest resolves them by name
+at collection time.
 """
 from __future__ import annotations
 
@@ -21,14 +27,17 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
+from hike.events.interfaces.event_bus import IExternalEventBus
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, eq=False)
 class _PingEvent(IntegrationEvent):
     payload: str
+    source: ClassVar[str] = "//test-service"
     version: int = 1
 
 
@@ -285,3 +294,54 @@ class EventProviderParitySuite:
         t.join(timeout=5)
 
         assert call_count == 1, f"expected 1 (dedup), got {call_count}"
+
+
+class EventBusParitySuite:
+    """Smoke tests for IExternalEventBus as a unified publish + subscribe interface."""
+
+    def _run_bus(
+        self, bus: IExternalEventBus[IntegrationEvent], *, delay: float = 0.15
+    ) -> threading.Thread:
+        t = threading.Thread(target=bus.tasks()[0], daemon=True)
+        t.start()
+        time.sleep(delay)
+        return t
+
+    def test_bus_publish_then_receive(
+        self,
+        make_event_bus: Callable[[], IExternalEventBus[IntegrationEvent]],
+    ) -> None:
+        """Publishing through the bus reaches a handler subscribed on the same bus."""
+        bus = make_event_bus()
+        received: list[_PingEvent] = []
+
+        class _Handler(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                received.append(event)
+                bus.cleanup()
+
+        bus.subscribe(_Handler())  # type: ignore[arg-type]
+        t = self._run_bus(bus)
+        bus.publish([_PingEvent(payload="bus-hello")])
+        t.join(timeout=30)
+
+        assert not t.is_alive(), "bus did not stop — no message received within 30 s"
+        assert len(received) == 1
+        assert received[0].payload == "bus-hello"
+
+    def test_bus_cleanup_stops_consuming(
+        self,
+        make_event_bus: Callable[[], IExternalEventBus[IntegrationEvent]],
+    ) -> None:
+        """cleanup() stops the bus's background task."""
+        bus = make_event_bus()
+
+        class _Noop(IEventHandler[_PingEvent]):
+            def handle(self, event: _PingEvent) -> None:
+                pass
+
+        bus.subscribe(_Noop())  # type: ignore[arg-type]
+        t = self._run_bus(bus)
+        bus.cleanup()
+        t.join(timeout=10)
+        assert not t.is_alive()

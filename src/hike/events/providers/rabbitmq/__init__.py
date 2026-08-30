@@ -15,10 +15,12 @@ except ImportError as _exc:
         "Install it with: pip install hike[rabbitmq]"
     ) from _exc
 
+from hike.events.providers.rabbitmq.event_bus import RabbitMQEventBus
 from hike.events.providers.rabbitmq.publisher import RabbitMQEventPublisher
 from hike.events.providers.rabbitmq.subscriber import RabbitMQEventSubscriber
 
 __all__ = [
+    "RabbitMQEventBus",
     "RabbitMQEventPublisher",
     "RabbitMQEventSubscriber",
 ]

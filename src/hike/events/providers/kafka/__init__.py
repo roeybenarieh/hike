@@ -15,10 +15,12 @@ except ImportError as _exc:
         "Install it with: pip install hike[kafka]"
     ) from _exc
 
+from hike.events.providers.kafka.event_bus import KafkaEventBus
 from hike.events.providers.kafka.publisher import KafkaEventPublisher
 from hike.events.providers.kafka.subscriber import KafkaEventSubscriber
 
 __all__ = [
+    "KafkaEventBus",
     "KafkaEventPublisher",
     "KafkaEventSubscriber",
 ]

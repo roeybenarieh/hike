@@ -10,6 +10,7 @@ import threading
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 from confluent_kafka import Consumer, Producer  # pyright: ignore[reportMissingModuleSource]
@@ -17,14 +18,15 @@ from testcontainers.community.kafka import KafkaContainer  # pyright: ignore[rep
 
 from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
-from hike.events.providers.kafka import KafkaEventPublisher, KafkaEventSubscriber
-from tests.hike.events.providers.parity_suite import EventProviderParitySuite
+from hike.events.providers.kafka import KafkaEventBus, KafkaEventPublisher, KafkaEventSubscriber
+from tests.hike.events.providers.parity_suite import EventBusParitySuite, EventProviderParitySuite
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, eq=False)
 class VesselSailed(IntegrationEvent):
     vessel_id: str
     destination: str
+    source: ClassVar[str] = "//test-service"
     version: int = 1
 
 
@@ -224,5 +226,20 @@ class TestKafkaEventProviderParity(EventProviderParitySuite):
         def factory() -> IExternalEventSubscriber[IntegrationEvent]:
             consumer = _make_consumer(kafka_bootstrap, group_id=shared_group_id)
             return KafkaEventSubscriber(consumer, topic_prefix=topic_prefix)
+
+        return factory
+
+
+class TestKafkaEventBusParity(EventBusParitySuite):
+    @pytest.fixture
+    def make_event_bus(
+        self, kafka_bootstrap: str, topic_prefix: str
+    ) -> Callable[[], KafkaEventBus]:
+        shared_group_id = uuid.uuid4().hex
+
+        def factory() -> KafkaEventBus:
+            prod = Producer({"bootstrap.servers": kafka_bootstrap})
+            cons = _make_consumer(kafka_bootstrap, group_id=shared_group_id)
+            return KafkaEventBus(prod, cons, topic_prefix=topic_prefix)
 
         return factory

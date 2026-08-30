@@ -11,6 +11,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pika
 import pytest
@@ -19,8 +20,8 @@ from testcontainers.core.container import DockerContainer  # pyright: ignore[rep
 
 from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
-from hike.events.providers.rabbitmq import RabbitMQEventPublisher, RabbitMQEventSubscriber
-from tests.hike.events.providers.parity_suite import EventProviderParitySuite
+from hike.events.providers.rabbitmq import RabbitMQEventBus, RabbitMQEventPublisher, RabbitMQEventSubscriber
+from tests.hike.events.providers.parity_suite import EventBusParitySuite, EventProviderParitySuite
 
 
 class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeStubs]
@@ -50,10 +51,11 @@ class _RabbitMqContainer(DockerContainer):  # pyright: ignore[reportMissingTypeS
         raise RuntimeError("RabbitMQ did not become ready within 60 s")
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, eq=False)
 class ParcelShipped(IntegrationEvent):
     tracking_id: str
     recipient: str
+    source: ClassVar[str] = "//test-service"
     version: int = 1
 
 
@@ -337,6 +339,35 @@ class TestRabbitMQEventProviderParity(EventProviderParitySuite):
             ch = conn.channel()
             assert isinstance(ch, BlockingChannel)
             return RabbitMQEventSubscriber(ch, exchange=exchange, queue=queue)
+
+        yield factory
+
+        for conn in connections:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+class TestRabbitMQEventBusParity(EventBusParitySuite):
+    @pytest.fixture
+    def make_event_bus(
+        self,
+        rabbitmq_params: pika.ConnectionParameters,
+        exchange: str,
+        queue: str,
+    ) -> Iterator[Callable[[], IExternalEventSubscriber[IntegrationEvent]]]:
+        connections: list[pika.BlockingConnection] = []
+
+        def factory() -> RabbitMQEventBus:
+            pub_conn = pika.BlockingConnection(rabbitmq_params)
+            sub_conn = pika.BlockingConnection(rabbitmq_params)
+            connections.extend([pub_conn, sub_conn])
+            pub_ch = pub_conn.channel()
+            sub_ch = sub_conn.channel()
+            assert isinstance(pub_ch, BlockingChannel)
+            assert isinstance(sub_ch, BlockingChannel)
+            return RabbitMQEventBus(pub_ch, sub_ch, exchange=exchange, queue=queue)
 
         yield factory
 

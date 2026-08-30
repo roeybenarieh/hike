@@ -11,7 +11,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from redis import Redis
@@ -19,14 +19,15 @@ from testcontainers.community.redis import RedisContainer  # pyright: ignore[rep
 
 from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces import IExternalEventSubscriber, IEventHandler, IEventPublisher
-from hike.events.providers.redis import RedisEventPublisher, RedisEventSubscriber
-from tests.hike.events.providers.parity_suite import EventProviderParitySuite
+from hike.events.providers.redis import RedisEventBus, RedisEventPublisher, RedisEventSubscriber
+from tests.hike.events.providers.parity_suite import EventBusParitySuite, EventProviderParitySuite
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, eq=False)
 class PackageArrived(IntegrationEvent):
     package_id: str
     location: str
+    source: ClassVar[str] = "//test-service"
     version: int = 1
 
 
@@ -263,6 +264,25 @@ class TestRedisEventProviderParity(EventProviderParitySuite):
         """
         def factory() -> IExternalEventSubscriber[IntegrationEvent]:
             return RedisEventSubscriber(
+                redis_client,
+                stream_prefix=stream_prefix,
+                group=group,
+                claim_idle_ms=200,
+            )
+
+        return factory
+
+
+class TestRedisEventBusParity(EventBusParitySuite):
+    @pytest.fixture
+    def make_event_bus(
+        self,
+        redis_client: Redis,  # type: ignore[type-arg]
+        stream_prefix: str,
+        group: str,
+    ) -> Callable[[], RedisEventBus]:
+        def factory() -> RedisEventBus:
+            return RedisEventBus(
                 redis_client,
                 stream_prefix=stream_prefix,
                 group=group,
