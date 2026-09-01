@@ -117,6 +117,8 @@ body[data-md-color-scheme="default"] {
           <line x1="10" y1="0" x2="17" y2="0"/>
         </svg>
       </button>
+    </div>
+    <div style="position:absolute;top:12px;right:12px;z-index:10;">
       <button id="hike-cmap-fullscreen" aria-label="Full screen" title="Full screen"
         style="display:flex;align-items:center;justify-content:center;background:var(--cmap-bg);border:1px solid var(--cmap-border);border-radius:6px;padding:12px 16px;cursor:pointer;color:var(--cmap-muted);transition:opacity .15s;opacity:0.85;">
         <svg id="hike-cmap-fs-icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -125,10 +127,11 @@ body[data-md-color-scheme="default"] {
         </svg>
       </button>
     </div>
-  </div>
-  <div id="hike-cmap-info" style="display:none;margin-top:8px;padding:12px 18px;background:var(--cmap-bg);border-radius:8px;border:1px solid var(--cmap-border);font-size:0.82rem;font-family:monospace;color:var(--cmap-text);">
-    <span id="hike-cmap-info-name" style="font-weight:700;margin-right:10px;"></span>
-    <code id="hike-cmap-info-imp" style="color:var(--cmap-code);white-space:pre;"></code>
+    <div id="hike-cmap-info" style="display:none;position:absolute;bottom:76px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 16px;background:var(--cmap-search-panel-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--cmap-search-border);border-radius:8px;font-size:0.82rem;font-family:monospace;color:var(--cmap-text);white-space:nowrap;">
+      <div><span id="hike-cmap-info-name" style="font-weight:700;"></span></div>
+      <div><code id="hike-cmap-info-imp" style="color:var(--cmap-code);white-space:pre;"></code></div>
+      <div id="hike-cmap-info-impls" style="display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -138,45 +141,71 @@ body[data-md-color-scheme="default"] {
 
   var NODES = [
     /* Core DDD */
-    { data: { id: 'ValueObject',     l: 'ValueObject',           s: 'hike.value_object',               cat: 'core',        imp: 'from hike import ValueObject' } },
-    { data: { id: 'EntityID',        l: 'EntityID',              s: 'hike.entity',                     cat: 'core',        imp: 'from hike import EntityID' } },
-    { data: { id: 'Entity',          l: 'Entity',                s: 'hike.entity',                     cat: 'core',        imp: 'from hike import Entity' } },
-    { data: { id: 'Aggregate',       l: 'Aggregate',             s: 'hike.aggregate',                  cat: 'core',        imp: 'from hike import Aggregate' } },
-    { data: { id: 'DomainEvent',     l: 'DomainEvent',           s: 'hike.domain_event',               cat: 'events',      imp: 'from hike import DomainEvent' } },
+    { data: { id: 'ValueObject',     l: 'ValueObject',       s: 'hike.value_object',           cat: 'core',        imp: 'from hike import ValueObject' } },
+    { data: { id: 'Identifier',      l: 'Identifier',        s: 'hike.entity / hike.aggregate', cat: 'core',        imp: 'from hike import EntityID\nfrom hike import AggregateID\nfrom hike import AggregateUUID' } },
+    { data: { id: 'Entity',          l: 'Entity',            s: 'hike.entity',                 cat: 'core',        imp: 'from hike import Entity' } },
+    { data: { id: 'Aggregate',       l: 'Aggregate',         s: 'hike.aggregate',              cat: 'core',        imp: 'from hike import Aggregate' } },
+    { data: { id: 'DomainEvent',     l: 'DomainEvent',       s: 'hike.domain_event',           cat: 'events',      imp: 'from hike import DomainEvent' } },
     /* Rules */
-    { data: { id: 'Rule',            l: 'Rule',                  s: 'hike.rules',                      cat: 'rules',       imp: 'from hike import Rule' } },
-    { data: { id: 'SpecRule',        l: 'SpecificationRule',     s: 'hike.rules',                      cat: 'rules',       imp: 'from hike import SpecificationRule' } },
+    { data: { id: 'Rule',            l: 'Rule',              s: 'hike.rules',                  cat: 'rules',       imp: 'from hike import Rule' } },
+    { data: { id: 'SpecRule',        l: 'SpecificationRule', s: 'hike.rules',                  cat: 'rules',       imp: 'from hike import SpecificationRule' } },
     /* Specifications */
-    { data: { id: 'ISpec',           l: 'ISpecification',        s: 'hike.specifications',             cat: 'specs',       imp: 'from hike import ISpecification' } },
+    { data: { id: 'Specification',   l: 'Specification',     s: 'hike.specifications',         cat: 'specs',       imp: 'from hike import ISpecification' } },
     /* Persistence */
-    { data: { id: 'IRepository',     l: 'IRepository',           s: 'hike.persistence.repository',     cat: 'persistence', imp: 'from hike import IRepository' } },
-    { data: { id: 'UnitOfWork',      l: 'UnitOfWork',            s: 'hike.persistence.uow',            cat: 'persistence', imp: 'from hike import UnitOfWork' } },
+    { data: { id: 'Repository', l: 'Repository', s: 'hike.persistence.repository', cat: 'persistence', imp: 'from hike import IRepository',
+      impls: [
+        { icon: 'inmemory',   imp: 'from hike.persistence.providers.in_memory import InMemoryRepository' },
+        { icon: 'mongodb',    imp: 'from hike.persistence.providers.pymongo import PyMongoRepository' },
+        { icon: 'sqlalchemy', imp: 'from hike.persistence.providers.sqlalchemy import SQLAlchemyRepository' },
+        { icon: 'redis',      imp: 'from hike.persistence.providers.redis import RedisRepository' },
+      ]
+    } },
+    { data: { id: 'UnitOfWork', l: 'UnitOfWork', s: 'hike.persistence.uow', cat: 'persistence', imp: 'from hike import UnitOfWork' } },
     /* Events */
-    { data: { id: 'IEventHandler',    l: 'IEventHandler',    s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventHandler' } },
-    { data: { id: 'IEventPublisher',  l: 'IEventPublisher',  s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventPublisher' } },
-    { data: { id: 'IEventSubscriber', l: 'IEventSubscriber', s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventSubscriber' } },
-    { data: { id: 'InMemoryEventBus', l: 'InMemoryEventBus', s: 'hike.events.event_bus',  cat: 'events', imp: 'from hike.events.event_bus import InMemoryEventBus' } },
+    { data: { id: 'EventHandler',   l: 'EventHandler',   s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventHandler' } },
+    { data: { id: 'EventPublisher', l: 'EventPublisher', s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventPublisher',
+      impls: [
+        { icon: 'rabbitmq',  imp: 'from hike.events.providers.rabbitmq import RabbitMQEventPublisher' },
+        { icon: 'kafka',     imp: 'from hike.events.providers.kafka import KafkaEventPublisher' },
+        { icon: 'redis',     imp: 'from hike.events.providers.redis import RedisEventPublisher' },
+      ]
+    } },
+    { data: { id: 'EventSubscriber', l: 'EventSubscriber', s: 'hike.events.interfaces', cat: 'events', imp: 'from hike.events.interfaces import IEventSubscriber',
+      impls: [
+        { icon: 'rabbitmq',  imp: 'from hike.events.providers.rabbitmq import RabbitMQEventSubscriber' },
+        { icon: 'kafka',     imp: 'from hike.events.providers.kafka import KafkaEventSubscriber' },
+        { icon: 'redis',     imp: 'from hike.events.providers.redis import RedisEventSubscriber' },
+      ]
+    } },
+    { data: { id: 'EventBus', l: 'EventBus', s: 'hike.events.event_bus', cat: 'events', imp: 'from hike.events.event_bus import EventBus',
+      impls: [
+        { icon: 'inmemory',  imp: 'from hike.events.event_bus import EventBus' },
+        { icon: 'rabbitmq',  imp: 'from hike.events.providers.rabbitmq import RabbitMQEventBus' },
+        { icon: 'kafka',     imp: 'from hike.events.providers.kafka import KafkaEventBus' },
+        { icon: 'redis',     imp: 'from hike.events.providers.redis import RedisEventBus' },
+      ]
+    } },
   ];
 
   var EDGES = [
     /* ── Inheritance / implements (solid) ──────────────────────── */
-    { data: { source: 'ValueObject',      target: 'EntityID',        etype: 'inh' } },
-    { data: { source: 'Entity',           target: 'Aggregate',       etype: 'inh' } },
-    { data: { source: 'Rule',             target: 'SpecRule',        etype: 'inh' } },
-    { data: { source: 'IEventPublisher',  target: 'InMemoryEventBus', etype: 'inh' } },
-    { data: { source: 'IEventSubscriber', target: 'InMemoryEventBus', etype: 'inh' } },
+    { data: { source: 'ValueObject',     target: 'Identifier',       etype: 'inh' } },
+    { data: { source: 'Entity',          target: 'Aggregate',        etype: 'inh' } },
+    { data: { source: 'Rule',            target: 'SpecRule',         etype: 'inh' } },
+    { data: { source: 'EventPublisher',  target: 'EventBus', etype: 'inh' } },
+    { data: { source: 'EventSubscriber', target: 'EventBus', etype: 'inh' } },
     /* ── Usage / dependency (dashed) ───────────────────────────── */
-    { data: { source: 'Entity',           target: 'EntityID',        etype: 'use', label: 'identifier' } },
-    { data: { source: 'Aggregate',        target: 'DomainEvent',     etype: 'use', label: 'raises' } },
-    { data: { source: 'Rule',             target: 'Entity',          etype: 'use', label: 'validates' } },
-    { data: { source: 'Rule',             target: 'ValueObject',     etype: 'use', label: 'validates' } },
-    { data: { source: 'SpecRule',         target: 'ISpec',           etype: 'use', label: 'delegates to' } },
-    { data: { source: 'IRepository',      target: 'ISpec',           etype: 'use', label: 'filter with' } },
-    { data: { source: 'UnitOfWork',       target: 'IRepository',     etype: 'use', label: 'scopes session' } },
-    { data: { source: 'UnitOfWork',       target: 'IEventPublisher', etype: 'use', label: 'publishes before commit' } },
-    { data: { source: 'IEventPublisher',  target: 'DomainEvent',     etype: 'use', label: 'publishes' } },
-    { data: { source: 'IEventSubscriber', target: 'IEventHandler',   etype: 'use', label: 'delegate handling to' } },
-    { data: { source: 'IEventSubscriber', target: 'DomainEvent',     etype: 'use', label: 'subscribes to' } },
+    { data: { source: 'Entity',          target: 'Identifier',       etype: 'use', label: 'uniquely identified using' } },
+    { data: { source: 'Aggregate',       target: 'DomainEvent',      etype: 'use', label: 'raises' } },
+    { data: { source: 'Rule',            target: 'Aggregate',        etype: 'use', label: 'validates invariants in' } },
+    { data: { source: 'Rule',            target: 'ValueObject',      etype: 'use', label: 'validates' } },
+    { data: { source: 'SpecRule',        target: 'Specification',    etype: 'use', label: 'delegates to' } },
+    { data: { source: 'Repository',      target: 'Specification',    etype: 'use', label: 'filter with' } },
+    { data: { source: 'UnitOfWork',      target: 'Repository',       etype: 'use', label: 'scopes session' } },
+    { data: { source: 'UnitOfWork',      target: 'EventPublisher',   etype: 'use', label: 'publishes before commit' } },
+    { data: { source: 'EventPublisher',  target: 'DomainEvent',      etype: 'use', label: 'publishes' } },
+    { data: { source: 'EventSubscriber', target: 'EventHandler',     etype: 'use', label: 'delegate handling to' } },
+    { data: { source: 'EventSubscriber', target: 'DomainEvent',      etype: 'use', label: 'subscribes to' } },
   ];
 
   var PALETTES = {
@@ -210,6 +239,16 @@ body[data-md-color-scheme="default"] {
     }
   };
 
+  /* Official brand logos via Simple Icons CDN; inmemory uses an inline SVG (no official brand) */
+  var ICONS = {
+    rabbitmq:   'https://cdn.simpleicons.org/rabbitmq',
+    kafka:      'https://cdn.simpleicons.org/apachekafka',
+    redis:      'https://cdn.simpleicons.org/redis',
+    mongodb:    'https://cdn.simpleicons.org/mongodb',
+    sqlalchemy: 'https://cdn.simpleicons.org/sqlalchemy',
+    inmemory:   'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect x="2" y="9" width="24" height="10" rx="2" fill="none" stroke="#64748b" stroke-width="2"/><rect x="5" y="12" width="4" height="4" rx="1" fill="#64748b"/><rect x="12" y="12" width="4" height="4" rx="1" fill="#64748b"/><rect x="19" y="12" width="4" height="4" rx="1" fill="#64748b"/><line x1="7" y1="5" x2="7" y2="9" stroke="#64748b" stroke-width="2"/><line x1="14" y1="5" x2="14" y2="9" stroke="#64748b" stroke-width="2"/><line x1="21" y1="5" x2="21" y2="9" stroke="#64748b" stroke-width="2"/><line x1="7" y1="19" x2="7" y2="23" stroke="#64748b" stroke-width="2"/><line x1="14" y1="19" x2="14" y2="23" stroke="#64748b" stroke-width="2"/><line x1="21" y1="19" x2="21" y2="23" stroke="#64748b" stroke-width="2"/></svg>'),
+  };
+
   function getPalette() {
     return document.body.getAttribute('data-md-color-scheme') === 'default'
       ? PALETTES.light : PALETTES.dark;
@@ -224,7 +263,7 @@ body[data-md-color-scheme="default"] {
       }},
       { selector: 'node', style: {
           'shape': 'round-rectangle',
-          'label': function (e) { return e.data('l') + '\n' + e.data('s'); },
+          'label': function (e) { return e.data('l'); },
           'text-wrap': 'wrap',
           'text-valign': 'center',
           'text-halign': 'center',
@@ -358,7 +397,7 @@ body[data-md-color-scheme="default"] {
        Edge labels use font-size 21 (graph units); char width ~14 units for system-ui.
        Node dims in graph units: min-width 140, h-padding 20 each side. */
     function nodeHalfDiag(node) {
-      var lbl = node.data('l') + '\n' + node.data('s');
+      var lbl = node.data('l');
       var maxCh = Math.max.apply(null, lbl.split('\n').map(function (l) { return l.length; }));
       var w = Math.max(140, maxCh * 7.2) + 40;
       return Math.sqrt(w * w + 80 * 80) / 2;
@@ -444,9 +483,10 @@ body[data-md-color-scheme="default"] {
       document.addEventListener('webkitfullscreenchange', onFsChange);
     }
 
-    var infoBox  = document.getElementById('hike-cmap-info');
-    var infoName = document.getElementById('hike-cmap-info-name');
-    var infoImp  = document.getElementById('hike-cmap-info-imp');
+    var infoBox   = document.getElementById('hike-cmap-info');
+    var infoName  = document.getElementById('hike-cmap-info-name');
+    var infoImp   = document.getElementById('hike-cmap-info-imp');
+    var infoImpls = document.getElementById('hike-cmap-info-impls');
 
     var lastTapped = null;
     cy.on('tap', 'node', function (evt) {
@@ -462,6 +502,35 @@ body[data-md-color-scheme="default"] {
       infoImp.textContent  = d.imp;
       var CAT_COLORS = { core:'#c4b5fd', rules:'#93c5fd', specs:'#5eead4', persistence:'#fcd34d', events:'#fdba74', messaging:'#f9a8d4', providers:'#9ca3af' };
       infoName.style.color = CAT_COLORS[d.cat] || '#e2e8f0';
+
+      /* render provider implementations if present */
+      if (infoImpls) {
+        var impls = d.impls;
+        if (impls && impls.length) {
+          infoImpls.innerHTML = '';
+          infoImpls.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12);';
+          impls.forEach(function (impl) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            var iconWrap = document.createElement('span');
+            iconWrap.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;background:#fff;border-radius:4px;padding:2px;';
+            var img = document.createElement('img');
+            img.src = ICONS[impl.icon] || '';
+            img.style.cssText = 'display:block;width:16px;height:16px;';
+            iconWrap.appendChild(img);
+            var code = document.createElement('code');
+            code.style.cssText = 'color:var(--cmap-code);font-size:0.78rem;';
+            code.textContent = impl.imp;
+            row.appendChild(iconWrap);
+            row.appendChild(code);
+            infoImpls.appendChild(row);
+          });
+        } else {
+          infoImpls.style.display = 'none';
+          infoImpls.innerHTML = '';
+        }
+      }
+
       infoBox.style.display = 'block';
       cy.animate({ center: { eles: evt.target }, zoom: Math.max(cy.zoom(), 1.6) }, { duration: 300 });
     });
