@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from typing import assert_type
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from hike.entity import from_dict, to_dict
+import pytest
+
+from hike.entity import EntityUUID, from_dict, to_dict
 from hike.specifications import (
     AndSpecification,
     EqualSpecification,
@@ -18,6 +20,32 @@ from hike.specifications import (
 )
 
 from tests.hike.conftest import Boat, BoatEngine, Engine, Horsepower, MotorBoat, Name, Price
+
+
+class TestEntityUUID:
+    def test_accepts_uuid_object(self) -> None:
+        uid = uuid4()
+        eid = EntityUUID(uid)
+        assert eid.value is uid
+
+    def test_accepts_valid_uuid_string_and_coerces(self) -> None:
+        uid = uuid4()
+        eid = EntityUUID(str(uid))  # pyright: ignore[reportArgumentType]
+        assert isinstance(eid.value, UUID)
+        assert eid.value == uid
+
+    def test_rejects_invalid_uuid_string(self) -> None:
+        with pytest.raises(ValueError, match="invalid uuid entity identifier"):
+            EntityUUID("not-a-uuid")  # pyright: ignore[reportArgumentType]
+
+    def test_rejects_non_string_non_uuid(self) -> None:
+        with pytest.raises(ValueError, match="invalid uuid entity identifier"):
+            EntityUUID(12345)  # pyright: ignore[reportArgumentType]
+
+    def test_coerced_value_is_uuid_not_string(self) -> None:
+        uid = uuid4()
+        eid = EntityUUID(str(uid))  # pyright: ignore[reportArgumentType]
+        assert type(eid.value) is UUID
 
 
 class TestUuidEntityIdentity:

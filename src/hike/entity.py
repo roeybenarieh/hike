@@ -64,6 +64,7 @@ class Field(Generic[_T]):
     def __set__(self, instance: object, value: _T) -> None:
         raise NotImplementedError  # pragma: no cover
 
+
 class EntityID[TId: Hashable](ValueObject[TId]):
     """A ValueObject that wraps the raw identifier of a DDD entity.
 
@@ -588,6 +589,22 @@ def from_dict(entity_class: type[Any], data: dict[str, Any]) -> Any:
 
 class EntityUUID(EntityID[UUID]):
     """Concrete EntityID for UUID-keyed entities."""
+
+    def __post_init__(self) -> None:
+        raw: object = self.value
+        if isinstance(raw, UUID):  # pyright: ignore[reportUnnecessaryIsInstance]
+            super().__post_init__()
+            return
+
+        if not isinstance(raw, str):
+            raise ValueError(f"invalid uuid entity identifier: {raw!r}")
+        try:
+            entity_uuid = UUID(raw)
+        except Exception:
+            raise ValueError(f"invalid uuid entity identifier: {raw!r}")
+
+        object.__setattr__(self, 'value', entity_uuid)
+        super().__post_init__()
 
 
 class UuidEntity(Entity[UUID]):
