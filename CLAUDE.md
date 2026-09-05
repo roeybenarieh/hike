@@ -21,6 +21,8 @@ Requires Python >= 3.14. Package manager is `uv` (see `uv.lock`).
 
 **Every time you find a bug and fix it, you must write a test that makes sure this bug doesn't exist anymore.**
 
+**When running tests, only run the tests that cover the changed code.** Use `uv run pytest <path>` targeting the specific test file or directory. Do not run the full suite unless explicitly asked.
+
 ## Git
 
 Never add a `Co-Authored-By` trailer to commit messages.
@@ -70,7 +72,14 @@ Repository error hierarchy (all in `repository.py`, extend `DomainError`):
 
 ### Provider parity rule
 
-Every feature **must work identically across all providers** (in_memory, pymongo, sqlalchemy, redis). If a feature cannot be implemented in even one provider, it must not be available in any provider — remove or withhold it entirely rather than offering a partial implementation. Do not add a capability to three providers and raise `NotImplementedError` in the fourth.
+Every feature **must work identically across all providers of the same kind**. This applies to all provider families:
+
+- **Persistence providers**: in_memory, pymongo, sqlalchemy, redis
+- **Event providers**: in_memory, rabbitmq, kafka, redis (and any future ones)
+
+If a feature cannot be implemented in even one provider of a family, it must not be available in any provider of that family — remove or withhold it entirely rather than offering a partial implementation. Do not add a capability to three providers and raise `NotImplementedError` in the fourth.
+
+**Parity must be enforced by tests.** Each provider family must have an abstract parity test suite (a base class with shared test methods) and a concrete subclass per provider that wires up the fixtures. Adding a feature to a provider without a corresponding parity test is not complete. The parity suite lives alongside the provider tests (e.g. `tests/hike/events/providers/parity_suite.py`, `tests/hike/persistence/providers/parity_suite.py`).
 
 ### Specification pattern (`specifications/`)
 
