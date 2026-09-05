@@ -42,6 +42,7 @@ from hike.persistence.pagination import (
     PagePagination,
     Pagination,
 )
+from hike.runner import ThreadedBackgroundTaskRunner, ProcessBackgroundTaskRunner
 from hike.specifications import (
     ISpecification,
     ISpecificationVisitor,
@@ -102,6 +103,9 @@ __all__ = [
     "ResourceDoesNotExistError",
     "ResourceAlreadyExistError",
     "OptimisticLockError",
+
+    "ThreadedBackgroundTaskRunner",
+    "ProcessBackgroundTaskRunner",
 
     "DBContext",
     "UnitOfWork",
