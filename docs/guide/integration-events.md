@@ -1,5 +1,8 @@
 # Integration Events
 
+!!! warning "🚧 Work in Progress"
+    This page is actively being written. The API and examples are functional, but some sections may be incomplete or revised before the stable release.
+
 An **integration event** is a domain event that crosses a service boundary. Where [domain events](domain-events.md) are dispatched synchronously within a process, integration events must survive process crashes, network partitions, and message broker restarts, and be delivered at-least-once to one or more receiving services.
 
 Hike implements integration events using the **transactional outbox/inbox pattern** via `TransactionalBox`.
@@ -70,13 +73,15 @@ box = (
 # Subscribe handlers to the inbox side
 from hike.events.interfaces import IEventHandler
 
+
 class FulfillOrder(IEventHandler[OrderPlaced]):
     def handle(self, event: OrderPlaced) -> None: ...
+
 
 box.subscribe(FulfillOrder())
 
 # Pass the box as the event producer to UoW (outbox side)
-uow = UnitOfWork(order_context, event_producer=box)
+uow = UnitOfWork(order_context, event_publisher=box)
 ```
 
 On `uow.commit()`, events are written to the outbox table in the **same transaction** as the domain change. The background relay then picks them up and forwards them to the broker. The inbox side receives from the broker, deduplicates, and dispatches to your handlers.
@@ -361,10 +366,11 @@ box = (
 box.subscribe(MyHandler())
 
 # 3. Connect to UoW (outbox — produces)
-uow = UnitOfWork(domain_context, event_producer=box)
+uow = UnitOfWork(domain_context, event_publisher=box)
 
 # 4. Start background tasks
 import threading
+
 for task in box.tasks():
     threading.Thread(target=task, daemon=True).start()
 

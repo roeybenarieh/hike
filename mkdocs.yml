@@ -61,3 +61,4 @@ nav:
       - Domain Events: guide/domain-events.md
       - Cross-Aggregate Invariants: guide/cross-aggregate-invariants.md
       - Integration Events: guide/integration-events.md
+      - Sagas: guide/sagas.md

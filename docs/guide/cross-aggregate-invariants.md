@@ -209,7 +209,8 @@ from hike.events.event_bus import EventBus
 from hike.events.interfaces import IEventHandler
 
 bus = EventBus()
-uow = UnitOfWork(context, event_producer=bus)
+uow = UnitOfWork(context, event_publisher=bus)
+
 
 class EnforceUniqueness(IEventHandler[PlayerAdded]):
     """Reacts to a player being added by checking global uniqueness."""
@@ -218,6 +219,7 @@ class EnforceUniqueness(IEventHandler[PlayerAdded]):
         if self._registry.exists(event.player_id):
             raise DuplicatePlayerError(event.player_id)
             # → commit is aborted; player is not persisted
+
 
 bus.subscribe(EnforceUniqueness(global_registry))
 
@@ -310,6 +312,8 @@ The `ProcessManager` base class calls `_subscribe()` during `__init__`. That's w
 
 `ProcessManager` holds no domain state by default. If your workflow spans many steps and needs to remember where it left off (e.g., a three-stage approval chain), store that state in a dedicated **saga aggregate** — a regular `UuidAggregate` whose fields track the workflow's progress. The process manager reads and updates this aggregate at each step.
 
+This hand-rolled state tracking is fine for a couple of steps, but it gets unwieldy once you need correlation across several event types, timeouts, or rollback logic. For that, reach for the dedicated **[Sagas](sagas.md)** framework — it gives you declarative correlation (`configure_how_to_find_saga`), automatic state persistence, timeouts, and LIFO compensation, instead of wiring all of that by hand inside a `ProcessManager`.
+
 ### When to use `ProcessManager`
 
 | Use it when… | Don't use it when… |
@@ -338,7 +342,8 @@ Does the invariant involve more than one aggregate?
    └─ Yes (eventual consistency is acceptable):
        Is the reaction a single step?
        ├─ Yes → EventBus subscription + plain handler.
-       └─ No  → ProcessManager (multi-step, possibly with a saga aggregate).
+       └─ No  → ProcessManager for a couple of steps, or a full Saga (see below) once you need
+                 correlation across many event types, timeouts, or compensation.
 ```
 
 ---
