@@ -6,7 +6,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from hike.entity import EntityUUID, from_dict, to_dict
+from hike.aggregate import UuidAggregate
+from hike.entity import EntityUUID, Field, field, from_dict, to_dict
 from hike.specifications import (
     AndSpecification,
     EqualSpecification,
@@ -282,3 +283,25 @@ class TestToDictFromDictNestedEntity:
         assert restored.engine.id == boat.engine.id
         assert restored.engine.name == boat.engine.name
         assert restored.engine.price == boat.engine.price
+
+
+class _FreeBoat(UuidAggregate):
+    name: Field[Name]
+    engine: Field[BoatEngine] = field(mutable=True)
+
+
+class TestMutableField:
+    """``field(mutable=True)`` opts a Field[Entity] out of the read-only guard."""
+
+    def _engine(self) -> BoatEngine:
+        return BoatEngine(name=Name("V8"), price=Price(1.0))
+
+    def test_mutable_entity_field_is_writable_outside_command(self) -> None:
+        boat = _FreeBoat(name=Name("b"), engine=self._engine())
+        boat.engine.price = Price(5.0)
+        assert boat.engine.price == Price(5.0)
+
+    def test_default_entity_field_stays_read_only(self) -> None:
+        boat = MotorBoat(name=Name("b"), price=Price(9.0), engine=self._engine())
+        with pytest.raises(AttributeError):
+            boat.engine.price = Price(5.0)
