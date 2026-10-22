@@ -9,10 +9,9 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
-from hike import Aggregate, AggregateDoesNotExistError, Field, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, \
+from hike import Field, ResourceDoesNotExistError, UnitOfWork, UuidAggregate, UuidEntity, ValueObject, \
     command, non_empty, non_negative, rule
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
 
@@ -61,7 +60,7 @@ class Boat(UuidAggregate):
 
 context = InMemoryDBContext()
 repo = InMemoryRepository[UUID, Boat]()
-uow: UnitOfWork[dict[Any, Aggregate[Any]]] = UnitOfWork(context)
+uow = UnitOfWork(context)
 
 # ---------------------------------------------------------------------------
 # Save
@@ -100,7 +99,7 @@ with uow(repo):
     uow.commit()
 
 with uow(repo):
-    fetched = repo.get_one(boat.id)
+    fetched = repo.get_one(boat.get_id())
 print(f"Updated price: {fetched.price.value}")
 
 # ---------------------------------------------------------------------------
@@ -117,7 +116,7 @@ except RuntimeError:
 
 with uow(repo):
     try:
-        repo.get_one(ghost.id)
+        repo.get_one(ghost.get_id())
         print("ERROR: ghost should not exist")
-    except AggregateDoesNotExistError:
+    except ResourceDoesNotExistError:
         print("Rollback confirmed: ghost was not persisted")

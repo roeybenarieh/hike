@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from hike.persistence.persistable import DataclassPersistable
-from hike.domain_event import Event
+from hike.domain_event import DomainEvent
 
 # integration event implementation from: https://github.com/cloudevents/sdk-python
 # TODO: integration event must have event-version style api stability. and should require backward compatibility
@@ -10,7 +10,7 @@ from hike.domain_event import Event
 # TODO: how to do the mapping between domain events to integration events
 # TODO: how to do validation to incoming integration events
 @dataclass(frozen=True, kw_only=True, eq=False)
-class IntegrationEvent(Event, DataclassPersistable[Any]):
+class IntegrationEvent(DomainEvent, DataclassPersistable[Any]):
     """Base for all integration events.
 
     Each event carries an auto-generated ``id`` (defaults to a ``uuid4()``)
@@ -24,7 +24,7 @@ class IntegrationEvent(Event, DataclassPersistable[Any]):
         class OrderPlaced(IntegrationEvent):
             order_id: str   # positional; id is keyword-only with a default
     """
-    version: int
+    version: int = 1
 
     def get_id(self) -> Any:
         return self.id

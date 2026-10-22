@@ -54,8 +54,8 @@ class InboxEventSubscriber[T: IntegrationEvent, TSession](IExternalEventSubscrib
     def _subscribe(self, event_type: str, event_class: type[T], event_handler: IEventHandler[T]) -> None:
         # Route business handlers through the repo (not directly to the broker).
         # Each subscribe call also wires the broker → repo_publisher for that event type.
-        self.repo_subscriber._subscribe(event_type, event_class, event_handler)
-        self.broker_subscriber._subscribe(event_type, event_class, self.repo_publisher)
+        self.repo_subscriber.subscribe(event_type, event_class, event_handler)
+        self.broker_subscriber.subscribe(event_type, event_class, self.repo_publisher)
 
     def cleanup(self) -> None:
         self.broker_subscriber.cleanup()

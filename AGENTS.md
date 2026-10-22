@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (OpenCode and others) when working on code in this repository.
 
 ## Commands
 
@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 uv sync              # install dependencies
 uv run python <file> # run a script
 uv build             # build the package
-uv run pyright       # type-check (if pyright is added as a dev dependency)
+uv run pyright       # type-check
 ```
 
 **Always run `uv run pyright <file>` to verify a type-fix actually resolves the warning before declaring it done.**
@@ -26,8 +26,6 @@ Requires Python >= 3.14. Package manager is `uv` (see `uv.lock`).
 ## Git
 
 Never add a `Co-Authored-By` trailer to commit messages.
-
-Never commit `CLAUDE.md` or anything under `.claude/` — these are local-only.
 
 Use **GitFlow** branching strategy:
 - `main` — production-ready releases only

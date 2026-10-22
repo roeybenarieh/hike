@@ -6,7 +6,9 @@ Defines the integration events that cross the service boundary and the saga stat
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
+from hike import UuidAggregate, command
 from hike.events.integration_event import IntegrationEvent
 from hike.events.saga import SagaData
 
@@ -20,10 +22,13 @@ from hike.events.saga import SagaData
 class FlightReserved(IntegrationEvent):
     """Published by the booking service when a seat is held.
 
-    ``flight_id`` is the seat's own UUID (as a string) and serves as the
-    primary correlation key throughout the booking saga lifecycle.
+    ``seat_id`` identifies the ``FlightSeat`` aggregate the reservation was
+    made against, so the saga can release its lock on completion/compensation.
+    ``flight_id`` is the airline's own flight code and is the primary
+    correlation key throughout the booking saga lifecycle.
     """
 
+    seat_id: UUID
     flight_id: str
     passenger: str
     card_token: str
@@ -82,6 +87,30 @@ class ReservationCancelled(IntegrationEvent):
     flight_id: str
     passenger: str
     reason: str
+
+
+# ---------------------------------------------------------------------------
+# Seat aggregate — owns the reservation decision, raises FlightReserved
+# ---------------------------------------------------------------------------
+
+
+class FlightSeat(UuidAggregate):
+    """Domain aggregate for a single bookable seat.
+
+    ``add_seat()`` persists one with no reservation yet; ``reserve()`` then
+    raises ``FlightReserved`` (dispatched by the UoW on commit), which starts
+    the booking saga.
+    """
+
+    @command
+    def reserve(self, *, flight_id: str, passenger: str, card_token: str, amount: float) -> None:
+        self.raise_event(FlightReserved(
+            seat_id=self.id.value,
+            flight_id=flight_id,
+            passenger=passenger,
+            card_token=card_token,
+            amount=amount,
+        ))
 
 
 # ---------------------------------------------------------------------------

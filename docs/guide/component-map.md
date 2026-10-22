@@ -189,12 +189,12 @@ body[data-md-color-scheme="default"] {
 
   var EDGES = [
     /* ── Inheritance / implements (solid) ──────────────────────── */
-    { data: { source: 'ValueObject',     target: 'Identifier',       etype: 'inh' } },
     { data: { source: 'Entity',          target: 'Aggregate',        etype: 'inh' } },
     { data: { source: 'Rule',            target: 'SpecRule',         etype: 'inh' } },
     { data: { source: 'EventPublisher',  target: 'EventBus', etype: 'inh' } },
     { data: { source: 'EventSubscriber', target: 'EventBus', etype: 'inh' } },
     /* ── Usage / dependency (dashed) ───────────────────────────── */
+    { data: { source: 'Entity',          target: 'ValueObject',      etype: 'use', label: 'compose of' } },
     { data: { source: 'Entity',          target: 'Identifier',       etype: 'use', label: 'uniquely identified using' } },
     { data: { source: 'Aggregate',       target: 'DomainEvent',      etype: 'use', label: 'raises' } },
     { data: { source: 'Rule',            target: 'Aggregate',        etype: 'use', label: 'validates invariants in' } },

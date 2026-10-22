@@ -9,9 +9,9 @@ Run with:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from hike import DomainEvent, UnitOfWork, UuidAggregate, ValueObject, non_empty, EntityID, command, Field
+from hike import DomainEvent, UnitOfWork, UuidAggregate, ValueObject, non_empty, EntityID, EntityUUID, command, Field
 from hike.events.event_bus import EventBus
 from hike.events.event_handlers import DomainEventHandler
 from hike.persistence.providers.in_memory import InMemoryDBContext, InMemoryRepository
@@ -40,7 +40,7 @@ class Customer(UuidAggregate):
 
     @command
     def add_order(self, order_id: UUID):
-        self.orders_ids.append(EntityID(order_id))
+        self.orders_ids.append(EntityUUID(order_id))
 
 
 class Order(UuidAggregate):
@@ -67,8 +67,8 @@ class OrderPlacedAddOrderToCustomer(DomainEventHandler[UUID, Customer, OrderPlac
 # ---------------------------------------------------------------------------
 
 # repositories - one for each aggregate
-order_repo = InMemoryRepository()
-customer_repo = InMemoryRepository()
+order_repo = InMemoryRepository[UUID, Order]()
+customer_repo = InMemoryRepository[UUID, Customer]()
 
 # events - wire OrderPlaced event to its handler
 event_bus = EventBus()
@@ -76,11 +76,17 @@ event_bus.subscribe(OrderPlacedAddOrderToCustomer(customer_repo))
 
 # unit of work
 context = InMemoryDBContext()
-uow = UnitOfWork(context, event_producer=event_bus)
+uow = UnitOfWork(context, event_publisher=event_bus)
+
+# seed a customer so the handler has someone to update
+customer = Customer(orders_ids=[])
+with uow(customer_repo):
+    customer_repo.save(customer)
+    uow.commit()
 
 # create a new order
 with uow(order_repo, customer_repo, auto_commit=True):
-    new_order = Order(customer_id=EntityID(uuid4()))
+    new_order = Order(customer_id=EntityUUID(customer.id.value))
     order_repo.save(new_order)
     # ① bus.publish(OrderPlaced) → OrderPlacedAddOrderToCustomer runs
     # ② update customer orders field in database

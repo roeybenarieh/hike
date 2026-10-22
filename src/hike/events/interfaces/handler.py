@@ -11,9 +11,6 @@ class IEventHandler[T: Event](ABC):
     def handle(self, event: T) -> None:
         """might raise an error indicating that couldn't handle the event"""
 
-    def __call__(self, event: T) -> None:
-        self.handle(event)
-
 
 class IReversibleEventHandler[T: Event](IEventHandler[T], ABC):
 
