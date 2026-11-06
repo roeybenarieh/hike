@@ -16,7 +16,7 @@ from hike.value_object import (
     within_past,
     within_future,
 )
-from hike.entity import Entity, EntityID, Field, UuidEntity, command, field
+from hike.entity import Entity, EntityID, EntityUUID, Field, UuidEntity, command, field
 from hike.aggregate import Aggregate, UuidAggregate, authority
 from hike.rules import Rule, CrossAggregateRule, RuleBrokenError, FunctionalRule, rule, SpecificationRule
 from hike.domain_event import DomainEvent
@@ -77,6 +77,7 @@ __all__ = [
     "within_future",
     "Entity",
     "EntityID",
+    "EntityUUID",
     "Field",
     "UuidEntity",
     "command",

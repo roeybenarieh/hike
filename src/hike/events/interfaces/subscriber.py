@@ -18,7 +18,7 @@ def _event_type_for[TEvent: Event](handler: IEventHandler[TEvent]) -> type[TEven
             if origin is None or not (isinstance(origin, type) and issubclass(origin, IEventHandler)):
                 continue
             args = typing.get_args(base)
-            if args and not isinstance(args[0], typing.TypeVar):
+            if len(args) == 1 and not isinstance(args[0], typing.TypeVar):
                 return args[0]  # type: ignore[return-value]
 
     try:
@@ -35,24 +35,39 @@ def _event_type_for[TEvent: Event](handler: IEventHandler[TEvent]) -> type[TEven
 class IEventSubscriber[TEvent: Event](ABC):
 
     @overload
-    def subscribe(self, event_handler: IEventHandler[TEvent], /) -> None:
+    def subscribe[TConcrete: Event](self, event_handler: IEventHandler[TConcrete], /) -> None:
         ...
 
     @overload
-    def subscribe(self, event_type: str, event_handler: IEventHandler[TEvent], /) -> None:
+    def subscribe[TConcrete: Event](self, event_type: str, event_handler: IEventHandler[TConcrete], /) -> None:
+        ...
+
+    @overload
+    def subscribe[TConcrete: Event](self, event_type: str, event_class: type[TConcrete], event_handler: IEventHandler[TConcrete], /) -> None:
         ...
 
     @final
     def subscribe(
             self,
-            event_type_or_handler: str | IEventHandler[TEvent],
-            event_handler: IEventHandler[TEvent] | None = None,
+            event_type_or_handler: str | IEventHandler[Any],
+            event_class_or_handler: type[Any] | IEventHandler[Any] | None = None,
+            event_handler: IEventHandler[Any] | None = None,
             /,
     ) -> None:
-        """multiple calls to this method is supported"""
-        if isinstance(event_type_or_handler, str):
-            event_cls = _event_type_for(event_handler)  # type: ignore[arg-type]
-            self._subscribe(event_type_or_handler, event_cls, event_handler)  # type: ignore[arg-type]
+        """multiple calls to this method is supported.
+
+        The 3-argument form (``event_type``, ``event_class``, ``event_handler``) skips
+        type inference entirely and should be used whenever the caller already knows the
+        concrete event class but ``event_handler``'s own type doesn't reveal it (e.g. it
+        handles multiple event types, or is an instance of a still-generic class).
+        """
+        if isinstance(event_type_or_handler, str) and isinstance(event_class_or_handler, type):
+            assert event_handler is not None
+            self._subscribe(event_type_or_handler, event_class_or_handler, event_handler)
+        elif isinstance(event_type_or_handler, str):
+            handler = event_class_or_handler
+            event_cls = _event_type_for(handler)  # type: ignore[arg-type]
+            self._subscribe(event_type_or_handler, event_cls, handler)  # type: ignore[arg-type]
         else:
             event_cls = _event_type_for(event_type_or_handler)
             self._subscribe(event_cls.event_type(), event_cls, event_type_or_handler)

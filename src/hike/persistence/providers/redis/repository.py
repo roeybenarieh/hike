@@ -5,6 +5,7 @@ import math
 import time
 import uuid as _uuid_mod
 from collections.abc import Iterator, Sequence
+from datetime import datetime
 from typing import Any, cast
 
 from redis import Redis
@@ -35,17 +36,22 @@ from hike.specifications import ISpecification
 
 
 class _AggregateEncoder(json.JSONEncoder):
-    """JSON encoder that round-trips ``uuid.UUID`` values via ``{"__uuid__": "…"}``."""
+    """JSON encoder that round-trips ``uuid.UUID`` and ``datetime`` values via
+    ``{"__uuid__": "…"}`` / ``{"__datetime__": "…"}`` envelopes."""
 
     def default(self, o: object) -> object:
         if isinstance(o, _uuid_mod.UUID):
             return {"__uuid__": str(o)}
+        if isinstance(o, datetime):
+            return {"__datetime__": o.isoformat()}
         return super().default(o)
 
 
 def _aggregate_object_hook(obj: dict[str, Any]) -> Any:
     if "__uuid__" in obj:
         return _uuid_mod.UUID(str(obj["__uuid__"]))
+    if "__datetime__" in obj:
+        return datetime.fromisoformat(str(obj["__datetime__"]))
     return obj
 
 
@@ -63,8 +69,9 @@ class RedisPersistableRepository(IRepository[TId, TPersistable, Pipeline]):
     compares it against ``obj.get_version()``, and raises ``OptimisticLockError``
     on mismatch.
 
-    **UUID serialization** — ``uuid.UUID`` values survive JSON round-trips
-    via a ``{"__uuid__": "…"}`` envelope.
+    **UUID/datetime serialization** — ``uuid.UUID`` and ``datetime.datetime``
+    values survive JSON round-trips via ``{"__uuid__": "…"}`` /
+    ``{"__datetime__": "…"}`` envelopes.
 
     Install with: ``pip install hike[redis]``
     """

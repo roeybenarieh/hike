@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import multiprocessing
 from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from redis import Redis
 from redis.client import Pipeline
 from testcontainers.community.redis import RedisContainer  # pyright: ignore[reportMissingTypeStubs]
 
-from hike.persistence.providers.redis import RedisDBContext, RedisRepository
+from hike.events.saga import SagaTimeout
+from hike.persistence.providers.redis import RedisDBContext, RedisPersistableRepository, RedisRepository
 from hike.persistence.uow import UnitOfWork
 
 from tests.hike.conftest import Boat, Journey
@@ -82,3 +84,36 @@ class TestRedisRepositoryParity(RepositoryParitySuite, CrossProcessWatchParitySu
             assert p.exitcode == 0, f"cross-process insert failed with exit code {p.exitcode}"
 
         return _insert
+
+
+# ---------------------------------------------------------------------------
+# Regression: datetime fields must survive Redis's JSON round-trip.
+#
+# _AggregateEncoder originally only knew how to encode uuid.UUID, so any
+# Persistable with a raw datetime field (e.g. SagaTimeout.fire_at, produced
+# by DataclassPersistable.to_dict()) raised TypeError on save() — a Redis-only
+# gap invisible on PyMongo (BSON stores datetime natively). This broke every
+# saga scenario that calls SagaContext.request_timeout() under Redis persistence.
+# ---------------------------------------------------------------------------
+
+
+class TestRedisDatetimeRoundTrip:
+    def test_datetime_field_round_trips(self, redis_client: Redis) -> None:  # type: ignore[type-arg]
+        repo: RedisPersistableRepository[UUID, SagaTimeout] = RedisPersistableRepository(
+            redis_client, SagaTimeout, "timeouts_dt_test"
+        )
+        uow: UnitOfWork[Pipeline] = UnitOfWork(RedisDBContext(redis_client))
+
+        fire_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        timeout = SagaTimeout(
+            saga_id=uuid4(),
+            saga_type_name="Example",
+            state="unused",
+            fire_at=fire_at,
+        )
+        with uow(repo):
+            repo.save(timeout)
+            uow.commit()
+        with uow(repo):
+            fetched = repo.get_one(timeout.get_id())
+        assert fetched.fire_at == fire_at

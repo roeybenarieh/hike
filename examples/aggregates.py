@@ -51,13 +51,13 @@ class OrderItem(UuidEntity):
 # Domain events
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(frozen=True)
 class ItemAdded(DomainEvent):
     item_id: object
     item_name: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class OrderShipped(DomainEvent):
     order_id: object
 
@@ -104,14 +104,14 @@ class Order(UuidAggregate):
     def add_item(self, item: OrderItem) -> None:
         self.items.append(item)
         self.total = Money(self.total.value + item.price.value)
-        self._events.append(ItemAdded(item.id, item.name.value))
+        self.raise_event(ItemAdded(item_id=item.id, item_name=item.name.value))
 
     # order_has_items only makes sense at ship-time, not at creation time,
     # so it stays in @command(invariants=[...]) rather than __invariants__.
     @command(invariants=[order_has_items, order_total_within_cap])
     def ship(self) -> None:
         self._shipped = True
-        self._events.append(OrderShipped(self.id))
+        self.raise_event(OrderShipped(order_id=self.id))
 
     # invariants='all' re-runs every rule in __invariants__ from the full MRO.
     @command(invariants='all')

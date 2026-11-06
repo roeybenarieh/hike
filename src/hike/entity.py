@@ -129,6 +129,7 @@ def unwrap_annotation(ann_type: object) -> type | None:
 _MISSING = object()
 
 _COMMAND_FLAG = '_hike_in_command'
+_MUTABLE_KEY = 'hike_mutable'
 
 
 class ReadOnlyView(Generic[_T]):
@@ -185,9 +186,10 @@ class _FieldDescriptor(Generic[_T]):
     ``_vo_<name>`` so the descriptor stays in control on subsequent reads.
     """
 
-    def __init__(self, field_name: str, field_type: type[_T]) -> None:
+    def __init__(self, field_name: str, field_type: type[_T], mutable: bool = False) -> None:
         self.field_name = field_name
         self.field_type = field_type
+        self.mutable = mutable
         self._private = f"_vo_{field_name}"
         self.construct_class: type[Any] | None = None
 
@@ -209,7 +211,7 @@ class _FieldDescriptor(Generic[_T]):
         val = instance.__dict__.get(self._private, _MISSING)
         if val is _MISSING:
             raise AttributeError(f"Field '{self.field_name}' not set")
-        if isinstance(val, Entity) and not instance.__dict__.get(_COMMAND_FLAG, False):
+        if isinstance(val, Entity) and not self.mutable and not instance.__dict__.get(_COMMAND_FLAG, False):
             return cast(_T, ReadOnlyView(cast(_T, val)))  # pyright: ignore[reportReturnType]
         return cast(_T, val)
 
@@ -244,9 +246,16 @@ def field(
         init: bool = True,
         repr: bool = True,
         metadata: Mapping[str, Any] | None = None,
+        mutable: bool = False,
         **kwargs: Any,
 ) -> Field[Any]:
     """Drop-in for ``dataclasses.field`` that returns ``Field[T]``.
+
+    ``mutable=True`` opts a ``Field[Entity]`` out of the read-only guard: the
+    nested entity is returned as-is outside ``@command``, so plain CRUD
+    (``person.address.street = ...``) works without a command. Use it only for
+    attributes with no cross-entity consequences. No effect on ValueObject
+    fields (always assignable).
 
     Omitted ``dataclasses.field`` parameters and why:
     - ``hash`` / ``compare``: ``Entity.__eq__`` and ``Entity.__hash__`` are
@@ -257,7 +266,10 @@ def field(
 
     Future ``dataclasses.field`` parameters are forwarded via ``**kwargs``.
     """
-    kw: dict[str, Any] = {"init": init, "repr": repr, "metadata": metadata, **kwargs}
+    kw: dict[str, Any] = {
+        "init": init, "repr": repr, **kwargs,
+        "metadata": {**(metadata or {}), _MUTABLE_KEY: mutable},
+    }
     if default is not _DC_MISSING:
         kw["default"] = default
     if default_factory is not _DC_MISSING:
@@ -372,6 +384,7 @@ class Entity[TId: Hashable](DomainObject, Persistable[TId]):
             resolved = {}
 
         non_init_names = {f.name for f in fields(cast(Any, cls)) if not f.init}
+        mutable_names = {f.name for f in fields(cast(Any, cls)) if f.metadata.get(_MUTABLE_KEY)}
         for name, ann_type in resolved.items():
             if name.startswith("_") or get_origin(ann_type) is ClassVar or name in non_init_names:
                 continue
@@ -390,8 +403,7 @@ class Entity[TId: Hashable](DomainObject, Persistable[TId]):
                 continue
             inner = unwrap_annotation(ann_type)
             if inner is not None and not isinstance(cls.__dict__.get(name), _FieldDescriptor):
-                desc: _FieldDescriptor[Any] = _FieldDescriptor(name,
-                                                               inner)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
+                desc: _FieldDescriptor[Any] = _FieldDescriptor(name, inner, name in mutable_names)  # pyright: ignore[reportArgumentType,reportUnknownVariableType]
                 setattr(cls, name, desc)
                 desc.__set_name__(cls, name)
 

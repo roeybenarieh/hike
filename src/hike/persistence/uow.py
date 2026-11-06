@@ -45,11 +45,11 @@ class DBContext[TSession](ABC):
 class UnitOfWork[TSessions]:
 
     def __init__(self, context: DBContext[TSessions],
-                 event_producer: IEventPublisher[DomainEvent] | None = None) -> None:
+                 event_publisher: IEventPublisher[DomainEvent] | None = None) -> None:
         self._context = context
         self._repos: tuple[IRepository[Any, Any, TSessions], ...] = ()
         self._auto_commit: bool = False
-        self.event_producer = event_producer
+        self.event_publisher = event_publisher
 
     def __call__(
             self,
@@ -100,8 +100,8 @@ class UnitOfWork[TSessions]:
 
     def commit(self) -> None:
         events = self._collect_all_events()
-        if self.event_producer is not None:
-            self.event_producer.publish(events)
+        if self.event_publisher is not None:
+            self.event_publisher.publish(events)
         self._context.commit()
 
     def rollback(self) -> None:

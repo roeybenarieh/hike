@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from contextlib import ExitStack
 from typing import Any, Callable, cast
 from uuid import UUID
@@ -7,6 +8,7 @@ from uuid import UUID
 from hike.domain_event import Event
 from hike.events.integration_event import IntegrationEvent
 from hike.events.interfaces.background_task import IBackgroundTasks, Task
+from hike.events.interfaces.handler import IEventHandler
 from hike.events.interfaces.publisher import IEventPublisher
 from hike.events.interfaces.subscriber import IEventSubscriber
 from hike.persistence.repository import IRepository, ResourceDoesNotExistError
@@ -19,7 +21,7 @@ from .mapper import SagaMapper
 from .saga import Saga, SagaEventHandler, SagaRole, SagaTimeoutHandler
 
 
-class SagaManager[TSagaData: SagaData](IBackgroundTasks):
+class SagaManager[TSagaData: SagaData](IBackgroundTasks, IEventHandler[Event]):
     """Routes integration events (and timeouts) to the correct saga instance.
 
     Usage with UnitOfWork (recommended)::
@@ -66,6 +68,12 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
         self._timeout_uow = timeout_uow
         self._on_complete = on_complete
         self._saga_locks: dict[UUID, list[tuple[IRepository[Any, Any, Any], Any]]] = {}
+        # handle() and handle_timeout() are called from different threads (the
+        # subscriber's dispatch thread and TimeoutManager's poll thread) but share
+        # self._uow/_timeout_uow/_repo/_timeout_repo/_saga_locks — serialize them so
+        # concurrent UnitOfWork.__enter__ calls never race on the same repo's session
+        # (corrupts in-flight pipelines/transactions for providers like Redis).
+        self._lock = threading.Lock()
 
         dummy: Saga[TSagaData] = saga_type.__new__(saga_type)
         mapper: SagaMapper[TSagaData] = SagaMapper()
@@ -86,7 +94,7 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
         :raises SagaNotFoundError: if a ``@handles`` method has no existing saga.
         """
         buffer: list[IntegrationEvent] = []
-        with ExitStack() as stack:
+        with self._lock, ExitStack() as stack:
             if self._uow is not None:
                 stack.enter_context(self._uow(self._repo, auto_commit=True))
             if self._timeout_uow is not None:
@@ -94,6 +102,9 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
             self._handle_impl(event, buffer)
         if buffer:
             self._publisher.publish(buffer)
+
+    def __call__(self, event: Event) -> None:
+        self.handle(event)
 
     def _handle_impl(self, event: Event, buffer: list[IntegrationEvent]) -> None:
         event_type = type(event)
@@ -171,11 +182,12 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
         the same way :meth:`handle` does.
         """
         buffer: list[IntegrationEvent] = []
-        if self._uow is not None:
-            with self._uow(self._repo, auto_commit=True):
+        with self._lock:
+            if self._uow is not None:
+                with self._uow(self._repo, auto_commit=True):
+                    self._handle_timeout_impl(timeout, buffer)
+            else:
                 self._handle_timeout_impl(timeout, buffer)
-        else:
-            self._handle_timeout_impl(timeout, buffer)
         if buffer:
             self._publisher.publish(buffer)
 
@@ -247,7 +259,7 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
         if isinstance(publisher, IBackgroundTasks):
             publisher.cleanup()
 
-    def inject_subscribers_to(self, subscriber: IEventSubscriber[Any]) -> None:
+    def subscribe_to(self, subscriber: IEventSubscriber[Any]) -> None:
         """Subscribe this manager to every event type it handles on *subscriber*.
 
         Equivalent to calling ``subscriber.subscribe(EventType, self)`` for
@@ -257,7 +269,7 @@ class SagaManager[TSagaData: SagaData](IBackgroundTasks):
             manager.subscribe_to(bus)
         """
         for event_cls in self.saga_type.event_dispatch:
-            subscriber._subscribe(event_cls.event_type(), event_cls, self)  # type: ignore[arg-type]
+            subscriber.subscribe(event_cls.event_type(), event_cls, self)  # type: ignore[arg-type]
 
     def _signal_completion(self, saga_id: UUID) -> None:
         if self._on_complete is not None:

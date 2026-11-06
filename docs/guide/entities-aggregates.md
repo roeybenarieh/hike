@@ -173,6 +173,7 @@ class Engine(UuidEntity):
 
 class Car(UuidAggregate):
     engine: Field[Engine]   # nested entity — read-only outside @command
+    # spare: Field[Engine] = field(mutable=True)  # opt out: plain CRUD, see rules-commands.md
 
 # Cross-aggregate reference: store IDs, not objects
 class Order(UuidAggregate):

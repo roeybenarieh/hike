@@ -164,6 +164,29 @@ car.tune(Speed(100))            # OK
 
 > **Note**: `list[Entity]` fields are plain dataclass fields and are not yet protected by `ReadOnlyView`. Only `Field[Entity]` descriptor fields carry this protection.
 
+### Opting out: `field(mutable=True)`
+
+Not every attribute needs a command. Changing a person's address touches no other aggregate, so a `@command` wrapper adds ceremony and nothing else. Mark such fields `mutable=True` to get plain CRUD:
+
+```python
+from hike import Field, UuidAggregate, field
+
+class Person(UuidAggregate):
+    name: Field[Name]
+    address: Field[Address] = field(mutable=True)   # free to edit
+    wife: Field[PersonRef]                           # guarded: use a @command
+
+person.address.street = Street("Main St")   # OK, no ReadOnlyView
+person.wife.name = Name("x")                # AttributeError (read-only view)
+```
+
+Rule of thumb: if changing the attribute can affect another entity or aggregate in the domain boundary (e.g. removing a `wife` must also update the other `Person`), leave it guarded and write a `@command`. If it is self-contained data, make it `mutable=True`.
+
+Caveats:
+
+- `mutable=True` only changes behaviour for `Field[Entity]`. `Field[ValueObject]` fields were already directly assignable.
+- Direct writes **do not re-check invariants**; only `@command` does. Don't make a field mutable if a `__invariants__` rule depends on it, or re-check the rule yourself.
+
 ---
 
 ## 6. Rules on Plain Entities
