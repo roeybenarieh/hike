@@ -42,6 +42,7 @@ from hike.persistence.pagination import (
     PagePagination,
     Pagination,
 )
+from hike.resilience import CircuitBreaker, CircuitOpenError, CircuitState
 from hike.runner import ThreadedBackgroundTaskRunner, ProcessBackgroundTaskRunner
 from hike.specifications import (
     ISpecification,
@@ -104,6 +105,10 @@ __all__ = [
     "ResourceDoesNotExistError",
     "ResourceAlreadyExistError",
     "OptimisticLockError",
+
+    "CircuitBreaker",
+    "CircuitOpenError",
+    "CircuitState",
 
     "ThreadedBackgroundTaskRunner",
     "ProcessBackgroundTaskRunner",
