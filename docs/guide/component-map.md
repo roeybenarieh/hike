@@ -1,7 +1,5 @@
 # Component Map
 
-// # TODO: for each node add a link to the propper documentation(if there is no documentation, add it)
-
 <style>
 /* Dark default (slate scheme) */
 :root {
@@ -131,6 +129,7 @@ body[data-md-color-scheme="default"] {
       <div><span id="hike-cmap-info-name" style="font-weight:700;"></span></div>
       <div><code id="hike-cmap-info-imp" style="color:var(--cmap-code);white-space:pre;"></code></div>
       <div id="hike-cmap-info-impls" style="display:none;"></div>
+      <div><a id="hike-cmap-info-doc" href="#" style="display:none;margin-top:8px;font-size:0.78rem;color:var(--cmap-code);">Documentation &rarr;</a></div>
     </div>
   </div>
 </div>
@@ -142,8 +141,8 @@ body[data-md-color-scheme="default"] {
   var NODES = [
     /* Core DDD */
     { data: { id: 'ValueObject',     l: 'ValueObject',       s: 'hike.value_object',           cat: 'core',        imp: 'from hike import ValueObject' } },
-    { data: { id: 'Identifier',      l: 'Identifier',        s: 'hike.entity / hike.aggregate', cat: 'core',        imp: 'from hike import EntityID\nfrom hike import AggregateID\nfrom hike import AggregateUUID' } },
     { data: { id: 'Entity',          l: 'Entity',            s: 'hike.entity',                 cat: 'core',        imp: 'from hike import Entity' } },
+    { data: { id: 'Identifier',      l: 'Identifier',        s: 'hike.entity / hike.aggregate', cat: 'core',        imp: 'from hike import EntityID\nfrom hike import AggregateID\nfrom hike import AggregateUUID' } },
     { data: { id: 'Aggregate',       l: 'Aggregate',         s: 'hike.aggregate',              cat: 'core',        imp: 'from hike import Aggregate' } },
     { data: { id: 'DomainEvent',     l: 'DomainEvent',       s: 'hike.domain_event',           cat: 'events',      imp: 'from hike import DomainEvent' } },
     /* Rules */
@@ -187,18 +186,36 @@ body[data-md-color-scheme="default"] {
     } },
   ];
 
+  /* Doc page + anchor per node (relative to the component map's directory URL) */
+  var DOCS = {
+    ValueObject:     'value-objects/#what-is-a-value-object',
+    Identifier:      'entities-aggregates/#1-what-is-an-entity',
+    Entity:          'entities-aggregates/#1-what-is-an-entity',
+    Aggregate:       'entities-aggregates/#2-what-is-an-aggregate',
+    DomainEvent:     'domain-events/#defining-an-event',
+    Rule:            'rules-commands/#1-defining-rules-with-rule',
+    SpecRule:        'specifications/#4-using-specifications-as-business-rules-specificationrule',
+    Specification:   'specifications/#what-is-a-specification',
+    Repository:      'repositories-uow/#3-the-irepository-interface-and-persistence-providers',
+    UnitOfWork:      'repositories-uow/#2-what-is-a-unit-of-work-uow',
+    EventHandler:    'integration-events/#consumer-receiving-events',
+    EventPublisher:  'integration-events/#producer-publishing-events',
+    EventSubscriber: 'integration-events/#consumer-receiving-events',
+    EventBus:        'domain-events/#the-eventbus-wiring-publishers-to-subscribers',
+  };
+
   var EDGES = [
     /* ── Inheritance / implements (solid) ──────────────────────── */
-    { data: { source: 'Entity',          target: 'Aggregate',        etype: 'inh' } },
-    { data: { source: 'Rule',            target: 'SpecRule',         etype: 'inh' } },
-    { data: { source: 'EventPublisher',  target: 'EventBus', etype: 'inh' } },
-    { data: { source: 'EventSubscriber', target: 'EventBus', etype: 'inh' } },
+    { data: { source: 'ValueObject',     target: 'Identifier',        etype: 'inh' } },
+    { data: { source: 'Aggregate',       target: 'Entity',           etype: 'inh' } },
+    { data: { source: 'SpecRule',        target: 'Rule',             etype: 'inh' } },
+    { data: { source: 'EventBus',        target: 'EventPublisher',   etype: 'inh' } },
+    { data: { source: 'EventBus',        target: 'EventSubscriber',  etype: 'inh' } },
     /* ── Usage / dependency (dashed) ───────────────────────────── */
     { data: { source: 'Entity',          target: 'ValueObject',      etype: 'use', label: 'compose of' } },
     { data: { source: 'Entity',          target: 'Identifier',       etype: 'use', label: 'uniquely identified using' } },
     { data: { source: 'Aggregate',       target: 'DomainEvent',      etype: 'use', label: 'raises' } },
-    { data: { source: 'Rule',            target: 'Aggregate',        etype: 'use', label: 'validates invariants in' } },
-    { data: { source: 'Rule',            target: 'ValueObject',      etype: 'use', label: 'validates' } },
+    { data: { source: 'Entity',          target: 'Rule',             etype: 'use', label: 'enforces invariants via' } },
     { data: { source: 'SpecRule',        target: 'Specification',    etype: 'use', label: 'delegates to' } },
     { data: { source: 'Repository',      target: 'Specification',    etype: 'use', label: 'filter with' } },
     { data: { source: 'UnitOfWork',      target: 'Repository',       etype: 'use', label: 'scopes session' } },
@@ -487,6 +504,7 @@ body[data-md-color-scheme="default"] {
     var infoName  = document.getElementById('hike-cmap-info-name');
     var infoImp   = document.getElementById('hike-cmap-info-imp');
     var infoImpls = document.getElementById('hike-cmap-info-impls');
+    var infoDoc   = document.getElementById('hike-cmap-info-doc');
 
     var lastTapped = null;
     cy.on('tap', 'node', function (evt) {
@@ -512,16 +530,18 @@ body[data-md-color-scheme="default"] {
           impls.forEach(function (impl) {
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:8px;';
-            var iconWrap = document.createElement('span');
-            iconWrap.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;background:#fff;border-radius:4px;padding:2px;';
-            var img = document.createElement('img');
-            img.src = ICONS[impl.icon] || '';
-            img.style.cssText = 'display:block;width:16px;height:16px;';
-            iconWrap.appendChild(img);
+            if (impl.icon) {
+              var iconWrap = document.createElement('span');
+              iconWrap.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;background:#fff;border-radius:4px;padding:2px;';
+              var img = document.createElement('img');
+              img.src = ICONS[impl.icon] || '';
+              img.style.cssText = 'display:block;width:16px;height:16px;';
+              iconWrap.appendChild(img);
+              row.appendChild(iconWrap);
+            }
             var code = document.createElement('code');
             code.style.cssText = 'color:var(--cmap-code);font-size:0.78rem;';
             code.textContent = impl.imp;
-            row.appendChild(iconWrap);
             row.appendChild(code);
             infoImpls.appendChild(row);
           });
@@ -529,6 +549,12 @@ body[data-md-color-scheme="default"] {
           infoImpls.style.display = 'none';
           infoImpls.innerHTML = '';
         }
+      }
+
+      if (infoDoc) {
+        var docPage = DOCS[d.id];
+        infoDoc.style.display = docPage ? 'block' : 'none';
+        if (docPage) infoDoc.href = '../' + docPage;
       }
 
       infoBox.style.display = 'block';
