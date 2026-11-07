@@ -24,10 +24,8 @@ body[data-md-color-scheme="default"] {
 /* hide native browser clear button */
 #hike-cmap-search::-webkit-search-cancel-button { display: none; }
 /* fullscreen */
-#hike-cmap-wrap:-webkit-full-screen,
-#hike-cmap-wrap:fullscreen { background: var(--cmap-bg); padding: 0; overflow: hidden; }
-#hike-cmap-wrap:-webkit-full-screen #hike-cmap,
-#hike-cmap-wrap:fullscreen #hike-cmap { height: 100vh !important; border-radius: 0 !important; border: none !important; }
+#hike-cmap-wrap.cmap-fs { position: fixed !important; inset: 0; z-index: 10000 !important; width: 100vw !important; margin: 0 !important; padding: 0; background: var(--cmap-bg); }
+#hike-cmap-wrap.cmap-fs #hike-cmap { height: 100vh !important; border-radius: 0 !important; border: none !important; }
 </style>
 
 <div id="hike-cmap-wrap" style="position:relative;z-index:2;margin:1.5rem -1.1rem;width:calc(100% + 2.2rem);font-family:inherit;">
@@ -478,26 +476,38 @@ body[data-md-color-scheme="default"] {
       var FS_ICON_EXPAND   = '<polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
       var FS_ICON_COMPRESS = '<line x1="21" y1="3" x2="14" y2="10"/><polyline points="20,10 14,10 14,4"/><line x1="3" y1="21" x2="10" y2="14"/><polyline points="4,14 10,14 10,20"/>';
 
+      /* CSS-based fullscreen (not the Fullscreen API): the browser reserves Esc
+         while using the real Fullscreen API, so the page never receives it. */
+      var cmapHome = null;
       fsBtn.addEventListener('click', function () {
-        var wrap = document.getElementById('hike-cmap-wrap');
-        if (!document.fullscreenElement) {
-          (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
-        } else {
-          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-        }
+        setFullscreen(!isFullscreen());
       });
 
-      function onFsChange() {
+      function isFullscreen() {
+        var wrap = document.getElementById('hike-cmap-wrap');
+        return !!wrap && wrap.classList.contains('cmap-fs');
+      }
+      function setFullscreen(on) {
+        var wrap = document.getElementById('hike-cmap-wrap');
         var fsIcon = document.getElementById('hike-cmap-fs-icon');
-        if (fsIcon) fsIcon.innerHTML = document.fullscreenElement ? FS_ICON_COMPRESS : FS_ICON_EXPAND;
+        if (!wrap) return;
+        /* move to <body> while fullscreen so no ancestor stacking context/transform clips it */
+        if (on && !cmapHome) {
+          cmapHome = { parent: wrap.parentNode, next: wrap.nextSibling };
+          document.body.appendChild(wrap);
+        } else if (!on && cmapHome) {
+          cmapHome.parent.insertBefore(wrap, cmapHome.next);
+          cmapHome = null;
+        }
+        wrap.classList.toggle('cmap-fs', on);
+        document.body.style.overflow = on ? 'hidden' : '';
+        if (fsIcon) fsIcon.innerHTML = on ? FS_ICON_COMPRESS : FS_ICON_EXPAND;
         cy.resize();
         cy.fit(cy.elements(), 20);
         initZoom = cy.zoom();
         initPan = { x: cy.pan().x, y: cy.pan().y };
         if (resetBtn) resetBtn.style.display = 'none';
       }
-      document.addEventListener('fullscreenchange', onFsChange);
-      document.addEventListener('webkitfullscreenchange', onFsChange);
     }
 
     var infoBox   = document.getElementById('hike-cmap-info');
@@ -623,6 +633,32 @@ body[data-md-color-scheme="default"] {
       });
     }
 
+    /* Ctrl/Cmd+F: search the map instead of the browser page */
+    /* Ctrl/Cmd+F or "/" opens map search (unless typing in a field). Esc: 1st closes search, 2nd exits fullscreen or resets view. */
+    document.addEventListener('keydown', function (e) {
+      if (!document.getElementById('hike-cmap') || e.defaultPrevented) return;
+      var typing = e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') || (e.key === '/' && !typing)) {
+        e.preventDefault();
+        if (searchPanel) searchPanel.style.display = 'flex';
+        if (searchEl) searchEl.focus();
+        return;
+      }
+      if (e.key !== 'Escape') return;
+      if (searchPanel && searchPanel.style.display !== 'none') {
+        clearSearch();
+        searchPanel.style.display = 'none';
+        if (searchEl) searchEl.blur();
+        return;
+      }
+      var wrapEl = document.getElementById('hike-cmap-wrap');
+      if (wrapEl && wrapEl.classList.contains('cmap-fs')) {
+        document.getElementById('hike-cmap-fullscreen').click();
+      } else if (resetBtn) {
+        resetBtn.click();
+      }
+    });
+
     function runSearch(q) {
       if (!q) {
         cy.elements().removeClass('cmap-faded cmap-match cmap-neighbor');
@@ -707,7 +743,7 @@ body[data-md-color-scheme="default"] {
         if (acOpen) {
           if (e.key === 'ArrowDown') { e.preventDefault(); setACActive(Math.min(acActive + 1, items.length - 1)); return; }
           if (e.key === 'ArrowUp')   { e.preventDefault(); setACActive(Math.max(acActive - 1, 0));              return; }
-          if (e.key === 'Escape')    { hideAC(); return; }
+          if (e.key === 'Escape')    { e.preventDefault(); hideAC(); return; }
           if (e.key === 'Enter' && acActive >= 0) { e.preventDefault(); items[acActive].dispatchEvent(new MouseEvent('mousedown')); return; }
         }
         if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); runSearch(searchEl.value.trim().toLowerCase()); hideAC(); }

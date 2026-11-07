@@ -62,4 +62,5 @@ nav:
       - Cross-Aggregate Invariants: guide/cross-aggregate-invariants.md
       - Integration Events: guide/integration-events.md
       - Sagas: guide/sagas.md
-  - Resilience: guide/resilience.md
+  - Miscellaneous:
+      - Resilience: guide/resilience.md
